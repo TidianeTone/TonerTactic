@@ -202,7 +202,7 @@ SUB = [""]
 
 
 def export(name, objs):
-    folder = os.path.join(OUT, SUB[0])
+    folder = os.path.join(OUT, "hd" if HD else "", SUB[0])
     os.makedirs(folder, exist_ok=True)
     for o in bpy.context.view_layer.objects:
         o.select_set(False)
@@ -452,6 +452,36 @@ def brazier(seed):
                     if d < 3.5 and R.random() < 0.6:
                         glow[(x, y, 8)] = R.choice(EMBER)
     return vox, glow
+
+
+def rack(seed):
+    """Râtelier d'armes : deux montants, une traverse, une épée, une hache et une lance posées."""
+    R = random.Random(seed)
+    vox = {}
+    WOODC, STEEL, DARK = pal(["#6b4a30", "#5a3d27", "#7a5638"]), pal(["#c8d2d8", "#aeb8be", "#dfe6ea"]), lin("#3a2a1c")
+    for x in (2, 13):
+        for y in (6, 7):
+            for z in range(0, 14):
+                vox[(x, y, z)] = pick(R, WOODC)
+        for y in range(3, 11):
+            vox[(x, y, 0)] = pick(R, WOODC)
+    for x in range(2, 14):
+        vox[(x, 6, 12)] = vox[(x, 7, 12)] = pick(R, WOODC)
+        vox[(x, 8, 3)] = pick(R, WOODC)
+    for z in range(1, 13):  # épée
+        vox[(5, 7, z)] = pick(R, STEEL) if z > 3 else DARK
+    for x in (4, 6):
+        vox[(x, 7, 4)] = lin("#e2b24e")
+    for z in range(1, 14):  # hache : manche puis fer
+        vox[(8, 7, z)] = DARK if z < 10 else pick(R, WOODC)
+    for x in range(9, 12):
+        for z in range(9, 13):
+            if (x - 9) + abs(z - 10.5) < 3:
+                vox[(x, 7, z)] = pick(R, STEEL)
+    for z in range(1, 15):  # lance
+        vox[(11, 7, z)] = pick(R, WOODC) if z < 12 else pick(R, STEEL)
+    vox[(11, 7, 15)] = pick(R, STEEL)
+    return vox
 
 
 def lever(seed):
@@ -1145,11 +1175,37 @@ def jaw_trap(seed):
         vox[(x, 7, 0)] = pick(R, IRON)
     return vox
 
+HD = int(os.environ.get("DELVE_HD", "0"))  # 3 : chaque voxel devient 3x3x3 grains -> assets/hd/ (PC ultra seulement)
+
+
+def hd(vox, seed, F, chip=True):
+    """Voxel fin : subdivise, écaille les arêtes vives, piquette les faces, varie la teinte grain par grain."""
+    R = random.Random(seed)
+    out = {}
+    for (x, y, z), c in vox.items():
+        ex = [n for n in FACES if (x + n[0], y + n[1], z + n[2]) not in vox]
+        for i in range(F):
+            for j in range(F):
+                for k in range(F):
+                    loc = (i, j, k)
+                    on = sum(1 for n in ex if any(n[a] and loc[a] == (F - 1 if n[a] > 0 else 0) for a in range(3)))
+                    if chip and on >= 2 and R.random() < 0.5:
+                        continue
+                    if chip and on == 1 and R.random() < 0.06:
+                        continue
+                    out[(x * F + i, y * F + j, z * F + k)] = tone(c, R.uniform(0.9, 1.07)) if chip else c
+    return out
+
+
 def emit(kit):
     for name, vox, glow, opt in kit:
         v = opt.get("v", V)
         origin = opt.get("origin", (0, 0, 0))
         skip = opt.get("skip", ())
+        if HD:
+            vox = hd(vox, len(name), HD)
+            glow = glow and hd(glow, 0, HD, chip=False)
+            v, origin = v / HD, tuple(o * HD for o in origin)
         objs = [mesh(name, vox, v, origin=origin, skip=skip)]
         if glow:
             objs.append(mesh(name + "_glow", glow, v, origin=origin, ao=False, glow=True))
@@ -1188,8 +1244,9 @@ def build():
     SUB[0] = ""
     kit = []
     if only:
-        if "teal" in only.split(","):
-            foliage_kit(kit, "teal", TEAL)
+        for biome, leaves in (("autumn", AUTUMN), ("green", GREEN), ("pink", PINK), ("teal", TEAL)):
+            if biome in only.split(","):
+                foliage_kit(kit, biome, leaves)
         emit(kit)
         print("ok (partiel)")
         return
@@ -1204,6 +1261,7 @@ def build():
     kit.append(("prop_brasero", vox, g, FLAT))
     kit.append(("prop_levier", lever(562), None, FLAT))
     kit.append(("prop_pilier", cracked_pillar(563), None, FLAT))
+    kit.append(("prop_ratelier", rack(567), None, FLAT))
     vox, g = barrel(564)
     kit.append(("prop_baril", vox, g, FLAT))
     vox, g = turret(565)

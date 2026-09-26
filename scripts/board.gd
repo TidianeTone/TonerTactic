@@ -34,6 +34,7 @@ var monument_face := Vector2i.ZERO
 var _hl: MultiMeshInstance3D
 var _water: MeshInstance3D
 static var _meshes := {}
+static var hd := false  ## voxel fin (assets/hd, généré par DELVE_HD=3) : PC en qualité ultra
 static var _mats := {}
 
 
@@ -311,6 +312,15 @@ func _place_props() -> void:
 			else:
 				props.erase(c)
 			break
+	# le râtelier d'armes : rare, jamais sur le chemin, toujours au bout de l'arène (il faut aller le chercher)
+	if dim >= 12 and rng.randf() < 0.17:
+		var far: Array = cells.filter(func(c): return near.has(c) and not paths.has(c) and not props.has(c) and not blocked.has(c) and kind.get(c, "") == "land")
+		far.sort_custom(func(a, b): return near[a] > near[b])
+		for c in far.slice(0, 6):
+			props[c] = "ratelier"
+			if _connected():
+				break
+			props.erase(c)
 
 
 func _damier_props() -> void:
@@ -805,12 +815,15 @@ static func material_for(key: String, glow: bool) -> Material:
 
 
 static func mesh_of(key: String) -> Dictionary:
-	if _meshes.has(key):
-		return _meshes[key]
+	var ck := ("hd/" + key) if hd else key
+	if _meshes.has(ck):
+		return _meshes[ck]
 	var md := {"mesh": null, "glow": null}
-	var path := "res://assets/%s.glb" % key
-	if not ResourceLoader.exists(path):
-		path = "res://assets/%s.glb" % key.get_file()
+	var path := ""
+	for k in ([key, key.get_file()] if key.contains("/") else [key]):
+		for dir in (["hd/", ""] if hd else [""]):
+			if path == "" and ResourceLoader.exists("res://assets/%s%s.glb" % [dir, k]):
+				path = "res://assets/%s%s.glb" % [dir, k]
 	var ps: PackedScene = load(path)
 	var inst := ps.instantiate()
 	for mi in inst.find_children("*", "MeshInstance3D", true, false):
@@ -819,7 +832,7 @@ static func mesh_of(key: String) -> Dictionary:
 		else:
 			md.mesh = mi.mesh
 	inst.free()
-	_meshes[key] = md
+	_meshes[ck] = md
 	return md
 
 

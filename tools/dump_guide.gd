@@ -38,8 +38,8 @@ func _init() -> void:
 	for k in Data.ANCIENTS:
 		ancients[k] = _col(Data.ANCIENTS[k])
 	var guilds := []
-	for g in Guildes.LIST:
-		guilds.append(g)
+	for i in Guildes.LIST.size():
+		guilds.append(Guildes.LIST[i] + [Guildes.DESC[i]])  # [a, b, nom, règle, inspiration, paragraphe]
 	var out := {"cards": cards, "items": items, "foes": foes, "heroes": heroes, "tiles": tiles, "tools": Data.TOOLS, "relics": Data.RELICS,
 		"passives": Data.PASSIVES, "traits": Data.TRAITS, "triggers": Data.TRIGGERS, "keywords": Data.KEYWORDS, "pacts": Data.PACTS,
 		"modifiers": Data.MODIFIERS, "affixes": Data.AFFIXES, "ancients": ancients, "boons": Data.BOONS, "guilds": guilds,

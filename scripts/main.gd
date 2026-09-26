@@ -237,7 +237,7 @@ func apply_biome(b: Dictionary) -> void:
 	sm.ground_bottom_color = b.water_deep
 	env.ambient_light_energy = b.ambient
 	env.fog_light_color = b.fog
-	env.fog_density = 0.85
+	env.fog_density = 0.45 if quality >= 2 else 0.85
 	env.volumetric_fog_albedo = b.fog
 	sun.light_color = b.sun
 	sun.light_energy = b.sun_energy
@@ -251,12 +251,21 @@ func apply_biome(b: Dictionary) -> void:
 
 func _apply_quality() -> void:
 	## 0 portable, 1 normal, 2 ultra
+	Board.hd = quality >= 2 and not OS.has_feature("web") and args.get("hd", "1") != "0"
 	env.ssao_enabled = quality >= 1
 	env.ssil_enabled = quality >= 2
 	env.sdfgi_enabled = quality >= 2
 	env.volumetric_fog_enabled = quality >= 2
-	env.volumetric_fog_density = 0.012
+	# ultra : air limpide et rayons de soleil plutôt que voile laiteux, creux plus sombres, lumière qui tranche
+	env.volumetric_fog_density = 0.004
+	env.volumetric_fog_anisotropy = 0.7
 	env.volumetric_fog_length = 48.0
+	env.ssao_intensity = 3.2 if quality >= 2 else 2.4
+	env.ssil_intensity = 1.4
+	env.sdfgi_energy = 1.2
+	env.adjustment_contrast = 1.14 if quality >= 2 else 1.05
+	env.adjustment_saturation = 1.16 if quality >= 2 else 1.1
+	env.fog_density = 0.45 if quality >= 2 else 0.85
 	cam_attr.dof_blur_far_enabled = quality >= 1
 	cam_attr.dof_blur_near_enabled = quality >= 1
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL if quality == 0 else DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
@@ -1399,6 +1408,18 @@ func _roll_item(min_rarity := 1) -> String:
 	return ids[rng.randi_range(0, ids.size() - 1)]
 
 
+func rack_weapon(h: Unit) -> void:
+	## Râtelier d'armes : une arme pour ce héros, plutôt bonne (peu commune ou mieux), équipée si sa main est libre.
+	var r := rng.randf()
+	var rar := 3 if r > 0.7 else 2
+	var ids: Array = []
+	while ids.is_empty() and rar > 0:
+		ids = Data.ITEMS.keys().filter(func(id): return Data.ITEMS[id].slot == "arme" and Data.ITEMS[id].rarity == rar and (Data.ITEMS[id].owner == "any" or Data.ITEMS[id].owner == h.key))
+		rar -= 1
+	if ids.size() > 0:
+		_gain_item(ids[rng.randi_range(0, ids.size() - 1)], h)
+
+
 func _gain_item(id: String, h: Unit = null) -> void:
 	## Au sac, ou équipé d'office si l'emplacement du héros qui l'a trouvé est libre.
 	var it: Dictionary = Data.ITEMS[id]
@@ -1510,8 +1531,6 @@ func _rewards(type: String) -> void:
 		oid = _obj_roll(3 if type == "elite" else 2)
 		opts.append({"card": {"id": oid, "lvl": 2 if type == "elite" else 1, "h": party[0]}, "tag": "Objet · au héros de ton choix"})
 	var sub := "+%d or · ajoutez une carte au paquet (%d cartes)" % [g, deck.size()]
-	if extra.size() > 0:
-		sub += "  ·  ✦ la carte bonus ne prend la place d'aucune autre"
 	var i := await ui.choose("BUTIN", sub, opts, true)
 	if i >= 0 and oid != "" and i == opts.size() - 1:
 		var hh := await _pick_hero("OBJET", "Qui prend %s ?" % Data.def(oid).name)
@@ -1581,13 +1600,22 @@ func _choose_vocation(h: Unit, second := false) -> void:
 	var gl: Array = Guildes.LIST[g]
 	ui.banner("Vocation : %s" % Data.HEROES[k].name, h.nm)
 	if not second:
-		# cadeau de vocation : la commune de la guilde, tout de suite dans le paquet (un vrai palier de puissance)
-		var com := Guildes.cards_of(g, [1])
-		if com.size() > 0:
-			var ci := {"id": com[0], "lvl": 1, "h": h.key}
-			deck.append(ci)
-			library_see(com[0])
-			await ui.choose("CADEAU DE VOCATION", "%s rejoint %s : cette carte de la guilde entre dans son paquet." % [h.nm, gl[2]], [{"card": ci, "tag": "Offerte"}], true, "Continuer")
+		# cadeau de vocation : une carte au choix, tout de suite dans le paquet (un vrai palier de puissance) :
+		# la commune de la guilde, sa peu commune, et une carte de la classe apprise
+		var ids: Array = []
+		for rr in [1, 2]:
+			var pool: Array = Guildes.cards_of(g, [rr])
+			if pool.size() > 0:
+				ids.append(pool[rng.randi_range(0, pool.size() - 1)])
+		var own: Array = Data.CARDS.keys().filter(func(id): return Data.CARDS[id].owner == k and Data.CARDS[id].rar == 1 and not Data.STARTER[k].has(id))
+		if own.size() > 0:
+			ids.append(own[rng.randi_range(0, own.size() - 1)])
+		var opts: Array = ids.slice(0, 3).map(func(id): return {"card": {"id": id, "lvl": 1, "h": h.key}})
+		if opts.size() > 0:
+			var j := await ui.choose("CADEAU DE VOCATION", "%s rejoint %s : une de ces cartes entre dans son paquet." % [h.nm, gl[2]], opts, true, "Aucune")
+			if j >= 0:
+				deck.append(opts[j].card)
+				library_see(opts[j].card.id)
 
 
 # Maîtrise : elle rend les cartes multiclasses plus fréquentes et meilleures, sans rien verrouiller.

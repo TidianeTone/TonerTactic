@@ -5,34 +5,34 @@ class_name Guildes
 
 # [classe A, classe B, nom, règle, inspiration]
 const LIST := [
-	["garde", "lame", "La Tenaille", "L'un fixe l'ennemi, l'autre le prend à revers.", "Magic (Boros) · Duelyst (Lyonar et Songhai)"],
-	["garde", "oracle", "Les Veilleurs du Seuil", "Le soin en trop devient armure.", "Magic (Orzhov) · Hearthstone (Paladin, Prêtre)"],
-	["garde", "artificier", "Les Bastionniers", "L'armure encaisse, la poudre répond.", "Duelyst (Lyonar, Vetruvian)"],
-	["garde", "moine", "Les Ascètes de fer", "L'armure se change en coups.", "Slay the Spire (Body Slam) · Duelyst"],
+	["garde", "lame", "Les Bourreaux", "L'un fixe l'ennemi, l'autre le prend à revers.", "Magic (Boros) · Duelyst (Lyonar et Songhai)"],
+	["garde", "oracle", "Les Templiers", "Le soin en trop devient armure.", "Magic (Orzhov) · Hearthstone (Paladin, Prêtre)"],
+	["garde", "artificier", "Les Sapeurs", "L'armure encaisse, la poudre répond.", "Duelyst (Lyonar, Vetruvian)"],
+	["garde", "moine", "Les Videurs", "L'armure se change en coups.", "Slay the Spire (Body Slam) · Duelyst"],
 	["garde", "trappeur", "Les Gardes-chasse", "Repousser la proie dans le piège.", "Duelyst (Lyonar et Vanar)"],
-	["garde", "tidiane", "Les Endurcis", "Chaque PV perdu endurcit.", "David Goggins · Parry"],
-	["garde", "receleur", "La Douane", "Chaque carte-objet en réserve sert de bouclier.", "Magic (Orzhov, Extort)"],
-	["lame", "oracle", "Les Murmures", "Chaque carte piochée en plus est une lame de plus.", "Magic (Dimir) · Duelyst (Abyssian)"],
+	["garde", "tidiane", "Les Berserkers", "Chaque PV perdu endurcit.", "David Goggins · Parry"],
+	["garde", "receleur", "Les Douaniers", "Chaque carte-objet en réserve sert de bouclier.", "Magic (Orzhov, Extort)"],
+	["lame", "oracle", "Les Magilames", "Chaque carte piochée en plus est une lame de plus.", "Magic (Dimir) · Duelyst (Abyssian)"],
 	["lame", "artificier", "Les Saboteurs", "Frapper dans le dos, laisser un cadeau.", "Magic (Rakdos) · Duelyst (Songhai, Vetruvian)"],
-	["lame", "moine", "L'École du Vent", "Chaque téléportation compte comme un coup.", "Duelyst (Songhai) · Hearthstone (Combo)"],
+	["lame", "moine", "Les Ninjas", "Chaque téléportation compte comme un coup.", "Duelyst (Songhai) · Hearthstone (Combo)"],
 	["lame", "trappeur", "Les Chasseurs de primes", "Une cible marquée est une prime.", "Magic (Outlaws of Thunder Junction)"],
-	["lame", "tidiane", "La Frame parfaite", "Punir l'erreur, jouer dans la fenêtre.", "Tekken · Smash Melee · Jojo"],
-	["lame", "receleur", "La Pègre des Quais", "Chaque coup de dos vide une poche.", "Hearthstone (Voleur)"],
-	["oracle", "artificier", "La Forge-Braise", "Surcharge : payer plus pour tout brûler.", "Magic (Izzet, Niv-Mizzet)"],
-	["oracle", "moine", "Les Sages du Souffle", "Chaque coup soigne un allié.", "Magic (Selesnya) · Hearthstone (Prêtre)"],
-	["oracle", "trappeur", "Les Augures", "Voir le coup avant de le tirer.", "Magic (Azorius) · Duelyst (Vanar)"],
-	["oracle", "tidiane", "Les Diaristes", "Relire ses pages pour rejouer.", "Tes journaux · Magic (Izzet, Jump-start)"],
-	["oracle", "receleur", "Les Antiquaires", "Un objet vaut un sort.", "Magic (Trésors, Indices)"],
-	["artificier", "moine", "Les Poings-Canons", "Les coups au contact allument les mèches.", "Magic (Gruul) · Duelyst (Magmar)"],
-	["artificier", "trappeur", "Les Artilleurs de brousse", "Les pièges explosent, les tourelles marquent.", "Hearthstone (Chasseur) · Duelyst (Vetruvian)"],
-	["artificier", "tidiane", "Les Artisans", "Le geste technique affûte l'outil.", "Artisan plutôt qu'artiste · 174 BPM"],
+	["lame", "tidiane", "Les Escrimeurs", "Punir l'erreur, jouer dans la fenêtre.", "Tekken · Smash Melee · Jojo"],
+	["lame", "receleur", "Les Détrousseurs", "Chaque coup de dos vide une poche.", "Hearthstone (Voleur)"],
+	["oracle", "artificier", "Les Canonniers", "Surcharge : payer plus pour tout brûler.", "Magic (Izzet, Niv-Mizzet)"],
+	["oracle", "moine", "Les Gourous", "Chaque coup soigne un allié.", "Magic (Selesnya) · Hearthstone (Prêtre)"],
+	["oracle", "trappeur", "Les Tireurs d'élite", "Voir le coup avant de le tirer.", "Magic (Azorius) · Duelyst (Vanar)"],
+	["oracle", "tidiane", "Les Enlumineurs", "Relire ses pages pour rejouer.", "Tes journaux · Magic (Izzet, Jump-start)"],
+	["oracle", "receleur", "Les Apothicaires", "Un objet vaut un sort.", "Magic (Trésors, Indices)"],
+	["artificier", "moine", "Les Démolisseurs", "Les coups au contact allument les mèches.", "Magic (Gruul) · Duelyst (Magmar)"],
+	["artificier", "trappeur", "Les Artilleurs", "Les pièges explosent, les tourelles marquent.", "Hearthstone (Chasseur) · Duelyst (Vetruvian)"],
+	["artificier", "tidiane", "Les Ingénieurs", "Le geste technique affûte l'outil.", "Artisan plutôt qu'artiste · 174 BPM"],
 	["artificier", "receleur", "Les Ferrailleurs", "Un objet devient un baril, un baril devient un objet.", "Duelyst (Mechaz0r) · Mewgenics"],
-	["moine", "trappeur", "Les Coureurs des berges", "Traquer à mains nues.", "Magic (Gruul) · Duelyst (Magmar, Vanar)"],
-	["moine", "tidiane", "Le Dojo", "Le combo parfait, frame par frame.", "Tekken · Smash Melee"],
-	["moine", "receleur", "Les Acrobates de foire", "Les objets volés nourrissent le combo.", "Hearthstone (Voleur, Combo)"],
-	["trappeur", "tidiane", "Les Chasseurs de patterns", "Lire le boss, attendre la fenêtre.", "Monster Hunter · Elden Ring"],
+	["moine", "trappeur", "Les Lutteurs", "Traquer à mains nues.", "Magic (Gruul) · Duelyst (Magmar, Vanar)"],
+	["moine", "tidiane", "Les Catcheurs", "Le combo parfait, frame par frame.", "Tekken · Smash Melee"],
+	["moine", "receleur", "Les Acrobates", "Les objets volés nourrissent le combo.", "Hearthstone (Voleur, Combo)"],
+	["trappeur", "tidiane", "Les Chasseurs de monstres", "Lire le boss, attendre la fenêtre.", "Monster Hunter · Elden Ring"],
 	["trappeur", "receleur", "Les Braconniers", "Chaque piège est une poche de plus.", "Magic (Golgari)"],
-	["tidiane", "receleur", "Chaos Agent", "Braquage : piocher dans un paquet qui n'est pas le tien.", "Grixis Heist · Magic Arena (Heist)"],
+	["tidiane", "receleur", "Les Cambrioleurs", "Braquage : piocher dans un paquet qui n'est pas le tien.", "Grixis Heist · Magic Arena (Heist)"],
 ]
 
 # Le paragraphe de chaque guilde (écran de vocation), dans l'ordre de LIST : plus long que la philosophie d'une classe.
@@ -69,28 +69,28 @@ const DESC := [
 
 # « g » : indice dans LIST. « up » : niveaux 2 et 3, comme Data.UPGRADES.
 const CARDS := {
-	# 0 · La Tenaille
+	# 0 · Les Bourreaux
 	"g_etau": {"name": "Étau", "g": 0, "rar": 1, "cost": 1, "kind": "atk", "range": [1, 1], "dmg": 6, "trig": {"on": "tenaille", "dmg": 5}, "text": "Inflige {dmg}.", "up": [{"dmg": 3}, {"cost": -1}]},
 	"g_contrepied": {"name": "Contre-pied", "g": 0, "rar": 2, "cost": 1, "kind": "skill", "target": "self", "block": 5, "ambush": true, "text": "+{block} armure. Le prochain coup compte de dos.", "up": [{"block": 3}, {"draw": 1, "text": "+{block} armure. Le prochain coup compte de dos. Pioche 1."}]},
 	"g_tenaille": {"name": "Coup de tenaille", "g": 0, "rar": 3, "cost": 1, "kind": "atk", "range": [1, 1], "dmg": 7, "trig": {"on": "tenaille", "dmg": 7, "draw": 1}, "text": "Inflige {dmg}.", "up": [{"dmg": 3}, {"cost": -1}]},
 	"g_appat": {"name": "Appât", "g": 0, "rar": 3, "cost": 1, "kind": "skill", "target": "self", "block": 6, "taunt": true, "bait": true, "text": "+{block} armure, Provocation. Qui frappe ce héros avant son prochain tour s'expose : le coup suivant contre lui compte de dos.", "up": [{"block": 4}, {"cost": -1}]},
 	"g_releve": {"name": "Relève de la garde", "g": 0, "rar": 3, "cost": 0, "kind": "skill", "target": "ally", "range": [1, 1], "swap": true, "block": 6, "ambush": true, "text": "Échange de place avec un allié voisin : il gagne {block} armure, et ton prochain coup compte de dos.", "up": [{"block": 4}, {"draw": 1, "text": "Échange de place avec un allié voisin : il gagne {block} armure, et ton prochain coup compte de dos. Pioche 1."}]},
 	"g_enclume": {"name": "Serment de l'Enclume", "g": 0, "rar": 4, "cost": 2, "kind": "power", "target": "self", "power": "enclume", "val": 6, "text": "Pouvoir : quand un ennemi frappe un héros au contact, l'allié le plus proche se téléporte dans son dos et frappe {val}.", "up": [{"val": 3}, {"cost": -1}]},
-	# 1 · Les Veilleurs du Seuil
+	# 1 · Les Templiers
 	"g_benir": {"name": "Bénir", "g": 1, "rar": 1, "cost": 1, "kind": "skill", "target": "ally", "range": [0, 3], "heal": 5, "block": 3, "text": "Soigne {heal} un allié, +{block} armure.", "up": [{"heal": 3}, {"block": 3}]},
 	"g_lumiere": {"name": "Lumière d'acier", "g": 1, "rar": 2, "cost": 1, "kind": "skill", "target": "self", "block": 4, "all": true, "text": "+{block} armure à chaque héros.", "up": [{"block": 2}, {"cost": -1}]},
 	"g_litanie": {"name": "Litanie d'airain", "g": 1, "rar": 3, "cost": 1, "kind": "skill", "target": "ally", "range": [0, 3], "heal": 8, "overheal": true, "text": "Soigne {heal} un allié. Le soin en trop devient armure, doublé.", "up": [{"heal": 4}, {"cost": -1}]},
 	"g_lance_aube": {"name": "Lance d'aube", "g": 1, "rar": 3, "cost": 1, "kind": "atk", "range": [2, 5], "dmg": 4, "per_block": 1.0, "text": "Inflige {dmg} + l'armure du héros, à distance.", "up": [{"dmg": 3}, {"reach": 1}]},
 	"g_seuil": {"name": "Seuil sacré", "g": 1, "rar": 3, "cost": 1, "kind": "skill", "target": "self", "rune": "source", "block": 6, "text": "La case du héros devient une Source. +{block} armure.", "up": [{"block": 4}, {"cost": -1}]},
 	"g_ysolde": {"name": "Ysolde, l'Aube fixe", "g": 1, "rar": 4, "cost": 3, "kind": "skill", "target": "self", "revive": true, "block": 10, "all": true, "aegis_all": true, "exhaust": true, "text": "Relève chaque héros tombé avec 25 % de ses PV. Chaque héros gagne {block} armure et Égide. Épuise.", "up": [{"block": 5}, {"cost": -1}]},
-	# 2 · Les Bastionniers
+	# 2 · Les Sapeurs
 	"g_sacs": {"name": "Sacs de sable", "g": 2, "rar": 1, "cost": 1, "kind": "skill", "target": "tile", "range": [1, 2], "place": "baril", "block": 4, "text": "Pose un baril. +{block} armure.", "up": [{"block": 3}, {"cost": -1}]},
 	"g_parapet": {"name": "Parapet", "g": 2, "rar": 2, "cost": 1, "kind": "skill", "target": "self", "block": 7, "trig": {"on": "poudre", "draw": 1, "energy": 1}, "text": "+{block} armure.", "up": [{"block": 3}, {"cost": -1}]},
 	"g_pavois_piege": {"name": "Pavois piégé", "g": 2, "rar": 3, "cost": 1, "kind": "skill", "target": "self", "block": 8, "boom": 6, "text": "+{block} armure. Le prochain ennemi qui frappe ce héros au contact déclenche une explosion de {boom} autour de lui.", "up": [{"boom": 4}, {"cost": -1}]},
 	"g_charge_belier": {"name": "Charge-bélier", "g": 2, "rar": 3, "cost": 2, "kind": "atk", "target": "line", "range": [1, 3], "dmg": 8, "push": 2, "text": "Fonce 3 cases en ligne : {dmg} et repousse {push}. Repoussé contre un baril, il le fait sauter.", "up": [{"dmg": 3}, {"cost": -1}]},
 	"g_mantelet": {"name": "Mantelet", "g": 2, "rar": 3, "cost": 1, "kind": "skill", "target": "tile", "range": [1, 2], "place": "pilier", "block": 5, "text": "Dresse un pilier fendu : frappé ou heurté, il s'effondre (9). +{block} armure.", "up": [{"block": 3}, {"cost": -1}]},
 	"g_varn": {"name": "Le Bélier de Varn", "g": 2, "rar": 4, "cost": 3, "kind": "skill", "target": "tile", "range": [1, 2], "place": "tourelle", "tdmg": 8, "tpush": 2, "turns": 3, "text": "Pose un bélier : à chaque round, {tdmg} à l'ennemi le plus proche et le repousse de 2, pendant {turns} rounds.", "up": [{"tdmg": 4}, {"turns": 2}]},
-	# 3 · Les Ascètes de fer
+	# 3 · Les Videurs
 	"g_frappe_roc": {"name": "Frappe du roc", "g": 3, "rar": 1, "cost": 1, "kind": "atk", "range": [1, 1], "dmg": 5, "block": 3, "text": "Inflige {dmg}. +{block} armure.", "up": [{"dmg": 2, "block": 2}, {"cost": -1}]},
 	"g_garde_haute": {"name": "Garde haute", "g": 3, "rar": 2, "cost": 0, "kind": "skill", "target": "self", "block": 4, "trig": {"on": "enchaine", "block": 4}, "text": "+{block} armure.", "up": [{"block": 3}, {"draw": 1, "text": "+{block} armure. Pioche 1."}]},
 	"g_paume_fer": {"name": "Paume de fer", "g": 3, "rar": 3, "cost": 1, "kind": "atk", "range": [1, 1], "dmg": 4, "per_block": 0.5, "trig": {"on": "enchaine", "keep": true}, "text": "Inflige {dmg} + la moitié de l'armure du héros.", "up": [{"dmg": 3}, {"cost": -1}]},
@@ -104,21 +104,21 @@ const CARDS := {
 	"g_enclos": {"name": "Enclos", "g": 4, "rar": 3, "cost": 2, "kind": "skill", "target": "self", "traps_around": 3, "taunt": true, "text": "Pose 3 pièges autour du héros. Provocation.", "up": [{"cost": -1}, {"block": 6, "text": "Pose 3 pièges autour du héros. Provocation. +{block} armure."}]},
 	"g_epieu": {"name": "Épieu planté", "g": 4, "rar": 3, "cost": 1, "kind": "skill", "target": "tile", "range": [1, 3], "place": "epieu", "tdmg": 8, "text": "Plante un épieu : qui y marche ou y est poussé subit {tdmg} et reste entravé 2 tours.", "up": [{"tdmg": 4}, {"cost": -1}]},
 	"g_maelle": {"name": "Hallali de Maëlle", "g": 4, "rar": 4, "cost": 2, "kind": "power", "target": "self", "power": "hallali", "val": 4, "text": "Pouvoir : tout ennemi repoussé devient Marqué 2 tours. Les pièges infligent +{val}.", "up": [{"val": 3}, {"cost": -1}]},
-	# 5 · Les Endurcis
+	# 5 · Les Berserkers
 	"g_douche": {"name": "Douche froide", "g": 5, "rar": 1, "voix": "N", "cost": 0, "kind": "skill", "target": "self", "block": 7, "selfdmg": 2, "text": "+{block} armure, perd {selfdmg} PV.", "up": [{"block": 3}, {"selfdmg": -1}]},
 	"g_discipline": {"name": "Discipline", "g": 5, "rar": 2, "voix": "B", "cost": 1, "kind": "skill", "target": "self", "block": 5, "retain": true, "text": "+{block} armure. Conservé.", "up": [{"block": 3}, {"cost": -1}]},
 	"g_callus": {"name": "Callus", "g": 5, "rar": 3, "voix": "N", "cost": 1, "kind": "skill", "target": "self", "block": 12, "selfdmg": 4, "retain": true, "text": "Perd {selfdmg} PV. +{block} armure. Conservé.", "up": [{"block": 4}, {"selfdmg": -2}]},
 	"g_cle_donjon": {"name": "La Clé du donjon", "g": 5, "rar": 3, "voix": "B", "cost": 1, "kind": "skill", "target": "self", "draw": 2, "trig": {"on": "blesse", "energy": 1}, "text": "Pioche {draw}.", "up": [{"draw": 1}, {"cost": -1}]},
 	"g_parry": {"name": "Parry", "g": 5, "rar": 3, "voix": "R", "cost": 0, "kind": "skill", "target": "self", "parry": true, "exhaust": true, "text": "Le prochain coup au contact reçu avant son tour est annulé et renvoyé à l'attaquant. Épuise.", "up": [{"block": 5, "text": "+{block} armure. Le prochain coup au contact reçu avant son tour est annulé et renvoyé à l'attaquant. Épuise."}, {"exhaust": false, "text": "+{block} armure. Le prochain coup au contact reçu avant son tour est annulé et renvoyé à l'attaquant."}]},
 	"g_quarante": {"name": "La Règle des 40 %", "g": 5, "rar": 4, "voix": "N", "cost": 2, "kind": "power", "target": "self", "power": "quarante", "val": 15, "text": "Pouvoir : la première fois par combat qu'un héros tombe à 0 PV, il reste à 1, gagne {val} armure et +2 énergie à son prochain tour.", "up": [{"val": 5}, {"cost": -1}]},
-	# 6 · La Douane
+	# 6 · Les Douaniers
 	"g_fouille": {"name": "Fouille", "g": 6, "rar": 1, "cost": 1, "kind": "atk", "range": [1, 1], "dmg": 5, "steal": true, "text": "Vole l'objet de la cible, puis inflige {dmg}.", "up": [{"dmg": 3}, {"block": 4, "text": "Vole l'objet de la cible, puis inflige {dmg}. +{block} armure."}]},
 	"g_consigne": {"name": "Consigne", "g": 6, "rar": 2, "cost": 1, "kind": "skill", "target": "self", "iblock": 3, "text": "+{iblock} armure par Stock.", "up": [{"iblock": 1}, {"cost": -1}]},
 	"g_saisie": {"name": "Saisie", "g": 6, "rar": 3, "cost": 1, "kind": "atk", "range": [1, 1], "dmg": 6, "steal": true, "iblock": 3, "text": "Vole l'objet de la cible et inflige {dmg}. +{iblock} armure par Stock.", "up": [{"dmg": 3}, {"iblock": 1}]},
 	"g_coffre_fort": {"name": "Coffre-fort", "g": 6, "rar": 3, "cost": 1, "kind": "skill", "target": "self", "iblock": 3, "retain": true, "text": "+{iblock} armure par Stock. Conservé.", "up": [{"iblock": 1}, {"cost": -1}]},
 	"g_ferraille": {"name": "Bouclier de ferraille", "g": 6, "rar": 3, "cost": 1, "kind": "skill", "target": "self", "consume": true, "c_block": 14, "taunt": true, "text": "Démonte 1 : +{c_block} armure. Provocation.", "up": [{"c_block": 4}, {"cost": -1}]},
 	"g_octroi": {"name": "L'Octroi de Mère Bastide", "g": 6, "rar": 4, "cost": 2, "kind": "power", "target": "self", "power": "octroi", "val": 5, "text": "Pouvoir : tout ennemi qui frappe ce héros au contact lui cède son objet, sinon subit {val}.", "up": [{"val": 3}, {"cost": -1}]},
-	# 7 · Les Murmures
+	# 7 · Les Magilames
 	"g_murmure": {"name": "Murmure", "g": 7, "rar": 1, "cost": 0, "kind": "skill", "target": "self", "draw": 1, "rpoison": 2, "text": "Pioche 1. Un ennemi au hasard : +{rpoison} poison.", "up": [{"rpoison": 2}, {"draw": 1, "text": "Pioche {draw}. Un ennemi au hasard : +{rpoison} poison."}]},
 	"g_dard": {"name": "Dard de braise", "g": 7, "rar": 2, "cost": 1, "kind": "atk", "range": [2, 4], "dmg": 3, "poison": 3, "text": "Inflige {dmg} et {poison} de poison.", "up": [{"poison": 2}, {"dmg": 3}]},
 	"g_brume_noire": {"name": "Brume noire", "g": 7, "rar": 3, "cost": 1, "kind": "atk", "range": [1, 5], "dmg": 0, "shadow_ally": true, "draw": 1, "text": "L'allié le plus proche de la cible se téléporte dans son dos : son prochain coup compte de dos. Pioche 1.", "up": [{"cost": -1}, {"mark": 2, "text": "L'allié le plus proche de la cible se téléporte dans son dos : son prochain coup compte de dos. Marqué {mark} tours. Pioche 1."}]},
@@ -132,7 +132,7 @@ const CARDS := {
 	"g_poudre_aveuglante": {"name": "Poudre aveuglante", "g": 8, "rar": 3, "cost": 1, "kind": "skill", "target": "tile", "range": [1, 4], "smoke": 2, "text": "Fumée 2 tours sur une case et autour : au contact, tout coup y compte de dos.", "up": [{"draw": 1, "text": "Fumée 2 tours sur une case et autour : au contact, tout coup y compte de dos. Pioche 1."}, {"cost": -1}]},
 	"g_detonateur": {"name": "Dague-détonateur", "g": 8, "rar": 3, "cost": 1, "kind": "atk", "range": [2, 4], "dmg": 5, "det_near": true, "text": "Inflige {dmg} à distance. Un baril voisin de la cible saute.", "up": [{"dmg": 3}, {"cost": -1}]},
 	"g_zaida": {"name": "Le Feu d'artifice de Zaïda", "g": 8, "rar": 4, "cost": 3, "kind": "skill", "target": "self", "barrels_behind": true, "exhaust": true, "text": "Pose un baril dans le dos de chaque ennemi. Pioche 1 par baril posé. Épuise.", "up": [{"cost": -1}, {"exhaust": false, "text": "Pose un baril dans le dos de chaque ennemi. Pioche 1 par baril posé."}]},
-	# 9 · L'École du Vent
+	# 9 · Les Ninjas
 	"g_rafale": {"name": "Rafale", "g": 9, "rar": 1, "cost": 0, "kind": "atk", "range": [1, 1], "dmg": 2, "hits": 2, "text": "Inflige {dmg} deux fois.", "up": [{"dmg": 1}, {"hits": 1, "text": "Inflige {dmg} trois fois."}]},
 	"g_pas_vent": {"name": "Pas du vent", "g": 9, "rar": 2, "cost": 0, "kind": "move", "target": "tile", "range": [1, 2], "blink": true, "draw": 1, "text": "Téléportation à {rmax} cases. Pioche 1.", "up": [{"reach": 1}, {"energy": 1, "text": "Téléportation à {rmax} cases. Pioche 1, +1 énergie."}]},
 	"g_tourbillon_acier": {"name": "Tourbillon d'acier", "g": 9, "rar": 3, "cost": 1, "kind": "atk", "target": "self", "around": true, "dmg": 4, "back_if_tele": true, "text": "Inflige {dmg} à chaque ennemi voisin. Si le héros s'est téléporté ce tour, tous ces coups comptent de dos.", "up": [{"dmg": 2}, {"cost": -1}]},
@@ -146,70 +146,70 @@ const CARDS := {
 	"g_carreau_poison": {"name": "Carreau empoisonné", "g": 10, "rar": 3, "cost": 1, "kind": "atk", "range": [2, 5], "dmg": 4, "poison": 4, "x2_marked": true, "text": "Inflige {dmg} et {poison} de poison, doublé si la cible est marquée.", "up": [{"poison": 2}, {"dmg": 3}]},
 	"g_piege_ombre": {"name": "Piège d'ombre", "g": 10, "rar": 3, "cost": 1, "kind": "skill", "target": "tile", "range": [1, 3], "place": "ombre", "tdmg": 5, "text": "Pose un piège d'ombre : sa proie subit {tdmg}, reste entravée 2 tours et Marquée 2 tours.", "up": [{"tdmg": 4}, {"cost": -1}]},
 	"g_vesk": {"name": "Le Contrat de Vesk", "g": 10, "rar": 4, "cost": 2, "kind": "power", "target": "self", "power": "vesk", "val": 3, "text": "Pouvoir : les ennemis marqués prennent {val} poison à leur tour. Tuer un ennemi marqué rend 1 énergie et marque le plus proche.", "up": [{"val": 2}, {"cost": -1}]},
-	# 11 · La Frame parfaite
+	# 11 · Les Escrimeurs
 	"g_jab": {"name": "Jab", "g": 11, "rar": 1, "voix": "R", "cost": 0, "kind": "atk", "range": [1, 1], "dmg": 3, "trig": {"on": "premier", "draw": 1}, "text": "Inflige {dmg}.", "up": [{"dmg": 2}, {"dmg": 2}]},
 	"g_dash": {"name": "Dash cancel", "g": 11, "rar": 2, "voix": "B", "cost": 1, "kind": "move", "target": "tile", "range": [1, 3], "blink": true, "block": 3, "text": "Téléportation à {rmax} cases. +{block} armure.", "up": [{"reach": 1}, {"block": 3}]},
 	"g_whiff": {"name": "Whiff punish", "g": 11, "rar": 3, "voix": "R", "cost": 0, "kind": "atk", "range": [1, 1], "dmg": 3, "trig": {"on": "attaque", "dmg": 6}, "text": "Inflige {dmg}.", "up": [{"dmg": 2}, {"reach": 1}]},
 	"g_muda": {"name": "Muda muda", "g": 11, "rar": 3, "voix": "R", "cost": 2, "kind": "atk", "range": [1, 1], "dmg": 2, "hits": 7, "selfdmg": 3, "text": "Inflige {dmg} sept fois. Perd {selfdmg} PV.", "up": [{"dmg": 1}, {"selfdmg": -2}]},
 	"g_frames": {"name": "Lecture des frames", "g": 11, "rar": 3, "voix": "B", "cost": 1, "kind": "atk", "range": [1, 5], "dmg": 0, "delay": 2, "draw": 1, "text": "La cible recule de {delay} places dans l'initiative. Pioche 1.", "up": [{"delay": 1}, {"cost": -1}]},
 	"g_justframe": {"name": "Just frame", "g": 11, "rar": 4, "voix": "N", "cost": 1, "kind": "skill", "target": "self", "justframe": true, "text": "Premier jet : la prochaine attaque de ce tour inflige ×3 et ne coûte rien. Sinon : pioche 1.", "up": [{"cost": -1}, {"draw": 1, "text": "Premier jet : la prochaine attaque de ce tour inflige ×3 et ne coûte rien. Pioche 1 de toute façon."}]},
-	# 12 · La Pègre des Quais
+	# 12 · Les Détrousseurs
 	"g_coupe_bourse": {"name": "Coupe-bourse", "g": 12, "rar": 1, "cost": 0, "kind": "atk", "range": [1, 1], "dmg": 3, "steal": true, "text": "Vole l'objet de la cible, puis inflige {dmg}.", "up": [{"dmg": 2}, {"draw": 1, "text": "Vole l'objet de la cible, puis inflige {dmg}. Pioche 1."}]},
 	"g_ombre_quai": {"name": "Ombre du quai", "g": 12, "rar": 2, "cost": 1, "kind": "atk", "range": [1, 3], "behind": true, "dmg": 5, "text": "Se téléporte dans le dos d'un ennemi à {rmax} cases et inflige {dmg}.", "up": [{"dmg": 3}, {"reach": 1}]},
 	"g_tire": {"name": "Vol à la tire", "g": 12, "rar": 3, "cost": 0, "kind": "atk", "range": [1, 3], "behind": true, "ret": true, "steal": true, "dmg": 0, "text": "Se téléporte dans le dos d'un ennemi à {rmax} cases, vole son objet, puis revient.", "up": [{"dmg": 4, "text": "Se téléporte dans le dos d'un ennemi à {rmax} cases, vole son objet, inflige {dmg}, puis revient."}, {"draw": 1, "text": "Se téléporte dans le dos d'un ennemi à {rmax} cases, vole son objet, inflige {dmg}, puis revient. Pioche 1."}]},
 	"g_enduite": {"name": "Lame enduite", "g": 12, "rar": 3, "cost": 1, "kind": "skill", "target": "self", "item_poison": 4, "text": "Ce combat, tes cartes-objets mettent aussi {item_poison} poison à leur cible.", "up": [{"draw": 1, "text": "Ce combat, tes cartes-objets mettent aussi {item_poison} poison à leur cible. Pioche 1."}, {"cost": -1}]},
 	"g_filiere": {"name": "Filière", "g": 12, "rar": 3, "cost": 1, "kind": "skill", "target": "self", "filiere": true, "text": "Pour chaque objet volé ce tour : pioche 1 et +1 énergie (2 au plus).", "up": [{"cost": -1}, {"draw": 1, "text": "Pour chaque objet volé ce tour : pioche 1 et +1 énergie (2 au plus). Pioche 1."}]},
 	"g_cador": {"name": "Cador, Prince des Quais", "g": 12, "rar": 4, "cost": 2, "kind": "power", "target": "self", "power": "cador", "text": "Pouvoir : chaque coup de dos vole l'objet de la cible, ou en fabrique un.", "up": [{"cost": -1}, {"cost": -1}]},
-	# 13 · La Forge-Braise
+	# 13 · Les Canonniers
 	"g_etincelle_bleue": {"name": "Étincelle bleue", "g": 13, "rar": 1, "cost": 1, "kind": "atk", "range": [2, 4], "dmg": 4, "overload": 3, "text": "Inflige {dmg} à distance. Surcharge 3 : touche chaque ennemi.", "up": [{"dmg": 2}, {"reach": 1}]},
 	"g_braise_poudre": {"name": "Braise-poudre", "g": 13, "rar": 2, "cost": 1, "kind": "atk", "target": "tile", "range": [2, 4], "dmg": 4, "aoe": true, "aoe_baril": true, "text": "Inflige {dmg} en croix autour d'une case. Pose un baril au centre s'il est libre.", "up": [{"dmg": 3}, {"cost": -1}]},
 	"g_arc_volt": {"name": "Arc voltaïque", "g": 13, "rar": 3, "cost": 1, "kind": "atk", "range": [2, 4], "dmg": 4, "volt": true, "text": "Inflige {dmg}, puis fait sauter chaque baril à 3 cases de la cible.", "up": [{"dmg": 3}, {"reach": 1}]},
 	"g_colonne_s": {"name": "Colonne surchargée", "g": 13, "rar": 3, "cost": 2, "kind": "atk", "target": "tile", "range": [2, 5], "dmg": 7, "aoe": true, "overload": 4, "text": "Inflige {dmg} en croix autour d'une case. Surcharge 4 : touche chaque ennemi.", "up": [{"dmg": 3}, {"overload": -1, "text": "Inflige {dmg} en croix autour d'une case. Surcharge 3 : touche chaque ennemi."}]},
 	"g_brasero": {"name": "Brasero ambulant", "g": 13, "rar": 3, "cost": 1, "kind": "skill", "target": "tile", "range": [1, 3], "place": "brasero", "draw": 1, "text": "Pose un brasero (explose quand on le frappe : 7 autour). Pioche 1.", "up": [{"draw": 1, "text": "Pose un brasero (explose quand on le frappe : 7 autour). Pioche {draw}."}, {"cost": -1}]},
 	"g_ignar": {"name": "Ignar, Dragon des Écluses", "g": 13, "rar": 4, "cost": 3, "kind": "power", "target": "self", "power": "ignar", "val": 1, "text": "Pouvoir : chaque carte piochée inflige {val} à tous les ennemis.", "up": [{"cost": -1}, {"val": 1}]},
-	# 14 · Les Sages du Souffle
+	# 14 · Les Gourous
 	"g_souffle_braise": {"name": "Souffle de braise", "g": 14, "rar": 1, "cost": 1, "kind": "atk", "range": [1, 1], "dmg": 5, "leech": 3, "text": "Inflige {dmg}, soigne {leech}.", "up": [{"dmg": 2, "leech": 1}, {"cost": -1}]},
 	"g_mantra": {"name": "Mantra", "g": 14, "rar": 2, "cost": 0, "kind": "skill", "target": "self", "heal": 3, "draw": 1, "text": "Se soigne de {heal}. Pioche 1.", "up": [{"heal": 2}, {"draw": 1, "text": "Se soigne de {heal}. Pioche {draw}."}]},
 	"g_paume_guer": {"name": "Paume guérisseuse", "g": 14, "rar": 3, "cost": 1, "kind": "atk", "range": [1, 1], "dmg": 5, "heal_adj": true, "text": "Inflige {dmg}. L'allié le plus blessé à 2 cases regagne autant de PV.", "up": [{"dmg": 3}, {"cost": -1}]},
 	"g_meditation": {"name": "Méditation partagée", "g": 14, "rar": 3, "cost": 1, "kind": "skill", "target": "self", "draw": 2, "heal_all": 4, "trig": {"on": "enchaine", "energy": 1}, "text": "Pioche 2. Soigne {heal_all} chaque allié.", "up": [{"heal_all": 2}, {"cost": -1}]},
 	"g_braise_int": {"name": "Braise intérieure", "g": 14, "rar": 3, "cost": 0, "kind": "skill", "target": "self", "inner": 3, "text": "Ce tour, chaque coup au contact inflige aussi {inner} à l'ennemi le plus proche.", "up": [{"inner": 2}, {"draw": 1, "text": "Ce tour, chaque coup au contact inflige aussi {inner} à l'ennemi le plus proche. Pioche 1."}]},
 	"g_suien": {"name": "Maître Suien, Souffle des cent vies", "g": 14, "rar": 4, "cost": 2, "kind": "power", "target": "self", "power": "suien", "val": 1, "text": "Pouvoir : chaque coup de ce héros soigne {val} chaque allié. Au 10e coup du combat, un héros tombé se relève.", "up": [{"val": 1}, {"cost": -1}]},
-	# 15 · Les Augures
+	# 15 · Les Tireurs d'élite
 	"g_oeil_ouvert": {"name": "Œil ouvert", "g": 15, "rar": 1, "cost": 0, "kind": "skill", "target": "self", "mark_near": 2, "draw": 1, "text": "L'ennemi le plus proche est Marqué {mark_near} tours. Pioche 1.", "up": [{"mark_near": 1}, {"draw": 1, "text": "L'ennemi le plus proche est Marqué {mark_near} tours. Pioche {draw}."}]},
 	"g_fleche_rune": {"name": "Flèche runique", "g": 15, "rar": 2, "cost": 1, "kind": "atk", "range": [2, 5], "dmg": 5, "trig": {"on": "proie", "dmg": 4}, "text": "Inflige {dmg} à distance.", "up": [{"dmg": 2}, {"reach": 1}]},
 	"g_tir_augural": {"name": "Tir augural", "g": 15, "rar": 3, "cost": 1, "kind": "atk", "range": [3, 6], "dmg": 6, "trig": {"on": "precision", "mark": 2, "draw": 1}, "text": "Inflige {dmg} à distance.", "up": [{"dmg": 3}, {"cost": -1}]},
 	"g_rune_chasse": {"name": "Rune de chasse", "g": 15, "rar": 3, "cost": 1, "kind": "skill", "target": "tile", "range": [1, 4], "place": "piege", "tdmg": 8, "rune": "force", "text": "Change une case en Rune de force et y pose un piège.", "up": [{"tdmg": 4}, {"cost": -1}]},
 	"g_presage": {"name": "Présage de mort", "g": 15, "rar": 3, "cost": 1, "kind": "skill", "target": "self", "mark_all": 1, "draw": 1, "text": "Marque tous les ennemis {mark_all} tour(s). Pioche 1.", "up": [{"mark_all": 1}, {"cost": -1}]},
 	"g_aelis": {"name": "Aëlis, l'Œil du fleuve", "g": 15, "rar": 4, "cost": 2, "kind": "power", "target": "self", "power": "aelis", "text": "Pouvoir : les tirs ignorent la Brume et la fumée ; Précision se déclenche à une case près.", "up": [{"cost": -1}, {"cost": -1}]},
-	# 16 · Les Diaristes
+	# 16 · Les Enlumineurs
 	"g_page": {"name": "Page blanche", "g": 16, "rar": 1, "voix": "B", "cost": 0, "kind": "skill", "target": "self", "draw": 1, "trig": {"on": "premier", "draw": 1}, "text": "Pioche {draw}.", "up": [{"draw": 1}, {"energy": 1, "text": "Pioche {draw}. +1 énergie."}]},
 	"g_rature": {"name": "Rature", "g": 16, "rar": 2, "voix": "R", "cost": 1, "kind": "atk", "range": [1, 3], "dmg": 6, "leech": 2, "text": "Inflige {dmg}, soigne {leech}.", "up": [{"dmg": 3}, {"leech": 2}]},
 	"g_relecture": {"name": "Relecture", "g": 16, "rar": 3, "voix": "B", "cost": 1, "kind": "skill", "target": "self", "recall": 2, "text": "Remet {recall} cartes de la défausse en main ; elles coûtent 1 de moins ce tour.", "up": [{"recall": 1}, {"cost": -1}]},
 	"g_insomnie": {"name": "Insomnie lucide", "g": 16, "rar": 3, "voix": "N", "cost": 0, "kind": "skill", "target": "self", "draw": 3, "selfdmg": 3, "heal_ally": 6, "text": "Pioche {draw}, perd {selfdmg} PV. L'allié le plus blessé regagne {heal_ally} PV.", "up": [{"heal_ally": 3}, {"selfdmg": -2}]},
 	"g_rechute": {"name": "Rechute ou reprise", "g": 16, "rar": 3, "voix": "R", "cost": 1, "kind": "atk", "range": [1, 2], "dmg": 12, "rechute": true, "text": "Inflige {dmg} et perd 4 PV. Dos au mur : se soigne de 12 à la place.", "up": [{"dmg": 4}, {"cost": -1}]},
 	"g_journal": {"name": "Le Grand Journal", "g": 16, "rar": 4, "voix": "B", "cost": 3, "kind": "power", "target": "self", "power": "journal", "text": "Pouvoir : au début de chacun de ses tours, ce héros Découvre une carte déjà jouée ce combat ; elle coûte 0.", "up": [{"cost": -1}, {"cost": -1}]},
-	# 17 · Les Antiquaires
+	# 17 · Les Apothicaires
 	"g_estampille": {"name": "Estampille", "g": 17, "rar": 1, "cost": 1, "kind": "skill", "target": "self", "craft": 1, "draw": 1, "text": "Fabrique 1. Pioche 1.", "up": [{"cost": -1}, {"craft": 1, "text": "Fabrique 2. Pioche 1."}]},
 	"g_fiole_braise": {"name": "Fiole de braise", "g": 17, "rar": 2, "cost": 1, "kind": "atk", "range": [2, 4], "dmg": 4, "craft_id": "fiole", "text": "Inflige {dmg} à distance. Fabrique une Fiole de sève.", "up": [{"dmg": 3}, {"cost": -1}]},
 	"g_transmut": {"name": "Transmutation d'objet", "g": 17, "rar": 3, "cost": 1, "kind": "atk", "range": [2, 5], "dmg": 10, "need_item": true, "text": "Démonte 1 : inflige {dmg} à distance. Sans objet : rien.", "up": [{"dmg": 4}, {"cost": -1}]},
 	"g_alchimie": {"name": "Alchimie", "g": 17, "rar": 3, "cost": 1, "kind": "skill", "target": "self", "craft_id": "fiole", "fiole2": true, "text": "Fabrique une Fiole de sève. Ce combat, les fioles soignent le double.", "up": [{"cost": -1}, {"draw": 1, "text": "Fabrique une Fiole de sève. Ce combat, les fioles soignent le double. Pioche 1."}]},
 	"g_expertise": {"name": "Expertise", "g": 17, "rar": 3, "cost": 0, "kind": "skill", "target": "self", "idraw": 3, "text": "Pioche 1 par Stock ({idraw} au plus).", "up": [{"iblock": 2, "text": "Pioche 1 par Stock ({idraw} au plus). +{iblock} armure par objet."}, {"energy": 1, "text": "Pioche 1 par Stock ({idraw} au plus). +{iblock} armure par objet. +1 énergie."}]},
 	"g_oriel": {"name": "Dame Oriel, la Curatrice", "g": 17, "rar": 4, "cost": 2, "kind": "power", "target": "self", "power": "oriel", "text": "Pouvoir : la première carte-objet jouée à chaque tour agit deux fois.", "up": [{"cost": -1}, {"cost": -1}]},
-	# 18 · Les Poings-Canons
+	# 18 · Les Démolisseurs
 	"g_poing_poudre": {"name": "Poing de poudre", "g": 18, "rar": 1, "cost": 1, "kind": "atk", "range": [1, 1], "dmg": 6, "trig": {"on": "poudre", "dmg": 4}, "text": "Inflige {dmg}.", "up": [{"dmg": 3}, {"cost": -1}]},
 	"g_meche_lente": {"name": "Mèche lente", "g": 18, "rar": 2, "cost": 0, "kind": "skill", "target": "tile", "range": [1, 1], "place": "baril", "text": "Pose un baril au contact.", "up": [{"draw": 1, "text": "Pose un baril au contact. Pioche 1."}, {"block": 4, "text": "Pose un baril au contact. Pioche 1. +{block} armure."}]},
 	"g_gantelet": {"name": "Gantelet-pétard", "g": 18, "rar": 3, "cost": 1, "kind": "atk", "range": [1, 1], "dmg": 6, "push": 2, "trig": {"on": "enchaine", "boom": 4}, "text": "Inflige {dmg} et repousse {push}.", "up": [{"dmg": 3}, {"cost": -1}]},
 	"g_canon": {"name": "Coup de canon", "g": 18, "rar": 3, "cost": 2, "kind": "atk", "range": [1, 1], "dmg": 13, "recoil": 2, "text": "Inflige {dmg}. Le recul renvoie le héros 2 cases en arrière.", "up": [{"dmg": 4}, {"cost": -1}]},
 	"g_rythme": {"name": "Rythme de forge", "g": 18, "rar": 3, "cost": 0, "kind": "skill", "target": "self", "draw": 1, "hitcount": true, "trig": {"on": "poudre", "energy": 1}, "text": "Pioche 1. Compte comme un coup.", "up": [{"block": 4, "text": "Pioche 1. Compte comme un coup. +{block} armure."}, {"draw": 1, "text": "Pioche {draw}. Compte comme un coup. +{block} armure."}]},
 	"g_hazan": {"name": "Hazan, Poing de poudre", "g": 18, "rar": 4, "cost": 3, "kind": "power", "target": "self", "power": "hazan", "val": 7, "text": "Pouvoir : le 3e coup de chacun de ses tours déclenche une explosion de {val} autour de la cible.", "up": [{"val": 3}, {"cost": -1}]},
-	# 19 · Les Artilleurs de brousse
+	# 19 · Les Artilleurs
 	"g_leurre": {"name": "Leurre sonore", "g": 19, "rar": 1, "cost": 1, "kind": "skill", "target": "tile", "range": [1, 4], "lure": 2, "text": "Les ennemis à 4 cases de la case avancent de {lure} vers elle.", "up": [{"lure": 1}, {"cost": -1}]},
 	"g_barrage": {"name": "Tir de barrage", "g": 19, "rar": 2, "cost": 1, "kind": "atk", "range": [2, 5], "dmg": 4, "det_near": true, "text": "Inflige {dmg} à distance. Un baril voisin de la cible saute.", "up": [{"dmg": 2}, {"reach": 1}]},
 	"g_mine_fil": {"name": "Mine à fil", "g": 19, "rar": 3, "cost": 1, "kind": "skill", "target": "tile", "range": [1, 3], "place": "mine", "tdmg": 8, "text": "Pose une mine : qui y marche la fait sauter, {tdmg} autour, et reste Marqué.", "up": [{"tdmg": 4}, {"cost": -1}]},
 	"g_tourelle_guet": {"name": "Tourelle de guet", "g": 19, "rar": 3, "cost": 2, "kind": "skill", "target": "tile", "range": [1, 2], "place": "tourelle", "tdmg": 4, "tmark": true, "trange": 6, "turns": 3, "text": "Pose une tourelle qui tire à 6 cases : {tdmg} et Marqué, pendant {turns} rounds.", "up": [{"tdmg": 2}, {"turns": 2}]},
 	"g_champ": {"name": "Champ piégé", "g": 19, "rar": 3, "cost": 2, "kind": "skill", "target": "tile", "range": [1, 3], "place": "piege", "tdmg": 8, "twin": true, "plus_baril": true, "text": "Pose deux pièges et un baril à côté.", "up": [{"cost": -1}, {"tdmg": 4}]},
 	"g_torvald": {"name": "La Baliste de Torvald", "g": 19, "rar": 4, "cost": 3, "kind": "skill", "target": "tile", "range": [1, 2], "place": "tourelle", "tdmg": 12, "tpierce": true, "tfar": true, "trange": 12, "turns": 3, "text": "Pose une baliste : chaque round, {tdmg} qui ignore l'armure, sur l'ennemi marqué le plus lointain (ou le plus lointain), {turns} rounds.", "up": [{"tdmg": 4}, {"turns": 1}]},
-	# 20 · Les Artisans
+	# 20 · Les Ingénieurs
 	"g_croquis": {"name": "Croquis technique", "g": 20, "rar": 1, "voix": "B", "cost": 1, "kind": "atk", "target": "tile", "range": [2, 4], "dmg": 4, "aoe": true, "text": "Inflige {dmg} en croix autour d'une case.", "up": [{"dmg": 2}, {"cost": -1}]},
 	"g_brouillon": {"name": "Brouillon", "g": 20, "rar": 2, "voix": "R", "cost": 1, "kind": "skill", "target": "tile", "range": [1, 3], "place": "baril", "draw": 1, "text": "Pose un baril. Pioche {draw}.", "up": [{"draw": 1}, {"cost": -1}]},
 	"g_geste": {"name": "Geste technique", "g": 20, "rar": 3, "voix": "B", "cost": 1, "kind": "skill", "target": "self", "lvl_next": true, "text": "La prochaine carte jouée ce tour gagne un niveau jusqu'à la fin du combat.", "up": [{"cost": -1}, {"draw": 1, "text": "La prochaine carte jouée ce tour gagne un niveau jusqu'à la fin du combat. Pioche 1."}]},
@@ -223,28 +223,28 @@ const CARDS := {
 	"g_bombe_art": {"name": "Bombe artisanale", "g": 21, "rar": 3, "cost": 1, "kind": "skill", "target": "self", "craft_id": "bombe", "craft_n": 2, "text": "Fabrique {craft_n} Bombes à mèche.", "up": [{"cost": -1}, {"craft_n": 1}]},
 	"g_tour_recup": {"name": "Tourelle de récup", "g": 21, "rar": 3, "cost": 1, "kind": "skill", "target": "tile", "range": [1, 2], "place": "tourelle", "tdmg": 4, "turns": 2, "turns_items": true, "text": "Pose une tourelle : {tdmg} au plus proche chaque round, 1 round par Stock ({turns} au moins).", "up": [{"tdmg": 2}, {"tdmg": 2}]},
 	"g_pip": {"name": "Le Grand Bazar de Pip", "g": 21, "rar": 4, "cost": 2, "kind": "power", "target": "self", "power": "pip", "text": "Pouvoir : chaque baril qui saute Fabrique 1.", "up": [{"cost": -1}, {"cost": -1}]},
-	# 22 · Les Coureurs des berges
+	# 22 · Les Lutteurs
 	"g_balayage": {"name": "Balayage", "g": 22, "rar": 1, "cost": 1, "kind": "atk", "range": [1, 1], "dmg": 4, "root": 1, "text": "Inflige {dmg}. Entravé {root} tour(s).", "up": [{"dmg": 2}, {"root": 1}]},
 	"g_garrot": {"name": "Garrot", "g": 22, "rar": 2, "cost": 1, "kind": "atk", "range": [1, 1], "dmg": 3, "root": 2, "mark": 1, "text": "Inflige {dmg}. Entravé {root} tours, Marqué {mark} tour(s).", "up": [{"dmg": 3}, {"mark": 1}]},
 	"g_lievre": {"name": "Coup de pied du lièvre", "g": 22, "rar": 3, "cost": 0, "kind": "atk", "range": [1, 1], "dmg": 4, "push": 3, "text": "Inflige {dmg} et repousse {push} : un piège sur sa route le prend.", "up": [{"dmg": 2}, {"push": 1}]},
 	"g_predateur": {"name": "Bond du prédateur", "g": 22, "rar": 3, "cost": 1, "kind": "atk", "range": [1, 4], "dash": true, "dmg": 6, "trig": {"on": "proie", "dmg": 6}, "text": "Bondit au contact d'un ennemi à {rmax} cases, relief ignoré, et inflige {dmg}.", "up": [{"dmg": 3}, {"reach": 1}]},
 	"g_prise": {"name": "Prise au sol", "g": 22, "rar": 3, "cost": 1, "kind": "atk", "range": [1, 1], "dmg": 5, "root": 1, "trig": {"on": "enchaine", "mark": 2}, "text": "Inflige {dmg}. Entravé {root} tour(s).", "up": [{"dmg": 3}, {"cost": -1}]},
 	"g_tetsu": {"name": "Tetsu, Loup-des-berges", "g": 22, "rar": 4, "cost": 2, "kind": "power", "target": "self", "power": "tetsu", "val": 4, "text": "Pouvoir : les ennemis entravés subissent +{val} au contact. Frapper un ennemi entravé rend son déplacement au héros.", "up": [{"val": 2}, {"cost": -1}]},
-	# 23 · Le Dojo
+	# 23 · Les Catcheurs
 	"g_poke": {"name": "Poke", "g": 23, "rar": 1, "voix": "R", "cost": 0, "kind": "atk", "range": [1, 2], "dmg": 3, "text": "Inflige {dmg}.", "up": [{"dmg": 2}, {"draw": 1, "text": "Inflige {dmg}. Pioche 1."}]},
 	"g_lcancel": {"name": "L-cancel", "g": 23, "rar": 2, "voix": "B", "cost": 0, "kind": "skill", "target": "self", "draw": 1, "trig": {"on": "enchaine", "energy": 1}, "text": "Pioche {draw}.", "up": [{"draw": 1}, {"block": 4, "text": "Pioche {draw}. +{block} armure."}]},
 	"g_ewgf": {"name": "Poing du dieu-vent", "g": 23, "rar": 3, "voix": "R", "cost": 1, "kind": "atk", "range": [1, 1], "dmg": 8, "trig": {"on": "premier", "dmg": 8}, "text": "Inflige {dmg}.", "up": [{"dmg": 3}, {"push": 2, "text": "Inflige {dmg} et repousse {push}."}]},
 	"g_shine": {"name": "Shine", "g": 23, "rar": 3, "voix": "R", "cost": 0, "kind": "atk", "target": "self", "around": true, "dmg": 1, "push": 2, "block": 3, "text": "{dmg} et repousse de {push} chaque ennemi voisin. +{block} armure.", "up": [{"block": 3}, {"push": 1}]},
 	"g_techchase": {"name": "Tech chase", "g": 23, "rar": 3, "voix": "B", "cost": 1, "kind": "atk", "range": [1, 4], "dmg": 5, "trig": {"on": "chasse", "dmg": 8}, "text": "Inflige {dmg}.", "up": [{"dmg": 3}, {"cost": -1}]},
 	"g_zero": {"name": "Zéro à la mort", "g": 23, "rar": 4, "voix": "R", "cost": 3, "kind": "atk", "range": [1, 1], "dmg": 4, "hits_flow": true, "text": "Inflige {dmg}, une fois de plus par carte déjà jouée ce tour.", "up": [{"dmg": 1}, {"cost": -1}]},
-	# 24 · Les Acrobates de foire
+	# 24 · Les Acrobates
 	"g_bateleur": {"name": "Bateleur", "g": 24, "rar": 1, "cost": 1, "kind": "atk", "range": [1, 1], "dmg": 3, "hits": 2, "steal": true, "text": "Vole l'objet de la cible, puis inflige {dmg} deux fois.", "up": [{"dmg": 1}, {"cost": -1}]},
 	"g_culbute": {"name": "Culbute", "g": 24, "rar": 2, "cost": 0, "kind": "move", "target": "tile", "range": [1, 2], "blink": true, "craft": 1, "text": "Bondit de {rmax} cases et Fabrique 1.", "up": [{"reach": 1}, {"draw": 1, "text": "Bondit de {rmax} cases et Fabrique 1. Pioche 1."}]},
 	"g_main_preste": {"name": "Main preste", "g": 24, "rar": 3, "cost": 0, "kind": "atk", "range": [1, 1], "dmg": 3, "steal": true, "text": "Vole l'objet de la cible, puis inflige {dmg}.", "up": [{"dmg": 2}, {"draw": 1, "text": "Vole l'objet de la cible, puis inflige {dmg}. Pioche 1."}]},
 	"g_jonglage": {"name": "Jonglage", "g": 24, "rar": 3, "cost": 1, "kind": "atk", "range": [1, 3], "dmg": 8, "throw": true, "text": "Lance une carte-objet sur la cible : {dmg}, plus l'effet de l'objet.", "up": [{"dmg": 3}, {"cost": -1}]},
 	"g_saut_marche": {"name": "Saut de marché", "g": 24, "rar": 3, "cost": 1, "kind": "atk", "range": [1, 1], "vault": true, "steal": true, "dmg": 0, "text": "Bondit par-dessus un ennemi voisin et lui vole son objet au passage.", "up": [{"dmg": 5, "text": "Bondit par-dessus un ennemi voisin, lui vole son objet et inflige {dmg}."}, {"cost": -1}]},
 	"g_linfei": {"name": "Lin Fei, Cent poches", "g": 24, "rar": 4, "cost": 2, "kind": "power", "target": "self", "power": "linfei", "text": "Pouvoir : le 3e coup de chacun de ses tours vole l'objet, sinon Fabrique 1. Chaque objet consommé compte comme un coup.", "up": [{"cost": -1}, {"cost": -1}]},
-	# 25 · Les Chasseurs de patterns
+	# 25 · Les Chasseurs de monstres
 	"g_reperage": {"name": "Repérage", "g": 25, "rar": 1, "voix": "B", "cost": 1, "kind": "atk", "range": [2, 5], "dmg": 4, "mark": 1, "text": "Inflige {dmg}. Marqué {mark} tour(s).", "up": [{"dmg": 2}, {"mark": 1}]},
 	"g_roulade": {"name": "Roulade", "g": 25, "rar": 2, "voix": "R", "cost": 0, "kind": "move", "target": "tile", "range": [1, 2], "blink": true, "block": 3, "text": "Roule de {rmax} cases, relief ignoré. +{block} armure.", "up": [{"block": 3}, {"reach": 1}]},
 	"g_pattern": {"name": "Lire le pattern", "g": 25, "rar": 3, "voix": "B", "cost": 1, "kind": "atk", "range": [1, 5], "dmg": 0, "mark": 2, "delay": 1, "draw": 1, "text": "Marqué {mark} tours, recule d'une place dans l'initiative. Pioche 1.", "up": [{"mark": 1}, {"cost": -1}]},
@@ -258,7 +258,7 @@ const CARDS := {
 	"g_appat_dore": {"name": "Appât doré", "g": 26, "rar": 3, "cost": 1, "kind": "skill", "target": "tile", "range": [1, 3], "place": "piege", "tdmg": 8, "lure": 2, "text": "Pose un piège ; les ennemis à 4 cases avancent de {lure} vers lui.", "up": [{"lure": 1}, {"cost": -1}]},
 	"g_trophee": {"name": "Trophée", "g": 26, "rar": 3, "cost": 0, "kind": "skill", "target": "self", "draw": 1, "trophy": true, "text": "Pioche 1. Ce combat, chaque ennemi marqué tué rapporte 10 or.", "up": [{"draw": 1, "text": "Pioche {draw}. Ce combat, chaque ennemi marqué tué rapporte 10 or."}, {"mark_near": 2, "text": "Pioche {draw}. L'ennemi le plus proche est Marqué {mark_near} tours. Ce combat, chaque ennemi marqué tué rapporte 10 or."}]},
 	"g_crane": {"name": "Le Vieux Crâne des Hauts-Fonds", "g": 26, "rar": 4, "cost": 2, "kind": "power", "target": "self", "power": "crane", "val": 3, "text": "Pouvoir : chaque piège déclenché inflige +{val} et Fabrique 1.", "up": [{"val": 3}, {"cost": -1}]},
-	# 27 · Chaos Agent
+	# 27 · Les Cambrioleurs
 	"g_reperage_coffre": {"name": "Repérage du coffre", "g": 27, "rar": 1, "voix": "B", "cost": 0, "kind": "skill", "target": "self", "draw": 1, "recharge": 1, "text": "Pioche {draw}. Recharge 1.", "up": [{"draw": 1}, {"craft": 1, "text": "Pioche {draw}. Recharge 1. Fabrique 1."}]},
 	"g_coup_main": {"name": "Coup de main", "g": 27, "rar": 2, "voix": "R", "cost": 1, "kind": "atk", "range": [1, 1], "dmg": 6, "steal": true, "text": "Vole l'objet de la cible, puis inflige {dmg}.", "up": [{"dmg": 3}, {"cost": -1}]},
 	"g_braquage": {"name": "Braquage", "g": 27, "rar": 3, "voix": "N", "cost": 1, "kind": "skill", "target": "self", "heist": 1, "text": "Braquage : regarde 3 cartes d'une classe absente de l'escouade, gardes-en une ; elle coûte 1 de moins.", "up": [{"cost": -1}, {"draw": 1, "text": "Braquage : regarde 3 cartes d'une classe absente de l'escouade, gardes-en une ; elle coûte 1 de moins. Pioche 1."}]},

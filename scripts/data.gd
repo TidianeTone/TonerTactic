@@ -632,7 +632,7 @@ const RELICS := {
 	"touriste": {"name": "Carnet du colporteur", "glyph": "⚐", "text": "Chaque butin propose en plus une carte d'une classe absente de l'escouade."},
 	"sceau": {"name": "Sceau de guilde", "glyph": "⬡", "text": "Les rares de guilde s'ouvrent dès la maîtrise II."},
 	"medaille": {"name": "Médaille du duo", "glyph": "⚭", "text": "Les cartes de guilde coûtent 1 de moins quand les deux classes de la guilde sont dans l'escouade."},
-	"noblesse": {"name": "Lettre de noblesse", "glyph": "✉", "text": "La case bonus du butin propose trois cartes au lieu d'une."},
+	"noblesse": {"name": "Lettre de noblesse", "glyph": "✉", "text": "Le butin propose trois cartes de vocation ou de guilde au lieu d'une."},
 	"plume": {"name": "Plume d'emprunt", "glyph": "✒", "text": "La première carte hors classe jouée à chaque tour pioche 1."},
 	"masque": {"name": "Masque de porcelaine", "glyph": "◐", "text": "La première carte hors classe de chaque tour coûte 1 de moins."},
 	"tambour": {"name": "Tambour 174", "glyph": "♫", "text": "Toutes les 4 cartes jouées dans un combat, +1 énergie."},
@@ -849,6 +849,7 @@ const PROPS := {
 	"pilier": {"name": "Pilier fendu", "text": "Frappé ou poussé, il s'effondre sur les 2 cases suivantes : 9 dégâts."},
 	"baril": {"name": "Baril de poudre", "text": "Un coup le fait exploser : 7 dégâts autour."},
 	"tourelle": {"name": "Tourelle", "text": "Tire 4 sur l'ennemi le plus proche à chaque fin de tour."},
+	"ratelier": {"name": "Râtelier d'armes", "text": "Au contact, un héros y prend une arme (cela lui coûte son déplacement). Une seule fois."},
 }
 
 
@@ -1256,7 +1257,7 @@ static func card_brief(c: Dictionary) -> String:
 	for pair in [[" ,", ","], [" .", "."], [",.", "."], [", .", "."], ["..", "."], [": ,", ":"], ["  ", " "]]:
 		t = t.replace(pair[0], pair[1])
 	t = t.strip_edges()
-	while t.begins_with(",") or t.begins_with(".") or t.begins_with("et ") or t.begins_with("+ "):
+	while t.begins_with(",") or t.begins_with(".") or t.begins_with(";") or t.begins_with("et ") or t.begins_with("+ "):
 		t = t.substr(1 if not t.begins_with("et ") else 3).strip_edges()
 	if t.begins_with("au Garde et aux alliés voisins"):
 		t = "Aussi aux alliés voisins."

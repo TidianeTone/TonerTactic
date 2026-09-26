@@ -107,5 +107,27 @@ def dos():
 		"no text, no letters.", os.path.join(HERE, "dos_carte.png"), "3:4", [os.path.join(HERE, "cadres_classes.png")])
 
 
+DOS = [  # un dos par classe (ordre de cadres_classes.png), la matière et l'emblème de son cadre
+	("garde", "royal-blue enamelled iron and steel, emblem: a tower shield under a small helmet crest, battlement border"),
+	("lame", "blackened steel and crimson lacquer, emblem: two crossed curved daggers under a crescent moon, smoke wisps"),
+	("oracle", "dark bronze and violet enamel, emblem: an open eye inside a ring of ember flames"),
+	("artificier", "riveted copper and brass, teal gauges, emblem: a powder keg with a lit fuse inside a cogwheel"),
+	("moine", "carved light wood and jade, green silk, emblem: a jade gem circled by prayer beads over wave crests"),
+	("trappeur", "knotted rope, bone and ochre leather, emblem: a stag skull with antlers over crossed arrows"),
+	("tidiane", "gilded wood splattered with magenta, blue, red and black paint, emblem: a cracked porcelain mask over crossed paintbrushes"),
+	("receleur", "tarnished silver and slate enamel, emblem: a padlock hung with keys and coins"),
+	("objet", "warm polished brass and leather, emblem: a buckled satchel with a coin"),
+]
+
+
+def dos_classes():
+	parts = ["Panel %d (row %d, column %d): %s." % (i + 1, i // 3 + 1, i % 3 + 1, d) for i, (k, d) in enumerate(DOS)]
+	still("A single image divided into a 3x3 grid of nine trading card BACKS for a fantasy tactics card game, each card portrait, centered "
+		"in its cell, all the same size and the same layout as the card back of the first reference: an ornate frame around a deep dark "
+		"background with subtle patterns, one large central emblem, symmetrical, hand-painted game UI, front view. Each back uses the material "
+		"and colours of the matching class frame in the second reference. No text, no letters. " + " ".join(parts) + " " + GREEN,
+		os.path.join(HERE, "dos_classes.png"), "3:4", [os.path.join(HERE, "dos_carte.png"), os.path.join(HERE, "cadres_classes.png")])
+
+
 if __name__ == "__main__":
-	dos() if sys.argv[1:] == ["dos"] else planches()
+	{"dos": dos, "dos_classes": dos_classes}.get(sys.argv[1] if sys.argv[1:] else "", planches)()

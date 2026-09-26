@@ -1980,16 +1980,20 @@ const MAPS := [
 	["quartz", [[Vector2(0.24, 0.42), Vector2(0.22, 0.50), Vector2(0.26, 0.56)], [Vector2(0.34, 0.40), Vector2(0.32, 0.48), Vector2(0.36, 0.56)], [Vector2(0.44, 0.39), Vector2(0.42, 0.50), Vector2(0.46, 0.57)], [Vector2(0.54, 0.39), Vector2(0.52, 0.48), Vector2(0.56, 0.57)], [Vector2(0.62, 0.40), Vector2(0.62, 0.48), Vector2(0.66, 0.58)], [Vector2(0.70, 0.42), Vector2(0.68, 0.50), Vector2(0.76, 0.57)], [Vector2(0.79, 0.46)]]],
 	["jade", [[Vector2(0.26, 0.50), Vector2(0.28, 0.57), Vector2(0.32, 0.63)], [Vector2(0.38, 0.46), Vector2(0.40, 0.53), Vector2(0.42, 0.60)], [Vector2(0.48, 0.42), Vector2(0.50, 0.51), Vector2(0.52, 0.63)], [Vector2(0.58, 0.44), Vector2(0.60, 0.52), Vector2(0.62, 0.65)], [Vector2(0.66, 0.40), Vector2(0.70, 0.51), Vector2(0.70, 0.60)], [Vector2(0.74, 0.42), Vector2(0.78, 0.50), Vector2(0.80, 0.56)], [Vector2(0.85, 0.48)]]],
 ]
-static var _dash: Texture2D
-static func dash_tex() -> Texture2D:
-	## Pointillés du sentier : une moitié pleine, une moitié vide, répétée le long de la ligne.
-	if _dash == null:
-		var im := Image.create(16, 4, false, Image.FORMAT_RGBA8)
-		for x in 16:
-			for y in 4:
-				im.set_pixel(x, y, Color(1, 1, 1, 1.0 if x < 9 else 0.0))
-		_dash = ImageTexture.create_from_image(im)
-	return _dash
+static var _trail: Texture2D
+static func trail_tex() -> Texture2D:
+	## Coupe de la sente : opaque au centre, bords fondus et grenus, pour qu'elle se pose dans la peinture.
+	if _trail == null:
+		var im := Image.create(64, 16, false, Image.FORMAT_RGBA8)
+		var r := RandomNumberGenerator.new()
+		r.seed = 7
+		for x in 64:
+			for y in 16:
+				var v := absf(y - 7.5) / 7.5
+				var a := clampf(1.0 - pow(v, 2.2), 0.0, 1.0) * r.randf_range(0.6, 1.0)
+				im.set_pixel(x, y, Color(1, 1, 1, a))
+		_trail = ImageTexture.create_from_image(im)
+	return _trail
 
 
 func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: int, nexts: Array, visited: Array, equip_txt: String, bi := 0) -> int:
@@ -2053,35 +2057,64 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 		var col: Array = m[1][mini(k, m[1].size() - 1)]
 		var p: Vector2 = col[0] if col.size() == 1 else col[clampi(i + (1 if fmap[k].size() == 1 else 0), 0, col.size() - 1)]
 		return stage.position + p * stage.size
-	# le sentier : une courbe douce par lien, ombre dessous, pointillés dessus
+	# le sentier : une sente de terre battue qui serpente, bords fondus dans l'image ; des pas dorés sur les chemins
+	# ouverts, des pas sombres sur ceux déjà suivis (plus de pointillés posés par-dessus le décor)
 	for k in fmap.size() - 1:
 		for i in fmap[k].size():
 			for j in fmap[k][i].links:
 				var a: Vector2 = pos.call(k, i)
 				var b: Vector2 = pos.call(k + 1, j)
-				var mid: Vector2 = (a + b) / 2.0 + (b - a).orthogonal().normalized() * (14.0 if (k + i + j) % 2 == 0 else -14.0)
+				var nrm: Vector2 = (b - a).orthogonal().normalized()
+				var sd := float((k * 7 + i * 13 + j * 29) % 17)
 				var pts := PackedVector2Array()
-				for q in 13:
-					var u := q / 12.0
-					pts.append(a.lerp(mid, u).lerp(mid.lerp(b, u), u))
+				for q in 25:
+					var u := q / 24.0
+					var env := sin(u * PI)  # les extrémités restent sur les salles
+					var wob := sin(u * TAU * 1.3 + sd) * 7.0 + sin(u * TAU * 2.7 + sd * 2.0) * 2.5
+					pts.append(a.lerp(b, u) + nrm * (wob + (10.0 if int(sd) % 2 == 0 else -10.0)) * env)
 				var trod: bool = visited.has(Vector2i(k, i)) and visited.has(Vector2i(k + 1, j))
 				var open: bool = k == step - 1 and i == lane and nexts.has(j)
-				var under := Line2D.new()
-				under.points = pts
-				under.width = 11.0 if trod or open else 8.0
-				under.default_color = Color(0.05, 0.03, 0.02, 0.55 if trod or open else 0.3)
-				under.joint_mode = Line2D.LINE_JOINT_ROUND
-				under.begin_cap_mode = Line2D.LINE_CAP_ROUND
-				under.end_cap_mode = Line2D.LINE_CAP_ROUND
-				area.add_child(under)
-				var ln := Line2D.new()
-				ln.points = pts
-				ln.width = 6.0 if trod or open else 4.0
-				ln.texture = dash_tex()
-				ln.texture_mode = Line2D.LINE_TEXTURE_TILE
-				ln.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
-				ln.default_color = GOLD if open else (INK if trod else Color(1, 0.95, 0.85, 0.55))
-				area.add_child(ln)
+				for layer in [[20.0, 0.24], [12.0, 0.46]]:  # le bord usé, puis le cœur de la sente
+					var ln := Line2D.new()
+					ln.points = pts
+					ln.width = layer[0] * (1.15 if trod or open else 1.0)
+					ln.texture = trail_tex()
+					ln.texture_mode = Line2D.LINE_TEXTURE_STRETCH
+					ln.default_color = Color(0.24, 0.16, 0.09, layer[1] * (1.4 if trod or open else 1.0))
+					ln.joint_mode = Line2D.LINE_JOINT_ROUND
+					ln.begin_cap_mode = Line2D.LINE_CAP_ROUND
+					ln.end_cap_mode = Line2D.LINE_CAP_ROUND
+					area.add_child(ln)
+				if trod or open:
+					# des pas, en quinconce, espacés régulièrement le long de la sente
+					var total := 0.0
+					for q in range(1, pts.size()):
+						total += pts[q].distance_to(pts[q - 1])
+					var step_len := 13.0
+					var d := step_len
+					var q2 := 1
+					var acc := 0.0
+					var side := 1.0
+					while d < total - step_len and q2 < pts.size():
+						var seg: float = pts[q2].distance_to(pts[q2 - 1])
+						if acc + seg < d:
+							acc += seg
+							q2 += 1
+							continue
+						var t: float = (d - acc) / seg
+						var p: Vector2 = pts[q2 - 1].lerp(pts[q2], t)
+						var dir: Vector2 = (pts[q2] - pts[q2 - 1]).normalized()
+						var fp := Polygon2D.new()
+						var circ := PackedVector2Array()
+						for c in 8:
+							var an := c / 8.0 * TAU
+							circ.append(Vector2(cos(an) * 3.2, sin(an) * 2.0).rotated(dir.angle()))
+						fp.polygon = circ
+						fp.position = p + dir.orthogonal() * 3.0 * side
+						fp.color = Color(GOLD, 0.95) if open else Color(0.1, 0.06, 0.03, 0.55)
+						area.add_child(fp)
+						side = -side
+						d += step_len
 	var info_plate := PanelContainer.new()
 	var ips := sb(Color(0.05, 0.04, 0.05, 0.86), GOLD.darkened(0.4), 10, 1, 8)
 	ips.content_margin_left = 18
@@ -2554,14 +2587,17 @@ func game_over(victory: bool, summary: String) -> void:
 
 # ------------------------------------------------------------------ vocation : l'explication
 
-func card_back(holder: Control, rar: int) -> void:
-	## Dos de carte peint : une carte pas encore découverte, seule sa rareté se devine (liseré et gemme).
+func card_back(holder: Control, rar: int, cls := "") -> void:
+	## Dos de carte peint : une carte pas encore découverte, seules sa classe (le dos) et sa rareté (liseré et gemme) se devinent.
 	var back := _panel(holder, sb(Color("#141216"), Data.RARITY_COL[rar].darkened(0.2 if rar > 1 else 0.45), 10, 2, 6))
 	back.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if ResourceLoader.exists("res://assets/ui/dos_carte.png"):
+	var dos := "res://assets/ui/dos_%s.png" % cls
+	if not ResourceLoader.exists(dos):
+		dos = "res://assets/ui/dos_carte.png"
+	if ResourceLoader.exists(dos):
 		var tr := TextureRect.new()
-		tr.texture = load("res://assets/ui/dos_carte.png")
+		tr.texture = load(dos)
 		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		tr.stretch_mode = TextureRect.STRETCH_SCALE
 		tr.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -2669,7 +2705,7 @@ func vocation_intro(h: Unit) -> void:
 	txt.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	txt.text = ("[center][color=#e3b45c]%s choisit une vocation[/color] : une deuxième classe.\n" +
 		"Chaque paire de classes forme une [color=#e3b45c]guilde[/color], avec sa règle et ses cartes à elle.\n" +
-		"Ses butins gagnent une [color=#e3b45c]case bonus[/color] : cartes de sa vocation et de sa guilde, sans jamais prendre la place d'une carte de classe.\n" +
+		"Ses butins proposent aussi des cartes de sa vocation et de sa guilde.\n" +
 		"Et plus il combat, plus la guilde se dévoile.[/center]") % h.nm
 	var tc := CenterContainer.new()
 	tc.add_child(txt)
@@ -2972,8 +3008,9 @@ func library_screen() -> void:
 						if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT or e is InputEventScreenTouch and e.pressed:
 							_lib_focus(cid))
 				else:
-					var rar: int = Data.def(id).get("rar", 1)
-					card_back(holder, rar)
+					var dd := Data.def(id)
+					var rar: int = dd.get("rar", 1)
+					card_back(holder, rar, "objet" if dd.has("tool") else str(dd.get("owner", "")))
 					holder.tooltip_text = "%s à découvrir" % Data.RARITY_NAME[rar]
 				flow.add_child(holder)
 	for t in [["Classes", "classes"], ["Guildes", "guildes"], ["Équipement", "equipement"], ["Bestiaire", "bestiaire"]]:

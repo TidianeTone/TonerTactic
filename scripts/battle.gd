@@ -553,7 +553,8 @@ func _make_prop(c: Vector2i) -> void:
 	node.position = board.world(c)
 	node.rotation.y = randi_range(0, 3) * PI * 0.5
 	var mk: Array = {"coffre": ["◆", Color(1.0, 0.85, 0.35)],
-		"brasero": ["✹", Color(1.0, 0.55, 0.2)], "baril": ["✹", Color(1.0, 0.55, 0.2)], "pilier": ["⚠", Color(0.95, 0.9, 0.8)]}.get(board.props[c], [])
+		"brasero": ["✹", Color(1.0, 0.55, 0.2)], "baril": ["✹", Color(1.0, 0.55, 0.2)], "pilier": ["⚠", Color(0.95, 0.9, 0.8)],
+		"ratelier": ["⚔", Color(0.85, 0.9, 1.0)]}.get(board.props[c], [])
 	if mk.size() > 0:
 		var l3 := Label3D.new()
 		l3.text = mk[0]
@@ -611,6 +612,10 @@ func interact(h: Unit, c: Vector2i) -> void:
 			busy = false
 			changed.emit()
 			return  # ouvrir un coffre au contact est gratuit : le déplacement reste
+		"ratelier":
+			_remove_prop(c)
+			Fx.burst(main, board.world(c) + Vector3(0, 0.6, 0), Color(0.85, 0.9, 1.0), 40, 3.0, 5.0)
+			main.rack_weapon(h)
 	h.moved = true
 	h.walked = true
 	busy = false
