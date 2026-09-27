@@ -129,5 +129,57 @@ def dos_classes():
 		os.path.join(HERE, "dos_classes.png"), "3:4", [os.path.join(HERE, "dos_carte.png"), os.path.join(HERE, "cadres_classes.png")])
 
 
+RELICS = {  # les 31 reliques (27/09) : même pixel art que l'équipement, à la place des pictogrammes
+	"ambre": "a warm amber stone with a tiny river insect trapped inside, glowing",
+	"feuille": "a single bright red autumn maple leaf with a sharp dagger-like stem",
+	"lotus_pale": "a pale white-pink lotus flower floating on a lily pad",
+	"crochet": "a big iron canal-lock hook with a chain link",
+	"cendre": "a small heap of glowing live embers and grey ash in a clay dish",
+	"tuile": "a broken terracotta roof tile, cracked in two",
+	"cloche": "a small green-bronze bell covered in barnacles, dripping water",
+	"grimoire": "a swollen damp leather spellbook with wet pages and a teal clasp",
+	"sablier": "a green glass water clock (clepsydra) with dripping water",
+	"ecaille": "a large iridescent golden carp scale",
+	"heron": "a white heron feather aigrette with a silver clasp",
+	"oeil": "a brass spyglass with a fogged lens",
+	"sacoche": "a buckled brown leather satchel",
+	"alambic": "a small copper pocket alchemy still with a bubbling green flask",
+	"livret": "a small apprentice notebook bound with string, a pencil tucked in",
+	"blason": "a heraldic shield quartered in blue, red, gold and green",
+	"touriste": "a peddler's travel notebook covered in stamps and pinned tickets",
+	"sceau": "a hexagonal guild wax seal stamp with a red wax disc",
+	"medaille": "a medal made of two interlocking rings, one blue one magenta",
+	"noblesse": "a sealed letter of nobility with a gold ribbon and red wax",
+	"plume": "an elegant quill pen borrowed, with a different-colored feather tip",
+	"masque": "a white porcelain half-mask with a thin crack, magenta ribbon",
+	"tambour": "a small hand drum with the number 174 painted on it, drumsticks",
+	"galet": "a smooth round polished river pebble, grey with a white band",
+	"pierre": "a whetstone with a small blade being sharpened, sparks",
+	"braise_eternelle": "a clay jug of stagnant green murky water with flies",
+	"hamecon": "a big rusty fishing hook on a frayed line",
+	"collier": "a spiked leather dog collar with wolf teeth charms",
+	"sifflet": "a carved bone whistle on a cord",
+	"bourse": "a ferryman's obol coin on a black ribbon, silver",
+	"journal_route": "a worn travel journal with a map sticking out and a compass",
+}
+
+
+def reliques():
+	out = os.path.join(HERE, "reliques")
+	os.makedirs(out, exist_ok=True)
+	ids = list(RELICS)
+	batches = [ids[i:i + 16] for i in range(0, len(ids), 16)]
+	json.dump(batches, open(os.path.join(out, "batches.json"), "w"), indent=0)
+	for k, b in enumerate(batches):
+		parts = ["Cell %d (row %d, column %d): %s." % (i + 1, i // 4 + 1, i % 4 + 1, RELICS[x]) for i, x in enumerate(b)]
+		for i in range(len(b), 16):
+			parts.append("Cell %d: empty." % (i + 1))
+		still("A 4x4 grid of sixteen separate video game relic icons in crisp pixel art, exactly the style of the reference images: "
+			"chunky readable pixels, a dark 1-pixel outline, rich hand-placed shading with 4 to 6 tones per material, warm highlights, "
+			"each object centered in its own cell, drawn at a slight three-quarter angle, same scale, lots of empty space between cells, "
+			"no text, no numbers, no frame, no shadow on the ground. " + " ".join(parts) + " " + GREEN.replace("frames", "items").replace("inside of each frame", "space around each item"),
+			os.path.join(out, "sheet_%02d.png" % k), "1:1", REFS)
+
+
 if __name__ == "__main__":
-	{"dos": dos, "dos_classes": dos_classes}.get(sys.argv[1] if sys.argv[1:] else "", planches)()
+	{"dos": dos, "dos_classes": dos_classes, "reliques": reliques}.get(sys.argv[1] if sys.argv[1:] else "", planches)()

@@ -63,25 +63,33 @@ def segs(profile, n):
 	return [(cuts[k], cuts[k + 1]) for k in range(n)]
 
 
-batches = json.load(open(os.path.join(ITEMS, "batches.json")))
-for k, b in enumerate(batches):
-	p = os.path.join(ITEMS, "sheet_%02d.png" % k)
-	if not os.path.exists(p):
-		print("planche manquante", k)
-		continue
-	arr = key(np.asarray(Image.open(p).convert("RGB")))
-	H, W = arr.shape[:2]
-	# la grille peinte n'est pas régulière : on coupe dans les couloirs vides (profils d'alpha)
-	xs, ys = segs(arr[..., 3].sum(axis=0), N), segs(arr[..., 3].sum(axis=1), N)
-	for i, id in enumerate(b):
-		r, c = divmod(i, N)
-		cell = arr[ys[r][0]:ys[r][1], xs[c][0]:xs[c][1]]
-		im = pixelize(cell)
-		if im is None:
-			print("case vide", id)
+def sheets(SRC, PRE):
+	if not os.path.exists(os.path.join(SRC, "batches.json")):
+		return
+	batches = json.load(open(os.path.join(SRC, "batches.json")))
+	for k, b in enumerate(batches):
+		p = os.path.join(SRC, "sheet_%02d.png" % k)
+		if not os.path.exists(p):
+			print("planche manquante", k)
 			continue
-		im.save(os.path.join(OUT, "item_%s.png" % id))
-	print("planche", k, "ok")
+		arr = key(np.asarray(Image.open(p).convert("RGB")))
+		H, W = arr.shape[:2]
+		# la grille peinte n'est pas régulière : on coupe dans les couloirs vides (profils d'alpha)
+		xs, ys = segs(arr[..., 3].sum(axis=0), N), segs(arr[..., 3].sum(axis=1), N)
+		for i, id in enumerate(b):
+			r, c = divmod(i, N)
+			cell = arr[ys[r][0]:ys[r][1], xs[c][0]:xs[c][1]]
+			im = pixelize(cell)
+			if im is None:
+				print("case vide", id)
+				continue
+			im.save(os.path.join(OUT, PRE + "%s.png" % id))
+		print("planche", k, "ok")
+
+
+
+sheets(ITEMS, "item_")
+sheets(os.path.join(HERE, "reliques"), "relic_")  # reliques (27/09) : à la place des pictogrammes
 dos = os.path.join(HERE, "dos_carte.png")
 if os.path.exists(dos):
 	d = np.asarray(Image.open(dos).convert("RGB")).astype(int)

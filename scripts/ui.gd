@@ -2394,8 +2394,6 @@ func _vignette(title: String, icon: String, text: String, col: Color, tag: Strin
 		ic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		if not seen:
 			ic.modulate = Color(0.3, 0.17, 0.07, 0.22)  # à peine une empreinte dans le cuir
-		elif icon.contains("/relic_"):
-			ic.modulate = Color(0.42, 0.24, 0.11)  # icônes de relique claires : gravées en brun sur le cuir
 		put.call(ic, 0.14, 0.15, 0.86, 0.52)
 	var gem := Panel.new()
 	gem.add_theme_stylebox_override("panel", sb(col if seen else DIM.darkened(0.3), Color(0.12, 0.06, 0.02), 2, 2))
