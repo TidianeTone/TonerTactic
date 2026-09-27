@@ -312,12 +312,19 @@ func _place_props() -> void:
 			else:
 				props.erase(c)
 			break
-	# le râtelier d'armes : rare, jamais sur le chemin, toujours au bout de l'arène (il faut aller le chercher)
-	if dim >= 12 and rng.randf() < 0.17:
-		var far: Array = cells.filter(func(c): return near.has(c) and not paths.has(c) and not props.has(c) and not blocked.has(c) and kind.get(c, "") == "land")
-		far.sort_custom(func(a, b): return near[a] > near[b])
-		for c in far.slice(0, 6):
-			props[c] = "ratelier"
+	# un seul objet spécial par arène, et pas à chaque combat : râtelier (au bout de l'arène, il faut aller le chercher),
+	# vasque ou cloche (à mi-chemin : les ennemis s'en servent aussi, c'est une course)
+	var roll := rng.randf()
+	var sp: String = "ratelier" if roll < 0.15 else ("vasque" if roll < 0.27 else ("cloche" if roll < 0.37 else ""))
+	if dim >= 12 and sp != "":
+		var land: Array = cells.filter(func(c): return near.has(c) and not paths.has(c) and not props.has(c) and not blocked.has(c) and kind.get(c, "") == "land")
+		var top: int = 0
+		for c in land:
+			top = maxi(top, near[c])
+		var goal: int = top if sp == "ratelier" else top / 2
+		land.sort_custom(func(a, b): return absi(near[a] - goal) < absi(near[b] - goal))
+		for c in land.slice(0, 6):
+			props[c] = sp
 			if _connected():
 				break
 			props.erase(c)

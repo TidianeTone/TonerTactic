@@ -29,7 +29,7 @@ const HEROES := {
 const PHILO := {
 	"garde": "Tenir. Le Garde prend les coups pour que les autres n'aient pas à les prendre : armure, provocation, charges qui renversent. Il gagne les combats longs.",
 	"lame": "Frapper là où ça ne se voit pas. La Lame tourne autour, passe dans le dos, empoisonne et disparaît. Fragile de face, mortelle de dos.",
-	"oracle": "Voir avant d'agir. L'Oracle brûle de loin, soigne, pioche et prépare : ses tours paraissent calmes, ses rounds suivants ne le sont pas.",
+	"oracle": "Tout à distance. L'Oracle brûle les ennemis de loin et soigne ses alliés sans jamais s'approcher : il tient l'arrière, et tant qu'on ne l'atteint pas, personne ne tombe.",
 	"artificier": "Tout peut sauter. L'Artificier pose des barils, lance des grenades et fait du terrain une arme ; il joue le placement avant les dégâts.",
 	"moine": "Le geste enchaîné. Le Moine frappe au contact, bondit, tourbillonne : chaque coup du tour nourrit le suivant.",
 	"trappeur": "La proie vient à lui. Le Trappeur pose ses pièges, marque, entrave et harponne : il décide où le combat aura lieu.",
@@ -468,6 +468,7 @@ const KEYWORDS := {
 	"Conservé": "Reste en main à la fin du tour au lieu d'aller en défausse.",
 	"Éphémère": "Épuisée si elle est encore en main à la fin du tour.",
 	"Égide": "Le prochain coup reçu ne fait aucun dégât.",
+	"Exécution": "Après le coup, une cible restée à 20 % de ses PV ou moins est achevée. Élites : 10 %. Gardiens : seulement dans leur dernière phase.",
 	"Découvre": "Choisis une carte parmi trois ; elle arrive en main et coûte 0 ce tour.",
 	"Braquage": "Regarde 3 cartes d'une classe absente de l'escouade, gardes-en une.",
 	"Surcharge": "Coût optionnel : au moment de jouer la carte, si l'énergie suffit, tu peux payer la Surcharge ; elle touche alors chaque ennemi.",
@@ -757,6 +758,7 @@ const PASSIVES := {
 	"prelude": {"name": "Prélude", "text": "Pioche 1 carte de plus à son premier tour de chaque combat."},
 	"affut": {"name": "Embusqué", "text": "+2 aux attaques à distance si le porteur n'a pas bougé ce tour."},
 	"main_leste": {"name": "Main leste", "text": "Tuer un ennemi équipé récupère sa pièce à coup sûr, et la carte de son objet, dans la main du tueur."},
+	"execution": {"name": "Exécution", "text": "Ses coups achèvent une cible restée à 20 % de ses PV ou moins (élites 10 %, gardiens en dernière phase)."},
 	"pavois_face": {"name": "Pavois", "text": "Les coups de face (hors magie) sont divisés par deux."},
 }
 
@@ -811,6 +813,7 @@ const ITEMS := {
 	"plume_elan": {"name": "Perle de souffle", "slot": "bijou", "owner": "any", "passive": "elan", "rarity": 2},
 	"gantelet": {"name": "Chevalière lestée", "slot": "bijou", "owner": "any", "passive": "arme_plus", "rarity": 3, "foe": true},
 	"miroir": {"name": "Miroir de cuivre", "slot": "bijou", "owner": "any", "passive": "retour", "rarity": 2, "foe": true},
+	"sceau_bourreau": {"name": "Sceau du bourreau", "slot": "bijou", "owner": "any", "passive": "execution", "rarity": 3},
 	"bourse": {"name": "Bourse du naufrageur", "slot": "bijou", "owner": "any", "passive": "chasseur", "rarity": 1},
 	"dent_silure": {"name": "Dent de silure", "slot": "bijou", "owner": "any", "dmg": 1, "passive": "", "rarity": 1, "foe": true},
 	"medaille_rouillee": {"name": "Insigne rouillé", "slot": "bijou", "owner": "any", "hp": 4, "block0": 2, "passive": "", "rarity": 1, "foe": true},
@@ -849,6 +852,8 @@ const PROPS := {
 	"pilier": {"name": "Pilier fendu", "text": "Frappé ou poussé, il s'effondre sur les 2 cases suivantes : 9 dégâts."},
 	"baril": {"name": "Baril de poudre", "text": "Un coup le fait exploser : 7 dégâts autour."},
 	"tourelle": {"name": "Tourelle", "text": "Tire 4 sur l'ennemi le plus proche à chaque fin de tour."},
+	"vasque": {"name": "Vasque", "text": "Au contact, soigne 40 % des PV max de qui y boit, héros ou ennemi (cela coûte son déplacement au héros). Une seule gorgée : un ennemi blessé viendra la boire."},
+	"cloche": {"name": "Cloche d'alarme", "text": "Un héros au contact la brise (cela coûte son déplacement) : les ennemis à 4 cases perdent leur prochain tour. Un ennemi libre qui l'atteint sonne l'alarme : 2 renforts."},
 	"ratelier": {"name": "Râtelier d'armes", "text": "Au contact, un héros y prend une arme (cela lui coûte son déplacement). Une seule fois."},
 }
 
@@ -1118,11 +1123,12 @@ const ENCHANTS := {
 	"perce": {"name": "Perçante", "text": "Ignore l'armure.", "desc": "Les dégâts ignorent l'armure de la cible.", "add": {"pierce": true}, "need": "dmg"},
 	"conserve": {"name": "Tenace", "text": "Conservé.", "desc": "Ne part pas à la défausse en fin de tour : elle reste en main.", "add": {"retain": true}, "need": "any"},
 	"allegee": {"name": "Allégée", "desc": "Coûte 1 de moins.", "add": {"cost": -1}, "need": "cost2"},
-	"grace": {"name": "Bourreau", "desc": "+1 énergie si la carte tue.", "add": {"trig": {"on": "grace", "energy": 1}}, "need": "atk"},
+	"grace": {"name": "Curée", "desc": "+1 énergie si la carte tue.", "add": {"trig": {"on": "grace", "energy": 1}}, "need": "atk"},
 	"mur": {"name": "Désespoir", "desc": "+5 dégâts si le héros est sous 30 % de ses PV.", "add": {"trig": {"on": "mur", "dmg": 5}}, "need": "atk"},
 	"proie": {"name": "Traqueur", "desc": "+4 dégâts si la cible est marquée ou entravée.", "add": {"trig": {"on": "proie", "dmg": 4}}, "need": "atk"},
 	"revers": {"name": "Ombre", "desc": "Pioche 1 si le coup part dans le dos de la cible.", "add": {"trig": {"on": "dos", "draw": 1}}, "need": "melee"},
 	"premier": {"name": "Ouverture", "desc": "Pioche 1 si c'est la première carte jouée du tour.", "add": {"trig": {"on": "premier", "draw": 1}}, "need": "any"},
+	"execution": {"name": "Exécutrice", "text": "Exécution.", "desc": "Exécution : après le coup, une cible restée à 20 % de ses PV ou moins est achevée (élites 10 %, gardiens en dernière phase).", "add": {"exec": true}, "need": "atk"},
 	"enchaine": {"name": "Rythme", "desc": "+4 armure si une autre carte a déjà été jouée ce tour.", "add": {"trig": {"on": "enchaine", "block": 4}}, "need": "any"},
 }
 
@@ -1140,6 +1146,8 @@ static func ench_ok(ci: Dictionary, en: String) -> bool:
 	var c := card(ci)
 	if add.has("pierce") and c.get("pierce", false) or add.has("retain") and c.get("retain", false):
 		return false
+	if add.has("exec") and (d.get("exec", false) or ups.any(func(u): return u.has("exec")) or c.get("target", "foe") != "foe" or c.get("around", false)):
+		return false  # Exécution : attaques sur une seule cible
 	match ENCHANTS[en].need:
 		"dmg":
 			return int(c.get("dmg", 0)) > 0

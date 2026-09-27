@@ -136,6 +136,7 @@ const OMEN_COL := Color(1.0, 0.42, 0.18, 0.85)  # un seul télégraphe rouge-amb
 const IDLE_AI := ["dancer", "spawner", "totem", "tether", "flood", "pilori"]
 const TRAP_KINDS := ["piege", "mine", "epieu", "ombre", "collet"]
 const BOOM := ["brasero", "baril"]
+const USABLE := ["coffre", "ratelier", "vasque", "cloche"]  # au contact : un héros (et, pour vasque et cloche, un ennemi) s'en sert
 const RING8: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)]
 
 
@@ -504,6 +505,13 @@ func spawn_props() -> void:
 	for n in prop_nodes.values():
 		n.queue_free()
 	prop_nodes.clear()
+	if main.args.has("prop") and not board.props.values().has(main.args.prop):
+		# test : --prop=vasque (cloche, ratelier) le pose au plus près du centre
+		var mid := Vector2i(board.dim / 2, board.dim / 2)
+		var land: Array = board.walkable_cells().filter(func(c): return not board.props.has(c) and board.kind.get(c, "") == "land")
+		land.sort_custom(func(a, b): return dist(a, mid) < dist(b, mid))
+		if land.size() > 0:
+			board.props[land[0]] = main.args.prop
 	for c in board.props:
 		_make_prop(c)
 	# les arbres du plateau deviennent destructibles (10 PV)
@@ -554,7 +562,7 @@ func _make_prop(c: Vector2i) -> void:
 	node.rotation.y = randi_range(0, 3) * PI * 0.5
 	var mk: Array = {"coffre": ["◆", Color(1.0, 0.85, 0.35)],
 		"brasero": ["✹", Color(1.0, 0.55, 0.2)], "baril": ["✹", Color(1.0, 0.55, 0.2)], "pilier": ["⚠", Color(0.95, 0.9, 0.8)],
-		"ratelier": ["⚔", Color(0.85, 0.9, 1.0)]}.get(board.props[c], [])
+		"ratelier": ["⚔", Color(0.85, 0.9, 1.0)], "vasque": ["♥", Color(0.45, 0.95, 0.85)], "cloche": ["♫", Color(1.0, 0.8, 0.4)]}.get(board.props[c], [])
 	if mk.size() > 0:
 		var l3 := Label3D.new()
 		l3.text = mk[0]
@@ -594,6 +602,52 @@ func _remove_prop(c: Vector2i) -> void:
 		tw.tween_callback(node.queue_free)
 
 
+func _drink(u: Unit, c: Vector2i) -> void:
+	## Vasque : le premier qui y boit, héros ou ennemi, reprend 40 % de ses PV max. Elle se vide.
+	_remove_prop(c)
+	Fx.burst(main, board.world(c) + Vector3(0, 0.6, 0), Color(0.45, 0.95, 0.85), 40, 3.0, 5.0)
+	heal(u, ceili(u.max_hp * 0.4))
+	log_add("%s boit à la vasque" % u.nm)
+
+
+func _foe_prop(f: Unit, R: Dictionary) -> bool:
+	## Vasque et cloche servent aussi aux ennemis : un blessé va boire ; un ennemi libre (aucun héros à 2 cases) va sonner l'alarme.
+	if f.data.get("structure", false) or f.data.ai in IDLE_AI:
+		return false
+	for pc in board.props.keys():
+		var k: String = board.props[pc]
+		if not ((k == "vasque" and f.hp * 5 < f.max_hp * 3) or (k == "cloche" and not alive_heroes().any(func(h): return dist(h.cell, f.cell) <= 2))):
+			continue
+		var best = null
+		for cell in R.cells:
+			if dist(cell, pc) == 1 and absi(board.h[cell] - board.h[pc]) <= 2 and (cell == f.cell or unit_at(cell) == null) and (best == null or R.dist[cell] < R.dist[best]):
+				best = cell
+		if best == null:
+			continue
+		if best != f.cell:
+			await _foe_walk(f, path_to(R.prev, best))
+		if not f.alive or over or not board.props.has(pc):
+			return true
+		f.face(pc - f.cell)
+		await f.cast()
+		if k == "vasque":
+			_drink(f, pc)
+		else:
+			_remove_prop(pc)
+			main.shake(0.4)
+			Fx.number(main, board.world(pc) + Vector3(0, 1.6, 0), "Alarme !", EMBER, true)
+			var free: Array = board.walkable_cells().filter(func(c): return unit_at(c) == null and not board.props.has(c) and not alive_heroes().any(func(h): return dist(h.cell, c) <= 1))
+			free.sort_custom(func(a, b): return dist(a, pc) < dist(b, pc))
+			var pool: Array = Data.EXTRAS[clampi(main.floor_i, 1, 3)]
+			for i in mini(2, free.size()):
+				var u := spawn_foe(pool[randi() % pool.size()], free[i])
+				u.face(pc - u.cell)
+				Fx.burst(main, u.position + Vector3(0, 0.5, 0), EMBER, 30, 2.0, 6.0)
+			await wait(0.5)
+		return true
+	return false
+
+
 func _open_chest(h: Unit, c: Vector2i) -> void:
 	_remove_prop(c)
 	Fx.burst(main, board.world(c) + Vector3(0, 0.5, 0), Color(1.0, 0.85, 0.4), 50, 3.0, 6.0)
@@ -616,6 +670,17 @@ func interact(h: Unit, c: Vector2i) -> void:
 			_remove_prop(c)
 			Fx.burst(main, board.world(c) + Vector3(0, 0.6, 0), Color(0.85, 0.9, 1.0), 40, 3.0, 5.0)
 			main.rack_weapon(h)
+		"vasque":
+			_drink(h, c)
+		"cloche":
+			_remove_prop(c)
+			main.shake(0.4)
+			Fx.burst(main, board.world(c) + Vector3(0, 1.0, 0), Color(1.0, 0.8, 0.4), 60, 5.0, 5.0)
+			Fx.number(main, board.world(c) + Vector3(0, 1.6, 0), "La cloche se brise !", Color(1.0, 0.8, 0.4), true)
+			for f in alive_foes():
+				if dist(f.cell, c) <= 4 and not f.data.get("structure", false):
+					f.set_meta("sonne", true)
+					Fx.number(main, f.position + Vector3(0, 1.0, 0), "Sonné", Color(1.0, 0.8, 0.4))
 	h.moved = true
 	h.walked = true
 	busy = false
@@ -1395,6 +1460,11 @@ func _foe_turn(f: Unit) -> void:
 		await wait(0.3)
 		if not f.alive:
 			return
+	if f.has_meta("sonne"):
+		f.remove_meta("sonne")
+		Fx.number(main, f.position + Vector3(0, 1.0, 0), "Sonné : passe son tour", Color(1.0, 0.8, 0.4))
+		await wait(0.4)
+		return
 	f.walked = false
 	var arm: int = int(f.data.get("armor", 0)) + f.extra_armor + (4 if mods.has("blindes") else 0)
 	if not _first_turn.has(f):
@@ -1535,7 +1605,7 @@ func click(c: Vector2i) -> void:
 		toggle_inspect(u)  # la fiche reste affichée jusqu'au prochain clic
 		return
 	var pk: String = board.props.get(c, "")
-	if pk == "coffre" and selected:
+	if pk in USABLE and selected:
 		var near := dist(selected.cell, c) == 1 and absi(board.h[selected.cell] - board.h[c]) <= 2
 		if near and (pk == "coffre" or not selected.moved):
 			interact(selected, c)
@@ -1547,7 +1617,7 @@ func click(c: Vector2i) -> void:
 				if dist(cell, c) == 1 and absi(board.h[cell] - board.h[c]) <= 2 and (best == null or R.dist[cell] < R.dist[best]):
 					best = cell
 			if best == null:
-				main.ui.toast("Trop loin : frappez le coffre avec une attaque, ou approchez-vous.")
+				main.ui.toast("Trop loin : frappez le coffre avec une attaque, ou approchez-vous." if pk == "coffre" else "Trop loin : approchez-vous.")
 				return
 			busy = true
 			var mover := selected
@@ -1875,6 +1945,7 @@ func play_card(i: int, t: Vector2i) -> void:
 		h.hp -= cost_hp
 		if cost_hp > 0:
 			hurt_turn = true
+			_berserk(h)
 		Fx.number(main, h.position + Vector3(0, 0.3, 0), "-%d PV" % cost_hp, Color(0.8, 0.45, 1.0))
 		h.hurt()
 	_pre = pre
@@ -2297,6 +2368,8 @@ func attack(h: Unit, f: Unit, c: Dictionary) -> void:
 		if base > 0 or c.get("dmg", 0) > 0:
 			_on_hit(h, f, back)
 		await wait(0.12)
+	if f.alive and dealt > 0 and (c.get("exec", false) or h.has_p("execution")):
+		_execute(h, f)
 	h.ambush = false
 	if h.triple and c.kind == "atk":
 		h.triple = false
@@ -2562,6 +2635,8 @@ func _equip_foe(f: Unit) -> void:
 func calc(att: Unit, tgt: Unit, base: int, c := {}) -> Dictionary:
 	var mult := 1.0
 	var flat := att.gear_dmg()
+	if att.side == "hero" and att.rage > 0:
+		flat += att.rage
 	var notes: Array = []
 	var ranged: bool = c.has("range") and card_range(c, att).y > 1 if att.side == "hero" else att.data.get("range", [1, 1])[1] > 1
 	var dh: int = board.h[att.cell] - board.h[tgt.cell]
@@ -2775,6 +2850,7 @@ func damage(u: Unit, amount: int, src: Unit = null, show := true, ranged := fals
 			u.set_meta("meute", mt)
 	if u.side == "hero" and rest > 0:
 		hurt_turn = true
+		_berserk(u)
 	if u.side == "hero" and u.hp <= 0 and powers.has("quarante") and not u.q40:
 		u.q40 = true
 		u.hp = 1
@@ -3271,6 +3347,8 @@ func foe_act(f: Unit) -> void:
 		f.root -= 1
 		Fx.number(main, f.position + Vector3(0, 0.5, 0), "⛓", Color(0.8, 0.9, 1.0))
 	var R := reach(f) if not rooted else {"prev": {f.cell: f.cell}, "cells": {f.cell: true}, "dist": {f.cell: 0}}
+	if await _foe_prop(f, R):
+		return
 	if ai == "anguille":
 		# elle ne quitte pas l'eau
 		var wet := {}
@@ -5080,6 +5158,27 @@ func _base(c: Dictionary, h: Unit, t) -> int:
 		+ int(c.get("per_drawn", 0)) * drawn_turn + int(c.get("per_exhaust", 0)) * int(exhaust_n.get(h, 0)) \
 		+ int(c.get("per_marked", 0)) * alive_foes().filter(func(o): return o.mark > 0).size() \
 		+ (int(c.get("consume_root", 0)) * (unit_at(t).root if t is Vector2i and unit_at(t) else 0))
+
+
+func _berserk(u: Unit) -> void:
+	## Berserk : chaque perte de PV de son porteur ajoute +val à ses coups jusqu'à la fin du combat.
+	if powers.has("berserk") and power_owner.get("berserk") == u:
+		u.rage += int(power_val.get("berserk", 2))
+		Fx.number(main, u.position + Vector3(0, 1.2, 0), "Rage +%d" % int(power_val.get("berserk", 2)), Color(1.0, 0.3, 0.25))
+
+
+func _execute(h: Unit, f: Unit) -> void:
+	## Exécution : une cible restée sous le seuil est achevée (20 %, élites 10 %, gardiens seulement en dernière phase).
+	if f.data.has("paliers") and int(f.get_meta("phase", 0)) < f.data.paliers.size():
+		return
+	var thr := 0.1 if (f.affix != "" or elite_fight or f.data.has("paliers")) else 0.2
+	if f.hp > f.max_hp * thr:
+		return
+	Fx.number(main, f.position + Vector3(0, 1.1, 0), "Exécution !", Color(0.95, 0.3, 0.3), true)
+	main.hitstop(0.14)
+	_sim("execution")
+	f.hp = 0
+	kill(f, h)
 
 
 func _fourgue(h: Unit, stolen: bool) -> void:

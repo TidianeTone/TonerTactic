@@ -41,6 +41,7 @@ func _init() -> void:
 		fails += 1
 	var b := Board.new()
 	var racks := 0
+	var specials := 0
 	for s in 200:
 		for bi in 3:
 			b.generate(s * 31 + bi, Data.BIOMES[bi], [12, 14, 16, 18][s % 4], Board.ARCHETYPES[s % 4])
@@ -58,11 +59,13 @@ func _init() -> void:
 					fails += 1
 			var nr := b.props.values().count("ratelier")
 			racks += nr
-			if nr > 1:
-				print("plusieurs râteliers seed ", s)
+			var nsp: int = nr + b.props.values().count("vasque") + b.props.values().count("cloche")
+			specials += nsp
+			if nsp > 1:
+				print("plusieurs objets spéciaux seed ", s)
 				fails += 1
-	if racks < 30 or racks > 180:  # ~17 % des 600 arènes
-		print("râteliers : ", racks, " sur 600 arènes")
+	if racks < 30 or racks > 160 or specials < 120 or specials > 330:  # ~15 % et ~37 % des 600 arènes (12+)
+		print("râteliers : ", racks, ", objets spéciaux : ", specials, " sur 600 arènes")
 		fails += 1
 	# mode tactique : le damier est toujours connexe et symétrique par le centre
 	for s2 in 300:

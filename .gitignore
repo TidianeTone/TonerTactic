@@ -35,3 +35,11 @@ blender/kie_ui/refs_items/
 
 # cadres de guilde peints (sources KIE) : seules les découpes frame_g_* sont publiées
 blender/kie_ui/guildes/
+
+# modèles voxel fin (DELVE_HD=3) : PC ultra en local, trop lourds pour le web
+assets/hd/
+blender/kie_ui/anciens_v2/
+blender/kie_ui/titre/
+blender/kie_ui/boites/
+blender/kie_cartes/berserk/
+outputs/

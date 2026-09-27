@@ -27,6 +27,7 @@ var hand_layer: Control
 var header: Label
 var sub: Label
 var challenge_lbl: Label
+var speaker := ""         # qui parle dans les écrans de choix (neutre, marchand, clé d'un Ancien) : sa boîte de dialogue, sinon une ligne dorée
 var team_on := false       # écrans de choix hors combat (sanctuaire, Ancien) : les portraits de l'équipe ouvrent leur fiche   # défi du porteur de carte, tant qu'il court
 var energy_lbl: Label
 var bpm_lbl: Label
@@ -185,6 +186,74 @@ func _label(text: String, size: int, col: Color, font: Font = null) -> Label:
 		l.add_theme_font_override("font", font)
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return l
+
+
+# Zone sombre de chaque boîte de dialogue (fractions de l'image : x0, y0, x1, y1), mesurée par blender/kie_ui/cut_boites.py
+const BOITES := {"neutre": [0.03, 0.12, 0.97, 0.96], "marchand": [0.03, 0.19, 0.93, 0.86], "anatheme": [0.07, 0.14, 0.97, 0.93],
+	"chineuse": [0.1, 0.17, 0.95, 0.73], "dojo": [0.04, 0.13, 0.94, 0.89], "sourcier": [0.05, 0.18, 0.96, 0.94]}
+
+
+func _bar_frame(bar: Control, path: String, iy0: float, iy1: float, capl: int, capr: int) -> void:
+	## Cadre peint autour d'une barre de vie : deux embouts à l'échelle, le tube étiré entre eux (le milieu de la texture est uniforme).
+	var tex: Texture2D = load(path)
+	var bs: Vector2 = bar.size if bar.size.x > 0 else bar.custom_minimum_size
+	var tw := tex.get_width()
+	var th := tex.get_height()
+	var k: float = bs.y / ((iy1 - iy0) * th)
+	var fr := Control.new()
+	fr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fr.position = Vector2(-capl * k, -iy0 * th * k)
+	for part in [[0, capl, 0.0, capl * k], [capl, tw - capl - capr, capl * k, bs.x], [tw - capr, capr, capl * k + bs.x, capr * k]]:
+		var at := AtlasTexture.new()
+		at.atlas = tex
+		at.region = Rect2(part[0], 0, part[1], th)
+		var r := TextureRect.new()
+		r.texture = at
+		r.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		r.stretch_mode = TextureRect.STRETCH_SCALE
+		r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		r.position = Vector2(part[2], 0)
+		r.size = Vector2(part[3], th * k)
+		fr.add_child(r)
+	bar.add_child(fr)
+
+
+func _speech(text: String) -> Control:
+	## La réplique dans la boîte de celui qui parle : chaque locuteur a son cadre (neutre, marchand, chaque Ancien).
+	var tex: Texture2D = load("res://assets/ui/boite_%s.png" % speaker)
+	var inr: Array = BOITES.get(speaker, [0.06, 0.15, 0.94, 0.88])
+	var asp := float(tex.get_width()) / tex.get_height()
+	var h := minf(210.0 if not big else 190.0, minf(700.0, root.size.x * 0.46) / asp)
+	var w := h * asp
+	var holder := Control.new()
+	holder.custom_minimum_size = Vector2(w, h)
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var tr := TextureRect.new()
+	tr.texture = tex
+	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tr.stretch_mode = TextureRect.STRETCH_SCALE
+	tr.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(tr)
+	var pad := h * 0.07
+	var l := _label(text, 18, INK)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	l.position = Vector2(inr[0] * w + pad, inr[1] * h + pad)
+	l.size = Vector2((inr[2] - inr[0]) * w - 2 * pad, (inr[3] - inr[1]) * h - 2 * pad)
+	l.clip_text = false
+	holder.add_child(l)
+	var cc := CenterContainer.new()
+	cc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cc.add_child(holder)
+	holder.pivot_offset = Vector2(w, h) * 0.5
+	holder.scale = Vector2(0.96, 0.96)
+	holder.modulate.a = 0.0
+	var tw := create_tween().set_parallel()
+	tw.tween_property(holder, "modulate:a", 1.0, 0.25)
+	tw.tween_property(holder, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	return cc
 
 
 func _shadowed(l: Label, outline := 6) -> Label:
@@ -425,10 +494,23 @@ func _build_hud() -> void:
 	boss_bar.add_child(bn)
 	var bb := ProgressBar.new()
 	bb.show_percentage = false
-	bb.custom_minimum_size = Vector2(600, 14)
-	bb.add_theme_stylebox_override("background", sb(Color(0, 0, 0, 0.7), Color(1, 0.5, 0.25, 0.6), 4, 1))
-	bb.add_theme_stylebox_override("fill", sb(Color("#e0582a"), Color(0, 0, 0, 0), 4))
+	bb.custom_minimum_size = Vector2(600, 20)
+	bb.add_theme_stylebox_override("background", sb(Color(0.08, 0.02, 0.02, 0.9), Color(0, 0, 0, 0), 2))
+	bb.add_theme_stylebox_override("fill", sb(Color("#e0582a"), Color(0, 0, 0, 0), 2))
 	boss_bar.add_child(bb)
+	boss_bar.move_child(bb, 0)  # le nom sous la barre : les ailes du cadre prennent le dessus
+	boss_bar.add_theme_constant_override("separation", 16)
+	boss_bar.position.y = 124
+	_bar_frame(bb, "res://assets/ui/barre_boss_tube.png", 0.268, 0.727, 124, 123)
+	var orn := TextureRect.new()
+	orn.texture = load("res://assets/ui/barre_boss_orn.png")
+	orn.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	orn.stretch_mode = TextureRect.STRETCH_SCALE
+	orn.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var osc: float = 20.0 / ((0.727 - 0.268) * 209.0)
+	orn.size = Vector2(828, 188) * osc
+	orn.position = Vector2(300 - orn.size.x * 0.5, -0.268 * 209.0 * osc - (188 - 56) * osc)
+	bb.add_child(orn)
 	boss_bar.set_meta("bar", bb)
 	boss_bar.visible = false
 
@@ -741,7 +823,7 @@ func toggle_menu() -> void:
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(t)
 	var first: Button
-	for e in [["Reprendre", func(): toggle_menu()], ["Bibliothèque", func(): library_screen()], ["Mode portable : %s" % ("oui" if big else "non"), func(): main.set_mobile(not big)], ["Vue tactique : %s" % ("oui" if main.tactic else "non"), func(): main.set_tactic(not main.tactic)], ["Langue : Français" if not Lang.on else "Language: English", func(): main.set_lang("fr" if Lang.on else "en")], ["Abandonner la run", func(): main.abandon()], ["Quitter le jeu", func(): get_tree().quit()]]:
+	for e in [["Reprendre", func(): toggle_menu()], ["Bibliothèque", func(): library_screen()], ["Mode portable : %s" % ("oui" if big else "non"), func(): main.set_mobile(not big)], ["Vue tactique : %s" % ("oui" if main.tactic else "non"), func(): main.set_tactic(not main.tactic)], ["Vocation dès le départ : %s" % ("oui" if main.voc_start else "non"), func(): main.set_voc_start(not main.voc_start)], ["Langue : Français" if not Lang.on else "Language: English", func(): main.set_lang("fr" if Lang.on else "en")], ["Abandonner la run", func(): main.abandon()], ["Quitter le jeu", func(): get_tree().quit()]]:
 		var b := Button.new()
 		b.text = e[0]
 		b.add_theme_font_override("font", title_f)
@@ -908,10 +990,11 @@ func _rebuild_heroes(box: VBoxContainer = null, list: Array = [], panels: Dictio
 		bar.show_percentage = false
 		bar.position = Vector2(98, 52)
 		bar.size = Vector2(158, 12)
-		bar.add_theme_stylebox_override("background", sb(Color(0, 0, 0, 0.55), Color(0, 0, 0, 0), 5))
-		bar.add_theme_stylebox_override("fill", sb(col, Color(0, 0, 0, 0), 5))
+		bar.add_theme_stylebox_override("background", sb(Color(0, 0, 0, 0.55), Color(0, 0, 0, 0), 2))
+		bar.add_theme_stylebox_override("fill", sb(col, Color(0, 0, 0, 0), 2))
 		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		p.add_child(bar)
+		_bar_frame(bar, "res://assets/ui/barre_heros.png", 0.2044, 0.8011, 78, 58)
 		var hp := _shadowed(_label("", 12, INK), 4)
 		hp.position = Vector2(98, 50)
 		hp.size = Vector2(158, 16)
@@ -941,7 +1024,7 @@ func _rebuild_heroes(box: VBoxContainer = null, list: Array = [], panels: Dictio
 func _stats_row(row: HBoxContainer, h: Unit) -> void:
 	for c in row.get_children():
 		c.queue_free()
-	row.add_child(_chip("attaque", "+%d" % (h.gear_dmg() + h.dmg_bonus), Color(1.0, 0.75, 0.6), 18))
+	row.add_child(_chip("attaque", "+%d" % (h.gear_dmg() + h.dmg_bonus + h.rage), Color(1.0, 0.75, 0.6), 18))
 	row.add_child(_chip("deplacement", str(h.move), Color.WHITE, 18))
 	var l := _shadowed(_label("saut %d · vit. %d" % [h.jump, h.speed], 13, DIM), 4)
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -1818,9 +1901,12 @@ func choose(title: String, subtitle: String, options: Array, allow_skip := false
 	var tl := _shadowed(_label(title, 44, INK, wide_f), 10)
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(tl)
-	var sl := _shadowed(_label(subtitle, 16, GOLD), 6)
-	sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(sl)
+	if speaker != "" and ResourceLoader.exists("res://assets/ui/boite_%s.png" % speaker) and subtitle != "":
+		box.add_child(_speech(subtitle))
+	else:
+		var sl := _shadowed(_label(subtitle, 16, GOLD), 6)
+		sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		box.add_child(sl)
 	if not top_card.is_empty():
 		# la carte trouvée en grand, puis une flèche vers les héros à qui la donner
 		var tk := 0.95 if not big else 0.8
@@ -3657,7 +3743,7 @@ func _boss_bars(boss: Unit) -> void:
 	boss_bar.visible = boss != null
 	if boss == null:
 		return
-	var bn: Label = boss_bar.get_child(0)
+	var bn: Label = boss_bar.get_child(1)
 	var bb: ProgressBar = boss_bar.get_meta("bar")
 	var pair: Array = battle.foes.filter(func(o): return o.data.get("titre", "") == boss.data.titre)
 	bn.text = boss.data.titre if pair.size() < 2 else " · ".join(pair.map(func(o): return "%s %d" % [o.nm.split(",")[0], maxi(0, o.hp)]))

@@ -68,6 +68,7 @@ var stick := 0             # charge collée (ennemi)
 var bounty := false        # Avis de recherche (ennemi)
 var struck_hero := false   # a frappé un héros depuis... (Whiff punish)
 var pushed := false        # repoussé ce tour
+var rage := 0             # Berserk : bonus aux coups gagné en perdant des PV
 var q40 := false           # Règle des 40 % déjà servie
 
 
@@ -136,7 +137,7 @@ func _load_body(path: String) -> void:
 func reset_fight() -> void:
 	for k in ["aegis", "bait", "exposed", "parry", "dodge_next", "keep_block", "tele", "triple", "lvl_next", "bounty", "struck_hero", "pushed", "q40", "walked"]:
 		set(k, false)
-	for k in ["boomguard", "bph", "inner", "hits", "fuse", "stick", "teles", "bpm"]:
+	for k in ["boomguard", "bph", "inner", "hits", "fuse", "stick", "teles", "bpm", "rage"]:
 		set(k, 0)
 
 var model: Node3D

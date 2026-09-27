@@ -455,32 +455,100 @@ def brazier(seed):
 
 
 def rack(seed):
-    """Râtelier d'armes : deux montants, une traverse, une épée, une hache et une lance posées."""
+    """Râtelier-forge : socle de pierre rond, puits de braise au centre, épées plantées de biais et chaînes qui pendent."""
+    R = random.Random(seed)
+    vox, glow = {}, {}
+    STEEL, RUST, GRIP = pal(["#b9c2c7", "#a3adb3", "#cfd6da"]), pal(["#7a5a44", "#6a4a36"]), pal(["#5a3d27", "#4a3220"])
+    CHAIN = pal(["#4a4a50", "#5a5a60", "#3c3c42"])
+    for x in range(0, 16):
+        for y in range(0, 16):
+            d = math.hypot(x - 7.5, y - 7.5)
+            if d < 7.4:
+                for z in range(0, 3 if d < 6.6 else 2):
+                    vox[(x, y, z)] = pick(R, STONE, 0.8, 1.05)
+                if d < 2.2:
+                    glow[(x, y, 2)] = R.choice(EMBER)
+                elif d < 3.0:
+                    vox[(x, y, 3)] = pick(R, STONE, 0.9, 1.1)
+    def blade(x0, y0, dx, dy, n):
+        # lame plantée : pointe dans le socle, garde et poignée en haut, penchée de (dx, dy) par étage
+        for z in range(2, 2 + n):
+            k = z - 2
+            x, y = int(round(x0 + dx * k)), int(round(y0 + dy * k))
+            top = n - 5
+            if k < top:
+                for w in (0, 1):
+                    vox[(x + w, y, z)] = pick(R, STEEL)
+                    vox[(x + w, y + 1, z)] = pick(R, STEEL, 0.8, 0.95)
+            elif k == top:
+                for w in range(-2, 4):
+                    vox[(x + w, y, z)] = pick(R, RUST)
+            else:
+                vox[(x, y, z)] = pick(R, GRIP)
+        x, y = int(round(x0 + dx * (n - 1))), int(round(y0 + dy * (n - 1)))
+        vox[(x, y, 2 + n)] = pick(R, RUST)
+    for (px, py, ph) in ((6, 10, 4), (10, 6, 5), (9, 10, 3)):  # blocs de braise, comme sortis de la forge
+        for z in range(3, 3 + ph):
+            glow[(px, py, z)] = glow[(px + 1, py, z)] = R.choice(EMBER)
+    blade(3, 4, 0.0, 0.0, 17)
+    blade(11, 3, 0.12, -0.05, 14)
+    blade(12, 11, 0.1, 0.1, 12)
+    blade(4, 12, -0.1, 0.08, 10)
+    for i in range(9):  # chaîne qui pend d'une garde jusqu'au sol
+        x, y, z = 5 + i // 2, 5 + i // 3, 14 - int(i * 1.4)
+        if z > 2:
+            vox[(x, y, z)] = pick(R, CHAIN)
+            if i % 2 == 0:
+                vox[(x, y + 1, z)] = pick(R, CHAIN)
+    return vox, glow
+
+
+def vasque(seed):
+    """Vasque : pied de pierre, large coupe, eau vive qui luit."""
+    R = random.Random(seed)
+    vox, glow = {}, {}
+    WATER = pal(["#5fe0cf", "#4ad0c0", "#7af0de"])
+    for x in range(0, 16):
+        for y in range(0, 16):
+            d = math.hypot(x - 7.5, y - 7.5)
+            if d < 3.2:
+                for z in range(0, 6):
+                    vox[(x, y, z)] = pick(R, STONE, 0.85, 1.05)
+            if d < 6.8:
+                vox[(x, y, 6)] = pick(R, STONE, 0.85, 1.05)
+                if d > 5.6:
+                    vox[(x, y, 7)] = vox[(x, y, 8)] = pick(R, STONE, 0.9, 1.1)
+                else:
+                    glow[(x, y, 7)] = R.choice(WATER)
+            if 3.0 < d < 4.2:
+                vox[(x, y, 0)] = pick(R, STONE, 0.8, 1.0)
+    return vox, glow
+
+
+def bell(seed):
+    """Cloche d'alarme : portique de bois, cloche de bronze, marteau posé."""
     R = random.Random(seed)
     vox = {}
-    WOODC, STEEL, DARK = pal(["#6b4a30", "#5a3d27", "#7a5638"]), pal(["#c8d2d8", "#aeb8be", "#dfe6ea"]), lin("#3a2a1c")
+    BRONZE, WOODC = pal(["#c9913e", "#b07a2e", "#dca552"]), pal(["#6b4a30", "#5a3d27", "#7a5638"])
     for x in (2, 13):
-        for y in (6, 7):
-            for z in range(0, 14):
+        for y in (7, 8):
+            for z in range(0, 17):
                 vox[(x, y, z)] = pick(R, WOODC)
-        for y in range(3, 11):
+        for y in range(4, 12):
             vox[(x, y, 0)] = pick(R, WOODC)
-    for x in range(2, 14):
-        vox[(x, 6, 12)] = vox[(x, 7, 12)] = pick(R, WOODC)
-        vox[(x, 8, 3)] = pick(R, WOODC)
-    for z in range(1, 13):  # épée
-        vox[(5, 7, z)] = pick(R, STEEL) if z > 3 else DARK
-    for x in (4, 6):
-        vox[(x, 7, 4)] = lin("#e2b24e")
-    for z in range(1, 14):  # hache : manche puis fer
-        vox[(8, 7, z)] = DARK if z < 10 else pick(R, WOODC)
-    for x in range(9, 12):
-        for z in range(9, 13):
-            if (x - 9) + abs(z - 10.5) < 3:
-                vox[(x, 7, z)] = pick(R, STEEL)
-    for z in range(1, 15):  # lance
-        vox[(11, 7, z)] = pick(R, WOODC) if z < 12 else pick(R, STEEL)
-    vox[(11, 7, 15)] = pick(R, STEEL)
+    for x in range(1, 15):
+        for y in (7, 8):
+            vox[(x, y, 17)] = pick(R, WOODC)
+    PROF = {15: 2.2, 14: 2.9, 13: 3.1, 12: 3.1, 11: 3.2, 10: 3.3, 9: 3.5, 8: 3.9, 7: 4.6, 6: 4.9}  # cloche : dôme, taille, lèvre évasée
+    for z, r in PROF.items():
+        for x in range(0, 16):
+            for y in range(0, 16):
+                d = math.hypot(x - 7.5, y - 7.5)
+                if d < r and (d > r - 1.2 or z >= 14):
+                    vox[(x, y, z)] = lin("#e6b865") if z in (6, 11) else pick(R, BRONZE)
+    vox[(7, 7, 16)] = vox[(8, 8, 16)] = pick(R, BRONZE)
+    for z in range(4, 7):
+        vox[(7, 8, z)] = lin("#3a2a1c")
     return vox
 
 
@@ -1261,7 +1329,11 @@ def build():
     kit.append(("prop_brasero", vox, g, FLAT))
     kit.append(("prop_levier", lever(562), None, FLAT))
     kit.append(("prop_pilier", cracked_pillar(563), None, FLAT))
-    kit.append(("prop_ratelier", rack(567), None, FLAT))
+    vox, g = rack(567)
+    kit.append(("prop_ratelier", vox, g, FLAT))
+    vox, g = vasque(568)
+    kit.append(("prop_vasque", vox, g, FLAT))
+    kit.append(("prop_cloche", bell(569), None, FLAT))
     vox, g = barrel(564)
     kit.append(("prop_baril", vox, g, FLAT))
     vox, g = turret(565)

@@ -50,6 +50,7 @@ var floor_biomes: Array = []
 var party: Array = ["garde", "lame", "oracle"]
 var leader: Unit            # pion du mode aventure
 var mode := "descente"      # "descente" (carte d'étage) | "aventure" (exploration)
+var voc_start := true      # réglage : le premier Ancien propose toujours la Vocation (une run différente dès le départ)
 var tactic := false         # vue tactique (réglage) : arènes plates en damier, pour la lisibilité seulement
 var elites_seen: Array = []  # "étage:élite" déjà affrontées
 var fight_loot: Array = []   # ce que le combat en cours a rapporté (écran de fin de combat)
@@ -172,6 +173,7 @@ func _setup_world() -> void:
 	if cf.load("user://reglages.cfg") == OK:
 		music_vol = float(cf.get_value("son", "musique", music_vol))
 		tactic = bool(cf.get_value("ecran", "tactique", false))
+		voc_start = bool(cf.get_value("partie", "vocation", true))
 	for i in 2:
 		var mp := AudioStreamPlayer.new()
 		mp.volume_db = -80.0
@@ -2071,7 +2073,9 @@ func _haven_npc(key: String, pos: Vector3, rot: float) -> void:
 
 func _merchant() -> void:
 	await _haven("marchand")
+	ui.speaker = "marchand"
 	await _merchant_shop()
+	ui.speaker = ""
 	_haven_end()
 
 
@@ -2624,6 +2628,7 @@ func _eventtest() -> void:
 	_make_party()
 	gold = 300
 	gain_obj("o_fiole", party[0])
+	ui.speaker = "neutre"
 	for ev in EVENTS_NEW:
 		await _haven("mystere")
 		var done := [false]
@@ -3687,6 +3692,8 @@ func _advtest() -> void:
 	# chemins d'événements : Ancien, bienfaits, salles « ? », paquet
 	gain_obj("o_fiole", party[0])
 	Engine.time_scale = 3.0
+	var shot_an := func(): await _frames(30); _shot(dir, "04_ancien")
+	shot_an.call()
 	await _ancient()
 	for bk in Data.BOONS:
 		await _boon(bk)
@@ -3814,13 +3821,17 @@ func _ancient() -> void:
 		pool[i] = pool[j]
 		pool[j] = t
 	var picks: Array = pool.slice(0, 3)
+	if voc_start and floor_i == 1 and not tuto and not picks.has("vocation"):
+		picks[0] = "vocation"  # réglage « Vocation dès le départ »
 	var opts: Array = picks.map(func(b): return {"title": Data.BOONS[b].name, "glyph": Data.BOONS[b].glyph, "art": "res://assets/ui/boon_%s.png" % b, "text": Data.BOONS[b].text, "color": an.col})
 	ui.team_on = true
+	ui.speaker = keys[posmod(run_seed + floor_i, keys.size())]
 	while true:
 		var i := await ui.choose("%s  %s" % [an.glyph, an.name.to_upper()], "%s · « %s »" % [an.title, an.line], opts, false, "", "res://assets/art/ancien_%s.png" % keys[posmod(run_seed + floor_i, keys.size())])
 		if await _boon(picks[i], true):
 			break
 	ui.team_on = false
+	ui.speaker = ""
 	ui.refresh_relics(relics)
 	ui.set_gold(gold)
 
@@ -4230,7 +4241,9 @@ func _mystery(r: Dictionary) -> void:
 	var ev: String = evs[rng.randi_range(0, evs.size() - 1)]
 	seen_events.append(ev)
 	if EVENTS_NEW.has(ev):
+		ui.speaker = "neutre"
 		var alive := await _event_new(ev, r)
+		ui.speaker = ""
 		ui.set_gold(gold)
 		if alive and mode != "aventure":
 			_haven_end()
@@ -4354,6 +4367,15 @@ func set_music_volume(v: float) -> void:
 	cf.load("user://reglages.cfg")
 	cf.set_value("son", "musique", music_vol)
 	cf.save("user://reglages.cfg")
+
+
+func set_voc_start(on: bool) -> void:
+	voc_start = on
+	var cf := ConfigFile.new()
+	cf.load("user://reglages.cfg")
+	cf.set_value("partie", "vocation", on)
+	cf.save("user://reglages.cfg")
+	ui.toast("Vocation dès le départ %s : le premier Ancien la proposera %s." % (["activée", "toujours"] if on else ["désactivée", "au hasard"]))
 
 
 func set_tactic(on: bool) -> void:
