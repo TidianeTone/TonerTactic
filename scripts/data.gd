@@ -160,7 +160,7 @@ const FOE_TIPS := {
 const CARDS := {
 	"frappe": {"name": "Frappe", "owner": "garde", "rar": 1, "cost": 1, "kind": "atk", "range": [1, 1], "dmg": 6, "trig": {"on": "grace", "draw": 1}, "text": "Inflige {dmg}."},
 	"pavois": {"name": "Pavois", "owner": "garde", "rar": 1, "cost": 1, "kind": "skill", "target": "self", "block": 6, "text": "Gagne {block} d'armure."},
-	"charge": {"name": "Charge", "owner": "garde", "rar": 1, "cost": 2, "kind": "atk", "target": "line", "range": [1, 3], "dmg": 8, "push": 1, "trig": {"on": "enchaine", "block": 4}, "text": "Fonce 3 cases en ligne. {dmg} et repousse {push}."},
+	"charge": {"name": "Charge", "owner": "garde", "rar": 1, "cost": 2, "kind": "atk", "target": "line", "range": [1, 3], "dmg": 8, "push": 1, "trig": {"on": "enchaine", "block": 4}, "text": "Fonce jusqu'à 3 cases vers un ennemi. {dmg} et repousse {push}."},
 	"defi": {"name": "Défi", "owner": "garde", "rar": 2, "cost": 1, "kind": "skill", "target": "self", "block": 4, "taunt": true, "text": "+{block} armure. Les ennemis le ciblent."},
 	"rempart": {"name": "Rempart", "owner": "garde", "rar": 2, "cost": 2, "kind": "skill", "target": "self", "block": 6, "adj": true, "text": "+{block} armure au Garde et aux alliés voisins."},
 	"marteau": {"name": "Marteau d'écluse", "owner": "garde", "rar": 2, "cost": 2, "kind": "atk", "range": [1, 1], "dmg": 11, "push": 2, "trig": {"on": "grace", "block": 6}, "text": "Inflige {dmg} et repousse de {push}."},
@@ -251,7 +251,7 @@ const CARDS := {
 	"c_represailles": {"name": "Représailles", "owner": "garde", "rar": 1, "cost": 1, "kind": "atk", "range": [1, 1], "dmg": 4, "trig": {"on": "attaque", "dmg": 6, "block": 4}, "text": "Inflige {dmg}.", "up": [{"dmg": 2}, {"trig": {"on": "attaque", "dmg": 6, "block": 4, "refund": true}}], "arch": "Le Défi"},
 	"c_epaule": {"name": "Coup d'épaule", "owner": "garde", "rar": 1, "cost": 1, "kind": "atk", "range": [1, 1], "dmg": 4, "push": 1, "crash": 3, "text": "Inflige {dmg}, repousse {push}. Choc : +{crash} aux deux.", "up": [{"dmg": 2, "crash": 2}, {"push": 1}], "arch": "Brise-lames"},
 	"c_ecailles": {"name": "Écailles d'écluse", "owner": "garde", "rar": 2, "cost": 1, "kind": "power", "target": "self", "power": "ecailles", "val": 3, "text": "Pouvoir : fin de tour sans avoir marché, le héros gagne {val} armure et la conserve.", "up": [{"val": 1}, {"cost": -1}], "arch": "L'Enclume"},
-	"c_interposition": {"name": "Interposition", "owner": "garde", "rar": 2, "cost": 1, "kind": "skill", "target": "ally", "range": [1, 3], "swap": true, "block": 5, "text": "Échange de place avec un allié à {rmax} cases ; il gagne {block} armure.", "up": [{"block": 3}, {"cost": -1}], "arch": "Le Défi"},
+	"c_interposition": {"name": "Interposition", "owner": "garde", "rar": 2, "cost": 1, "kind": "skill", "target": "ally", "range": [1, 3], "swap": true, "block": 5, "text": "Échange de place avec un allié à {rmax} cases ; l'allié gagne {block} armure.", "up": [{"block": 3}, {"cost": -1}], "arch": "Le Défi"},
 	"c_remous": {"name": "Remous", "owner": "garde", "rar": 2, "cost": 1, "kind": "atk", "range": [1, 1], "dmg": 5, "trig": {"on": "chasse", "dmg": 6, "draw": 1}, "text": "Inflige {dmg}.", "up": [{"dmg": 2}, {"cost": -1}], "arch": "Brise-lames"},
 	"c_lacher": {"name": "Lâcher d'écluse", "owner": "garde", "rar": 2, "cost": 2, "kind": "atk", "target": "self", "dmg": 5, "around": true, "push": 1, "crash": 3, "text": "Inflige {dmg} à chaque voisin, repousse 1. Choc : +{crash}.", "up": [{"dmg": 2}, {"block": 6, "text": "Inflige {dmg} à chaque voisin, repousse 1. Choc : +{crash}. +{block} armure."}], "arch": "Brise-lames"},
 	"c_contrepoids": {"name": "Contrepoids", "owner": "garde", "rar": 3, "cost": 1, "kind": "atk", "range": [1, 1], "dmg": 2, "per_block": 1.5, "spend_block": 0.5, "text": "Inflige {dmg} + 1,5× l'armure du héros, puis il en perd la moitié.", "up": [{"dmg": 4}, {"per_block": 0.5, "text": "Inflige {dmg} + 2× l'armure du héros, puis il en perd la moitié."}], "arch": "L'Enclume"},
@@ -1429,9 +1429,11 @@ static func card_brief(c: Dictionary) -> String:
 			rx.compile(pat)
 			_strip.append(rx)
 	var t: String = c.text
+	t = t.replace("allié gagne {block} armure", "allié gagne ¤")  # l'armure donnée à un autre : le chiffre reste dans la phrase
 	for rx: RegEx in _strip:
 		t = rx.sub(t, "", true)
-	for pair in [[" ,", ","], [" .", "."], [",.", "."], [", .", "."], ["..", "."], [": ,", ":"], ["  ", " "]]:
+	t = t.replace("¤", "{block} armure")
+	for pair in [[" ,", ","], [" .", "."], [",.", "."], [", .", "."], ["..", "."], [": ,", ":"], ["  ", " "], [" :.", "."], [":.", "."], [" : .", "."], [" ;.", "."]]:
 		t = t.replace(pair[0], pair[1])
 	t = t.strip_edges()
 	while t.begins_with(",") or t.begins_with(".") or t.begins_with(";") or t.begins_with("et ") or t.begins_with("+ "):

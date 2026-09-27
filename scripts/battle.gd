@@ -18,6 +18,8 @@ var glyph_t := {}           # glyphe instable -> tours avant l'explosion
 var glyph_lbl := {}
 var bombs := {}              # bombe à retardement : case -> {n: rounds avant l'explosion, dmg, lbl}
 var orienting := false      # fin du tour à la FFT : le héros choisit où il regarde
+var _faced := false        # le joueur a tourné le héros actif depuis sa dernière action (sinon : vers l'ennemi le plus proche en fin de tour)
+var _move_plan = null       # déplacement en deux clics : la case visée au premier clic
 var _orient_from := Vector2i.ZERO
 var _orient_mark: Label3D    # flèche dorée sur la case regardée, visible à travers le décor
 var board: Board
@@ -145,6 +147,7 @@ var _soufflet := false        # Soufflet de forge : une fois par tour
 var _souffle := false         # Souffle du canonnier : pas de poussée en chaîne
 var _remous := false          # Remous : une noyade causée par Remous n'en relance pas
 var _hits_turn := 0           # coups portés par le héros actif ce tour (Corde à nœuds)
+const SPRINT_COL := Color(1.0, 0.6, 0.12, 0.6)  # cases de course : un deuxième déplacement pour 3 mana
 const OMEN_COL := Color(1.0, 0.42, 0.18, 0.85)  # un seul télégraphe rouge-ambre pour tout ce qui arrive au prochain round
 const IDLE_AI := ["dancer", "spawner", "totem", "tether", "flood", "pilori"]
 const TRAP_KINDS := ["piege", "mine", "epieu", "ombre", "collet"]
@@ -1476,10 +1479,12 @@ func _hero_turn(h: Unit) -> void:
 	first_free = has("sablier")
 	_first_turn[h] = true
 	card_sel = -1
+	_faced = false
+	_move_plan = null
 	player_turn = true
 	busy = false
 	select(h)
-	main.focus(h.position)
+	main.follow(h.position, 17.0)  # zoom sur le héros qui joue
 	main.ui.banner(h.nm, "À toi · %d mana" % energy)
 	if powers.has("journal") and power_owner.get("journal") == h and played_ids.get(h, []).size() > 0:
 		_journal.call_deferred(h)
@@ -1520,21 +1525,15 @@ func end_turn() -> void:
 	if not player_turn or busy or over:
 		return
 	_lifesteal = false
-	var nope: String = main.tuto_gate("face" if orienting else "end")
+	var nope: String = main.tuto_gate("end")
 	if nope != "":
 		main.ui.toast(nope)
 		return
-	if not orienting and active and active.alive and (not main._testing() or main.tuto):
-		# d'abord l'orientation : le dos exposé compte (coups de dos, pièges, Tenaille)
-		orienting = true
-		coach.emit("orient", active)
-		_orient_from = active.facing
-		card_sel = -1
-		main.ui.banner("Orientation", "Où regarde %s ? · souris, flèches ou manette, puis clic ou Espace" % active.nm)
-		main.refresh_hover()
-		changed.emit()
-		return
+	# plus d'étape d'orientation : sans consigne du joueur depuis sa dernière action, il se tourne vers l'ennemi le plus proche
+	if active and active.alive and not _faced:
+		face_nearest(active)
 	orienting = false
+	_move_plan = null
 	player_turn = false
 	card_sel = -1
 	coach.emit("ended", active)
@@ -1598,6 +1597,10 @@ func _after_action() -> void:
 
 func pick_hero(h: Unit) -> void:
 	## Clic sur un héros : le héros actif se sélectionne, les autres montrent leur fiche.
+	## Une carte choisie : son portrait vaut sa case (le perso caché derrière la main reste ciblable).
+	if card_sel >= 0 and card_sel < hand.size() and card_targets(Data.card(hand[card_sel]), owner_of(Data.card(hand[card_sel]))).has(h.cell):
+		click(h.cell)
+		return
 	if h == active:
 		select(h)
 	else:
@@ -1654,7 +1657,11 @@ func _foe_turn(f: Unit) -> void:
 	if f.has_p("regen") and f.hp < f.max_hp:
 		heal(f, 2)
 	_tile_turn(f)
-	main.focus(f.position)
+	if f.data.get("structure", false):
+		main.focus(f.position)
+	else:
+		main.follow(f.position, 21.0)  # la caméra suit l'ennemi qui joue, le temps d'arriver
+		await wait(0.3)
 	changed.emit()
 	# déplacement en plus : l'ordre du Capitaine (+1 à 2 cases), la charge du Capitaine (+2)
 	var mv_bonus := 0
@@ -1721,8 +1728,11 @@ func select_card(i: int) -> void:
 		return
 	select(h)
 	card_sel = i
+	_move_plan = null
 	var tg := card_targets(c, h)
-	if c.get("target", "foe") == "self" or (c.get("target", "foe") == "ally" and tg.size() == 1):
+	# seule « self » part toute seule : une carte d'allié attend son clic (elle se jouait sur la case du lanceur,
+	# et un échange de place avec un seul allié à portée échangeait le héros avec lui-même)
+	if c.get("target", "foe") == "self":
 		play_card(i, h.cell)
 		return
 	if tg.is_empty():
@@ -1813,6 +1823,13 @@ func click(c: Vector2i) -> void:
 			if nope != "":
 				main.ui.toast(nope)
 				return
+			# deux clics : le premier trace le chemin (et le prix d'une course), le second y va.
+			# Au doigt, le premier toucher vise déjà ; les pilotes de test vont droit au but.
+			if _move_plan != c and not main.mobile and (not main._testing() or main.args.has("uxtest")):
+				_move_plan = c
+				main.refresh_hover()
+				return
+			_move_plan = null
 			busy = true
 			changed.emit()
 			var mover := selected  # la sélection peut changer pendant la marche
@@ -1825,6 +1842,8 @@ func click(c: Vector2i) -> void:
 			await mover.walk(path, board)
 			mover.moved = true
 			mover.walked = true
+			_faced = false
+			face_nearest(mover)
 			_zoc(mover, start)
 			for pc in path:
 				if loot.has(pc):
@@ -1873,14 +1892,39 @@ func toggle_inspect(u: Unit) -> void:
 
 
 func turn_facing(s: int) -> void:
-	## Flèches gauche/droite pendant l'orientation : un quart de tour.
-	if orienting:
+	## Flèches gauche/droite : un quart de tour, à tout moment du tour, gratuit.
+	if player_turn and not busy and active and active.alive:
 		active.facing = Vector2i(-active.facing.y * s, active.facing.x * s)
-		main.pad = true  # la souris ne reprend pas la main tant qu'elle ne bouge pas
-		refresh_highlight(null)
+		_faced = true
+		main.refresh_hover()
+
+
+func face_cell(c: Vector2i) -> bool:
+	## Clic droit sur une case : le héros actif se tourne vers elle, gratuit, à tout moment de son tour.
+	if not player_turn or busy or active == null or not active.alive or c == active.cell:
+		return false
+	active.face(_dir(active.cell, c))
+	_faced = true
+	coach.emit("faced", active)
+	main.refresh_hover()
+	return true
+
+
+func face_nearest(u: Unit) -> void:
+	## Orientation automatique : vers l'ennemi le plus proche (le dos exposé compte : coups de dos, pièges, Tenaille).
+	var best: Unit = null
+	for f in alive_foes():
+		if best == null or dist(u.cell, f.cell) < dist(u.cell, best.cell):
+			best = f
+	if best:
+		u.face(_dir(u.cell, best.cell))
 
 
 func cancel() -> void:
+	if _move_plan != null:
+		_move_plan = null
+		main.refresh_hover()
+		return
 	if orienting:
 		orienting = false
 		active.facing = _orient_from
@@ -1992,22 +2036,18 @@ func card_targets(c: Dictionary, h: Unit) -> Array:
 					elif board.kind[t] != "tower":
 						out.append(t)
 		"line":
-			for dir in Board.DIRS:
-				var p := h.cell
-				for i in r.y:
-					var n := p + dir
-					if board.props.get(n, "") in BOOM + ["pilier"] or oaks.has(n):
-						out.append(n)
-						break
-					if not board.walkable(n) or absi(board.h[n] - board.h[p]) > 2:
-						break
-					var o := unit_at(n)
-					if o:
-						if o.side == "foe":
-							out.append(n)
-						break
-					out.append(n)
-					p = n
+			# ruée : jusqu'à r.y cases par le plus court chemin (plus seulement en ligne droite), puis le coup au contact
+			var R := _dash_reach(h, r.y)
+			for cell in R:
+				if cell != h.cell:
+					out.append(cell)
+			var hits: Array = alive_foes().map(func(f): return f.cell) + oaks.keys()
+			for pc in board.props:
+				if board.props[pc] in BOOM + ["pilier"]:
+					hits.append(pc)
+			for t in hits:
+				if not out.has(t) and _dash_path(h, t, r.y, R) != null:
+					out.append(t)
 		_:
 			var cells: Array = [] if c.get("detonate", false) else alive_foes().map(func(f): return f.cell)
 			for pc in board.props:
@@ -2054,6 +2094,8 @@ func play_card(i: int, t: Vector2i) -> void:
 	var cost := cost_of(c)
 	if energy < cost or (c.has("xcost") and energy - cost < 1):
 		return
+	_faced = false
+	_move_plan = null
 	_lifesteal = c.get("lifesteal", false)
 	if int(c.get("pay_gold", 0)) > main.gold:
 		main.ui.toast("Pas assez d'or.")
@@ -2687,23 +2729,63 @@ func attack(h: Unit, f: Unit, c: Dictionary) -> void:
 	await wait(0.15)
 
 
-func charge(h: Unit, t: Vector2i, c: Dictionary) -> void:
-	var d := _dir(h.cell, t)
+func _dash_reach(h: Unit, n: int) -> Dictionary:
+	## Cases libres qu'une ruée atteint en n pas au plus (cellule -> [pas, précédente]) : ni unité, ni objet, ni arbre, marches de 2 au plus.
+	var R := {h.cell: [0, h.cell]}
+	var q: Array = [h.cell]
+	var i := 0
+	while i < q.size():
+		var p: Vector2i = q[i]
+		i += 1
+		if R[p][0] >= n:
+			continue
+		for d in Board.DIRS:
+			var nx: Vector2i = p + d
+			if R.has(nx) or not board.walkable(nx) or absi(board.h[nx] - board.h[p]) > 2 or unit_at(nx) or board.props.has(nx) or oaks.has(nx):
+				continue
+			R[nx] = [R[p][0] + 1, p]
+			q.append(nx)
+	return R
+
+
+func _dash_path(h: Unit, t: Vector2i, n: int, R := {}):
+	## Le chemin d'une ruée vers t : jusqu'à t s'il est libre, sinon jusqu'à la case voisine la plus proche (en n-1 pas), d'où frapper.
+	## null : hors d'atteinte.
+	if R.is_empty():
+		R = _dash_reach(h, n)
+	var end = null
+	if R.has(t):
+		end = t
+	else:
+		for d in Board.DIRS:
+			var e: Vector2i = t - d
+			if R.has(e) and R[e][0] <= n - 1 and absi(board.h[e] - board.h[t]) <= 2 and (end == null or R[e][0] < R[end][0] or (R[e][0] == R[end][0] and _dir(h.cell, t) == d)):
+				end = e
+	if end == null:
+		return null
 	var path: Array = []
-	var p := h.cell
-	while p != t:
-		var n := p + d
-		if unit_at(n) or board.props.has(n) or oaks.has(n):
-			break
-		path.append(n)
-		p = n
+	var p: Vector2i = end
+	while p != h.cell:
+		path.push_front(p)
+		p = R[p][1]
+	return path
+
+
+func charge(h: Unit, t: Vector2i, c: Dictionary) -> void:
+	var path = _dash_path(h, t, card_range(c, h).y)
+	if path == null:
+		return
 	if path.size() > 0:
 		await h.walk(path, board)
 		for pc in path:
 			if loot.has(pc):
 				_pick_loot(h, pc)
+	if h.cell == t:
+		face_nearest(h)
+		return
+	var d := _dir(h.cell, t)  # le sens de l'arrivée : c'est là que part la poussée
 	h.face(d)
-	var nx := h.cell + d
+	var nx := t
 	var f := unit_at(nx)
 	if f and f.side == "foe":
 		await h.lunge(f.position)
@@ -2779,6 +2861,10 @@ func _card_won(f: Unit, how: String) -> void:
 	main.pending_cards.append(f.card_id + ("|" + en if en != "" else ""))
 	Fx.number(main, f.position + Vector3(0, 1.8, 0), "%s : %s" % [how, Data.def(f.card_id).name], GOLD_FX, true)
 	log_add("🃏 %s — %s" % [how, Data.def(f.card_id).name])
+	var shown := {"id": f.card_id, "lvl": 1, "h": alive_heroes()[0].key if alive_heroes().size() > 0 else "garde"}
+	if en != "":
+		shown["ench"] = en
+	main.ui.reward_flash(shown, "Défi relevé" if f.card_cond != "fuite" else how)
 	f.card_id = ""
 	if f.has_node("CardMark"):
 		f.get_node("CardMark").queue_free()
@@ -4325,36 +4411,48 @@ func foe_strike(f: Unit, h: Unit) -> void:
 
 # ------------------------------------------------------------------ surbrillance
 
+var _plan_mark: Label3D
+func _mark3d(t: String, size: int, col: Color) -> Label3D:
+	## Étiquette 3D lisible à travers le décor (flèche d'orientation, déplacement prévu).
+	var l := Label3D.new()
+	l.text = t
+	l.font = Fx.title_font()
+	l.font_size = size
+	l.pixel_size = 0.006
+	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	l.no_depth_test = true
+	l.modulate = col
+	l.outline_size = 16
+	l.outline_modulate = Color(0.1, 0.05, 0.02, 0.9)
+	l.render_priority = 10
+	l.outline_render_priority = 9
+	units_root.add_child(l)
+	return l
+
+
 func refresh_highlight(hover) -> void:
 	## Pas de grille permanente : contours pour la portée, cases pleines pour les choix.
 	var cells := {}
+	# où regarde le héros actif : une petite flèche dorée sur la case devant lui (clic droit ailleurs pour le tourner)
+	var show_face: bool = player_turn and active != null and active.alive and not busy
+	if show_face and _orient_mark == null:
+		_orient_mark = _mark3d("⇩", 80, Color(1.0, 0.82, 0.35))
 	if _orient_mark:
-		_orient_mark.visible = orienting and active != null
-	if orienting and active:
-		if hover != null and hover != active.cell:
-			active.face(hover - active.cell)
-		if _orient_mark == null:
-			_orient_mark = Label3D.new()
-			_orient_mark.text = "⇩"
-			_orient_mark.font = Fx.title_font()
-			_orient_mark.font_size = 120
-			_orient_mark.pixel_size = 0.006
-			_orient_mark.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-			_orient_mark.no_depth_test = true
-			_orient_mark.modulate = Color(1.0, 0.82, 0.35)
-			_orient_mark.outline_size = 20
-			_orient_mark.outline_modulate = Color(0.1, 0.05, 0.02, 0.9)
-			_orient_mark.render_priority = 10
-			_orient_mark.outline_render_priority = 9
-			units_root.add_child(_orient_mark)
-		_orient_mark.visible = true
-		var fp := board.world(active.cell + active.facing)
-		_orient_mark.position = Vector3(fp.x, maxf(fp.y, active.position.y) + 0.8, fp.z)
-		for d in Board.DIRS:
-			if board._in(active.cell + d):
-				cells[active.cell + d] = Color(1.0, 0.82, 0.35, 0.95) if d == active.facing else 					(Color(1.0, 0.3, 0.22, 0.45) if d == -active.facing else Color(1, 1, 1, 0.3))
-		board.highlight(cells)
-		return
+		_orient_mark.visible = show_face
+		if show_face:
+			var fp := board.world(active.cell + active.facing) if board._in(active.cell + active.facing) else active.position + Vector3(active.facing.x, 0, active.facing.y)
+			_orient_mark.position = Vector3(fp.x, maxf(fp.y, active.position.y) + 0.55, fp.z)
+	# déplacement en deux clics : l'étiquette du second clic
+	var plan_ok: bool = _move_plan != null and player_turn and not busy and selected != null and card_sel < 0
+	if plan_ok and _plan_mark == null:
+		_plan_mark = _mark3d("", 44, Color(1.0, 0.9, 0.6))
+	if _plan_mark:
+		_plan_mark.visible = plan_ok
+		if plan_ok:
+			_plan_mark.text = "Course · 3 mana
+recliquer pour courir" if selected.moved else "Recliquer : y aller"
+			_plan_mark.modulate = Color(1.0, 0.7, 0.3) if selected.moved else Color(1.0, 0.92, 0.65)
+			_plan_mark.position = board.world(_move_plan) + Vector3(0, 1.1, 0)
 	if player_turn and not busy:
 		if card_sel >= 0 and card_sel < hand.size():
 			var c := Data.card(hand[card_sel])
@@ -4372,15 +4470,24 @@ func refresh_highlight(hover) -> void:
 				cells[t] = Color(col.r, col.g, col.b, 0.95)
 				if tele and alive_foes().any(func(o): return int(o.data.get("guet", 0)) > 0 and dist(o.cell, t) <= int(o.data.guet)):
 					cells[t] = Color(1.0, 0.35, 0.3, 0.95)  # sous l'œil de la Pisteuse
+			if hover != null and tg.has(hover) and c.get("target", "foe") == "line":
+				var dp = _dash_path(h, hover, card_range(c, h).y)
+				if dp != null:
+					for pc in dp:
+						cells[pc] = Color(1.0, 0.86, 0.4, 0.9)  # le chemin de la ruée
 			if hover != null and tg.has(hover) and c.get("aoe", false):
 				for d in Board.DIRS:
 					if board._in(hover + d):
 						cells[hover + d] = Color(1.0, 0.6, 0.2, 0.9)
 		elif selected and selected.alive and (not selected.moved or can_sprint(selected)):
 			var sp := selected.moved
-			for t in reach(selected).cells:
+			var R := reach(selected)
+			for t in R.cells:
 				if t != selected.cell:
-					cells[t] = Color(0.85, 0.6, 1.0, 0.45) if sp else Color(0.4, 0.68, 1.0, 0.75)
+					cells[t] = SPRINT_COL if sp else Color(0.4, 0.68, 1.0, 0.75)  # la course (3 mana) en orange
+			if _move_plan != null and R.cells.has(_move_plan):
+				for pc in path_to(R.prev, _move_plan):
+					cells[pc] = Color(1.0, 0.86, 0.4, 0.95)
 			for pc in board.props:
 				if board.props[pc] == "coffre" and dist(pc, selected.cell) == 1:
 					cells[pc] = Color(1.0, 0.85, 0.35, 0.95)
@@ -5547,21 +5654,75 @@ func _drop(u: Unit) -> void:
 		mi.mesh = md[part]
 		mi.material_override = Board.material("glow" if part == "glow" else "prop")
 		node.add_child(mi)
-	var l3 := Label3D.new()
-	l3.text = Data.TOOLS[u.tool].glyph
-	l3.font = Fx.title_font()
-	l3.font_size = 72
-	l3.pixel_size = 0.0045
-	l3.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	l3.no_depth_test = true
-	l3.modulate = Color(1.0, 0.85, 0.4)
-	l3.outline_size = 16
-	l3.outline_modulate = Color(0.05, 0.03, 0.02, 0.85)
-	l3.position.y = 1.0
-	node.add_child(l3)
-	var tw := l3.create_tween().set_loops()
-	tw.tween_property(l3, "position:y", 1.2, 0.8).set_trans(Tween.TRANS_SINE)
-	tw.tween_property(l3, "position:y", 1.0, 0.8).set_trans(Tween.TRANS_SINE)
+	# bien visible : une colonne de lumière dorée, un disque au sol, et l'icône de l'objet qui flotte au-dessus
+	var gold := Color(1.0, 0.78, 0.3)
+	if _beam_tex == null:
+		var bg := Gradient.new()
+		bg.offsets = PackedFloat32Array([0.0, 1.0])
+		bg.colors = PackedColorArray([Color(1, 1, 1, 0.45), Color(1, 1, 1, 0.0)])
+		_beam_tex = GradientTexture2D.new()
+		_beam_tex.gradient = bg
+		_beam_tex.fill_from = Vector2(0, 1)
+		_beam_tex.fill_to = Vector2(0, 0)
+	var beam := MeshInstance3D.new()
+	var cy := CylinderMesh.new()
+	cy.top_radius = 0.2
+	cy.bottom_radius = 0.34
+	cy.height = 3.6
+	cy.cap_top = false
+	cy.cap_bottom = false
+	beam.mesh = cy
+	var bm := StandardMaterial3D.new()
+	bm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	bm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	bm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	bm.albedo_texture = _beam_tex
+	bm.albedo_color = Color(gold.r * 3.0, gold.g * 3.0, gold.b * 3.0, 1.0)  # additif : il faut de la marge pour briller sur une dalle claire
+	beam.material_override = bm
+	beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	beam.position.y = 1.6
+	node.add_child(beam)
+	var btw := beam.create_tween().set_loops()
+	btw.tween_property(bm, "albedo_color:a", 0.45, 1.1).set_trans(Tween.TRANS_SINE)
+	btw.tween_property(bm, "albedo_color:a", 1.0, 1.1).set_trans(Tween.TRANS_SINE)
+	var disc := MeshInstance3D.new()
+	var dq := QuadMesh.new()
+	dq.size = Vector2(1.3, 1.3)
+	dq.orientation = PlaneMesh.FACE_Y
+	disc.mesh = dq
+	disc.material_override = Fx.soft_mat(gold, 2.2, true, BaseMaterial3D.BILLBOARD_DISABLED)
+	disc.position.y = 0.03
+	disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	node.add_child(disc)
+	var icon_path := "res://assets/ui/tool_%s.png" % u.tool
+	var fl: Node3D
+	if ResourceLoader.exists(icon_path):
+		var sp := Sprite3D.new()
+		sp.texture = load(icon_path)
+		sp.pixel_size = 0.75 / maxf(1.0, float(sp.texture.get_width()))
+		sp.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+		sp.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		sp.no_depth_test = true
+		sp.render_priority = 8
+		fl = sp
+	else:
+		var l3 := Label3D.new()
+		l3.text = Data.TOOLS[u.tool].glyph
+		l3.font = Fx.title_font()
+		l3.font_size = 96
+		l3.pixel_size = 0.0055
+		l3.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		l3.no_depth_test = true
+		l3.modulate = gold
+		l3.outline_size = 18
+		l3.outline_modulate = Color(0.05, 0.03, 0.02, 0.85)
+		fl = l3
+	fl.position.y = 1.25
+	node.add_child(fl)
+	var tw := fl.create_tween().set_loops()
+	tw.tween_property(fl, "position:y", 1.5, 0.8).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(fl, "position:y", 1.25, 0.8).set_trans(Tween.TRANS_SINE)
 	node.position = board.world(c)
 	units_root.add_child(node)
 	loot[c] = [u.tool, node]

@@ -9,6 +9,7 @@ const INK := Color("#efe6d2")
 const DIM := Color("#a79d8b")
 const GOLD := Color("#e3b45c")
 const CARD := Vector2(196, 272)  # proportions des cadres KIE
+var hand_k := 0.84  # échelle de la main au repos (survol : ×1,33) ; --handk= pour essayer
 const KIND_NAME := {"atk": "Attaque", "skill": "Technique", "move": "Mouvement", "power": "Pouvoir"}
 const ICON := {
 	"frappe": "⚔", "pavois": "🛡", "charge": "➤", "defi": "⚑", "rempart": "✠", "marteau": "⚒", "bastion": "🛡",
@@ -129,12 +130,12 @@ func _build_touch() -> void:
 	## Mode portable : ce que font Échap, Q/E, clic droit et D, à portée de pouce sur le bord droit.
 	touch_box = HBoxContainer.new()
 	touch_box.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	touch_box.position = Vector2(-380, -206)  # au-dessus de « Fin du tour », sous la fiche d'ennemi
+	touch_box.position = Vector2(-454, -206)  # au-dessus de « Fin du tour », sous la fiche d'ennemi
 	touch_box.add_theme_constant_override("separation", 10)
 	touch_box.z_index = 50
 	root.add_child(touch_box)
 	for e in [["☰", "Menu", func(): toggle_menu()], ["↺", "Tourner", func(): main.yaw -= 90.0], ["↻", "Tourner", func(): main.yaw += 90.0],
-			["✕", "Annuler", func(): battle.cancel()],
+			["⤵", "Le héros se tourne d'un quart", func(): battle.turn_facing(1)], ["✕", "Annuler", func(): battle.cancel()],
 			["⚠", "Danger", _toggle_danger]]:
 		var b := Button.new()
 		b.text = e[0]
@@ -559,11 +560,11 @@ func _build_hud() -> void:
 	grid.add_theme_constant_override("v_separation", 3)
 	grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	kv.add_child(grid)
-	for row in [["Clic", "héros, carte, case"], ["Clic ennemi", "épingler / retirer sa fiche"], ["Course", "déjà marché ? repartir une fois : 3 mana"],
-			["Survol", "infos de la case ou de l'objet"], ["Clic droit", "annuler · maintenu : caméra"],
+	for row in [["Clic · reclic", "viser une case · y aller"], ["Clic ennemi", "épingler / retirer sa fiche"], ["Course", "déjà marché ? cases orange : 3 mana"],
+			["Survol", "infos de la case ou de l'objet"], ["Clic droit", "annuler, sinon se tourner · maintenu : caméra"],
 			["ZQSD", "déplacer la caméra (clic droit tenu)"], ["Q / E · molette", "pivoter · zoomer"],
-			["Espace · ← →", "fin du tour, puis orientation"], ["D · L", "zone de danger · journal"], ["Tab · 1 à 9", "recentrer · jouer une carte"],
-			["Alt", "montrer les objets interactifs"], ["P · M", "paquet · musique"], ["H · Échap", "cette aide · menu"]]:
+			["Espace · ← →", "fin du tour · se tourner"], ["D · L", "zone de danger · journal"], ["Tab · 1 à 9", "recentrer · jouer une carte"],
+			["Alt", "montrer les objets interactifs"], ["P · M · T", "paquet · musique · vue tactique"], ["H · Échap", "cette aide · menu"]]:
 		var k := _label(row[0], 14, Color("#ffe3a3"), title_f)
 		k.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		grid.add_child(k)
@@ -855,9 +856,10 @@ var turn_arrow: Label
 
 
 func _place_turn_arrow() -> void:
-	## Le héros dont c'est le tour, tant qu'il n'a rien fait : un chevron doré qui rebondit au-dessus de lui.
+	## Le héros dont c'est le tour : un chevron doré qui rebondit au-dessus de lui, dans un halo qui bat
+	## (plein tant qu'il n'a rien fait, plus discret ensuite).
 	var h: Unit = battle.active if battle else null
-	var show: bool = hud.visible and h != null and battle.player_turn and not battle.busy and not h.moved and battle.played == 0 			and overlay == null and not (tuto_arrow != null and tuto_arrow.visible)
+	var show: bool = hud.visible and h != null and battle.player_turn and not battle.busy and overlay == null and not (tuto_arrow != null and tuto_arrow.visible)
 	var p := Vector3.ZERO
 	if show:
 		p = h.global_position + Vector3(0, h.head + 0.7, 0)
@@ -865,18 +867,34 @@ func _place_turn_arrow() -> void:
 	if turn_arrow == null:
 		if not show:
 			return
-		turn_arrow = _label("▼", 40, Data.CLASS_COLOR.get(h.key, GOLD).lightened(0.3), title_f)
-		turn_arrow.add_theme_color_override("font_outline_color", Color("#1a0e06"))
+		turn_arrow = _label("▼", 46, Unit.ACTIVE_COL.lightened(0.2), title_f)
+		turn_arrow.add_theme_color_override("font_outline_color", Color("#2a1606"))
 		turn_arrow.add_theme_constant_override("outline_size", 12)
 		turn_arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		turn_arrow.size = Vector2(50, 50)
+		turn_arrow.size = Vector2(60, 60)
+		turn_arrow.pivot_offset = Vector2(30, 30)
 		turn_arrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		turn_arrow.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		var halo := TextureRect.new()
+		halo.texture = Fx._radial([0.0, 0.3, 1.0], [0.9, 0.45, 0.0])
+		halo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		halo.position = Vector2(-30, -30)
+		halo.size = Vector2(120, 120)
+		halo.modulate = Unit.ACTIVE_COL
+		halo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		halo.show_behind_parent = true
+		turn_arrow.add_child(halo)
+		turn_arrow.set_meta("halo", halo)
 		root.add_child(turn_arrow)
 	turn_arrow.visible = show
 	if show:
-		turn_arrow.add_theme_color_override("font_color", Data.CLASS_COLOR.get(h.key, GOLD).lightened(0.3))
-		var bob := absf(sin(Time.get_ticks_msec() * 0.005)) * 10.0
-		turn_arrow.position = main.cam.unproject_position(p) - Vector2(25, 48 + bob)
+		var t := Time.get_ticks_msec() * 0.001
+		var fresh: bool = not h.moved and battle.played == 0
+		var bob := absf(sin(t * 5.0)) * (12.0 if fresh else 5.0)
+		turn_arrow.position = main.cam.unproject_position(p) - Vector2(30, 56 + bob)
+		turn_arrow.scale = Vector2.ONE * (1.0 if fresh else 0.75)
+		var halo: TextureRect = turn_arrow.get_meta("halo")
+		halo.modulate.a = (0.55 + 0.35 * sin(t * 4.0)) * (1.0 if fresh else 0.6)
 
 
 func _place_arrow() -> void:
@@ -899,6 +917,41 @@ func _place_arrow() -> void:
 
 func announce(c: Dictionary) -> void:
 	toast("%s — %s" % [Data.HEROES[c.owner].name, c.name])
+
+
+func reward_flash(ci: Dictionary, title: String) -> void:
+	## Une récompense gagnée en plein combat (défi relevé) : la carte s'affiche en grand un instant, sans rien bloquer.
+	var box := Control.new()
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.z_index = 90
+	root.add_child(box)
+	var k := 1.1
+	var w := make_card(ci)
+	w.scale = Vector2.ONE * k
+	_passthrough(w)
+	box.add_child(w)
+	var t := _shadowed(_label(title.to_upper(), 26, GOLD, title_f), 8)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	t.size = Vector2(420, 40)
+	t.position = Vector2(CARD.x * k * 0.5 - 210, -46)
+	box.add_child(t)
+	var ench: String = ci.get("ench", "")
+	if ench != "" and Data.ENCHANTS.has(ench):
+		var e := _shadowed(_label("✦ " + Data.ENCHANTS[ench].name, 18, Color("#d9a8ff"), title_f), 6)
+		e.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		e.size = Vector2(420, 28)
+		e.position = Vector2(CARD.x * k * 0.5 - 210, CARD.y * k + 8)
+		box.add_child(e)
+	var vp := root.size
+	var end := Vector2(vp.x - CARD.x * k - 60, vp.y * 0.5 - CARD.y * k * 0.5)
+	box.position = end + Vector2(CARD.x * k + 80, 0)
+	box.modulate.a = 0.0
+	var tw := box.create_tween()
+	tw.tween_property(box, "position", end, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(box, "modulate:a", 1.0, 0.25)
+	tw.tween_interval(2.6)
+	tw.tween_property(box, "modulate:a", 0.0, 0.4)
+	tw.tween_callback(box.queue_free)
 
 
 func set_gold(g: int) -> void:
@@ -958,7 +1011,7 @@ func show_item(tool_id: String, below: float) -> void:
 		c.queue_free()
 	if tool_id == "":
 		return
-	var k := 0.72
+	var k := 0.8 if big else 1.05  # en grand : on doit voir d'un coup d'œil ce qu'on ramasserait
 	var w := make_card({"id": Data.obj_of(tool_id), "lvl": 1, "h": battle.heroes[0].key if battle.heroes.size() > 0 else "garde"})
 	w.scale = Vector2.ONE * k
 	w.pivot_offset = Vector2.ZERO
@@ -1109,7 +1162,10 @@ func _rebuild_heroes(box: VBoxContainer = null, list: Array = [], panels: Dictio
 		badge.gui_input.connect(func(e):
 			if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
 				badge.accept_event()
-				hero_sheet(h))
+				if fight and battle.card_sel >= 0 and h.alive:
+					battle.pick_hero(h)  # une carte choisie : le portrait la joue sur ce héros
+				else:
+					hero_sheet(h))
 		var por := TextureRect.new()
 		por.texture = load("res://assets/art/portrait_%s.png" % h.key)
 		por.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -1279,9 +1335,9 @@ func refresh() -> void:
 			voc_badge.tooltip_text = "Vocation : " + Data.HEROES[av].name
 	pile_lbl.text = ("%s · pioche %d · défausse %d" % [battle.active.nm, battle.draw_pile.size(), battle.discard.size()]) if battle.active else "Tour ennemi"
 	end_btn.disabled = not battle.player_turn or battle.busy
-	end_btn.text = "Fin du tour" if battle.active == null else ("Valider l'orientation" if battle.orienting else "Fin · %s" % battle.active.nm)
+	end_btn.text = "Fin du tour" if battle.active == null else "Fin · %s" % battle.active.nm
 	keys_plate.visible = (battle.turn <= 1 and not main.tuto if show_keys < 0 else show_keys == 1) and not big  # au doigt, pas de clavier
-	var psig := "%s|%d|%s" % [JSON.stringify(battle.powers), battle.discard.size(), log_box.visible]
+	var psig := "%s|%d|%d|%s" % [JSON.stringify(battle.powers), battle.discard.size(), battle.draw_pile.size(), log_box.visible]
 	if psig != _played_sig:
 		_played_sig = psig
 		_rebuild_played()
@@ -1335,6 +1391,7 @@ func _rebuild_played() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	played_box.add_child(row)
+	row.add_child(_small_btn("Pioche · %d" % battle.draw_pile.size(), func(): main.view_deck("pioche")))
 	row.add_child(_small_btn("Défausse · %d" % battle.discard.size(), func(): main.view_deck("defausse")))
 	row.add_child(_small_btn("Journal" + (" ▾" if log_box.visible else " ▸"), func():
 		log_box.visible = not log_box.visible
@@ -1563,29 +1620,31 @@ func make_card(ci: Dictionary) -> Control:
 		bl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		bl.clip_text = true
 		band.add_child(bl)
-	# idéogrammes : ce que fait la carte, en chiffres, au bas de l'illustration
-	var stats := HBoxContainer.new()
-	stats.alignment = BoxContainer.ALIGNMENT_CENTER
-	stats.add_theme_constant_override("separation", 8)
-	stats.position = Vector2(art_r.position.x, art_r.end.y - 30)
-	stats.size = Vector2(art_r.size.x, 28)
-	stats.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	stats.visible = not secret
-	card.add_child(stats)
-	if c.get("dmg", 0) > 0:
-		stats.add_child(_chip("attaque", str(c.dmg) + ("×%d" % c.hits if c.get("hits", 1) > 1 else ""), Color(1, 0.8, 0.72)))
-	if c.get("block", 0) > 0:
-		stats.add_child(_chip("armure", str(c.block), Color(0.8, 0.9, 1.0)))
-	if c.get("heal", 0) > 0 or c.get("heal_all", 0) > 0:
-		stats.add_child(_chip("pv", str(c.get("heal", c.get("heal_all", 0))), Color(0.6, 1.0, 0.6)))
-	var rg: Array = c.get("range", [0, 0])
-	if rg[1] > 1 and c.get("target", "foe") != "self":
-		stats.add_child(_chip("portee", "%d-%d" % [maxi(rg[0], 1), rg[1]] if rg[0] > 1 else str(rg[1])))
+	# les chiffres dans des bulles aux coins, comme une carte à collectionner : l'effet en bas à gauche
+	# (dégâts, soin, armure, empilés s'il y en a plusieurs), la portée en bas à droite
+	if not secret:
+		var fx: Array = []
+		if c.get("dmg", 0) > 0:
+			fx.append(["attaque", str(c.dmg) + ("×%d" % c.hits if c.get("hits", 1) > 1 else ""), BUBBLE_DMG])
+		if c.get("heal", 0) > 0 or c.get("heal_all", 0) > 0:
+			fx.append(["pv", str(c.get("heal", c.get("heal_all", 0))), BUBBLE_HEAL])
+		if c.get("block", 0) > 0 and not String(c.text).contains("allié gagne {block}"):  # l'armure d'un autre reste dans la phrase
+			fx.append(["armure", str(c.block), BUBBLE_ARM])
+		for k in fx.size():
+			var d := 48.0 if k == 0 else 38.0
+			var b := _bubble(fx[k][0], fx[k][1], fx[k][2], d)
+			b.position = Vector2(-14 + (48.0 - d) * 0.5, CARD.y - 38 - (0 if k == 0 else 46 + (k - 1) * 40))  # à cheval sur le coin, comme une carte à collectionner
+			card.add_child(b)
+		var rg: Array = c.get("range", [0, 0])
+		if c.get("target", "foe") != "self" and rg[1] > 0:
+			var rb := _bubble("portee", "%d-%d" % [maxi(rg[0], 1), rg[1]] if rg[0] > 1 else str(rg[1]), BUBBLE_RANGE, 48.0)
+			rb.position = Vector2(CARD.x - 34, CARD.y - 38)
+			card.add_child(rb)
 	var txt := Data.card_brief(c)
 	var tt := Lang.t(Data.trig_text(c))
 	var body := VBoxContainer.new()
-	body.position = txt_r.position + Vector2(-4, 0)
-	body.size = txt_r.size + Vector2(8, 0)
+	body.position = txt_r.position + Vector2(6, 0)  # un peu rentré : les bulles des coins mordent sur le cadre
+	body.size = txt_r.size - Vector2(12, 0)
 	body.alignment = BoxContainer.ALIGNMENT_CENTER
 	body.add_theme_constant_override("separation", 1)
 	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1656,6 +1715,39 @@ static func icon(n: String) -> Texture2D:
 	if not _icons.has(n):
 		_icons[n] = load("res://assets/ui/icon_%s.png" % n)
 	return _icons[n]
+
+
+const BUBBLE_DMG := Color("#b8322a")
+const BUBBLE_HEAL := Color("#2f8a45")
+const BUBBLE_ARM := Color("#50677e")
+const BUBBLE_RANGE := Color("#8a6a2e")
+func _bubble(n: String, txt: String, fill: Color, d: float) -> Panel:
+	## Bulle de coin de carte : un disque coloré, l'idéogramme en filigrane, le chiffre en gros par-dessus.
+	var b := Panel.new()
+	var st := sb(fill, Color("#f4e6c4"), int(d * 0.5), 3, 5)
+	st.shadow_color = Color(0, 0, 0, 0.55)
+	st.shadow_offset = Vector2(0, 2)
+	b.add_theme_stylebox_override("panel", st)
+	b.size = Vector2(d, d)
+	b.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var t := TextureRect.new()
+	t.texture = icon(n)
+	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	t.position = Vector2(d * 0.14, d * 0.14)
+	t.size = Vector2(d * 0.72, d * 0.72)
+	t.modulate = Color(0, 0, 0, 0.3)
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(t)
+	var fs := int(d * (0.56 if txt.length() <= 2 else 0.4))
+	var l := _label(txt, fs, Color.WHITE, Fx.number_font())
+	l.add_theme_color_override("font_outline_color", Color(0.08, 0.04, 0.02))
+	l.add_theme_constant_override("outline_size", 7)
+	l.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	b.add_child(l)
+	return b
 
 
 func _chip(n: String, txt: String, tint := Color.WHITE, sz := 26) -> HBoxContainer:
@@ -1841,29 +1933,40 @@ func _process(dt: float) -> void:
 	_place_tags()
 
 
+func over_hand(p: Vector2) -> bool:
+	## La bande de la main (cartes au repos, levées au survol, et leurs interstices) : le plateau n'y reçoit ni survol ni clic.
+	var n := _cards.size()
+	if n == 0 or not hud.visible:
+		return false
+	var vp := root.size
+	var half := (n - 1) * 0.5 * minf(146.0, 900.0 / n) * hand_k / 0.84 + CARD.x * 0.5 * hand_k * 1.33 + 12.0
+	var top := vp.y - (CARD.y * hand_k * 1.33 + 80.0 if _hover_card >= 0 else CARD.y * hand_k + 28.0)
+	return absf(p.x - vp.x * 0.5) < half and p.y > top
+
+
 func _layout_hand(dt: float) -> void:
 	var n := _cards.size()
 	if n == 0:
 		return
 	var vp := root.size
-	var spacing := minf(146.0, 900.0 / n)
+	var spacing := minf(146.0, 900.0 / n) * hand_k / 0.84
 	var k := 1.0 - exp(-dt * 14.0)
 	for i in n:
 		var card: Control = _cards[i]
 		var off := i - (n - 1) * 0.5
-		var pos := Vector2(vp.x * 0.5 + off * spacing - CARD.x * 0.5, vp.y - CARD.y - 8 + off * off * 3.0)
+		var pos := Vector2(vp.x * 0.5 + off * spacing - CARD.x * 0.5, vp.y - CARD.y - 20 + off * off * 3.0)  # les bulles des coins débordent en bas
 		var rot := off * 0.03
-		var sc := 0.84
+		var sc := hand_k
 		var z := i
 		if i == battle.card_sel:
 			pos.y -= 40
 			rot = 0.0
-			sc = 0.98
+			sc = hand_k + 0.14
 			z = 50
 		if i == _hover_card:
 			pos.y -= 60
 			rot = 0.0
-			sc = 1.12
+			sc = hand_k * 1.33
 			z = 60
 		card.position = card.position.lerp(pos, k)
 		card.rotation = lerpf(card.rotation, rot, k)
@@ -1999,8 +2102,8 @@ func _make_tag(u: Unit) -> Control:
 	bar.position = Vector2(-1, 10)
 	bar.size = Vector2(72, 14)
 	var hero := u.side == "hero"
-	var fill_col: Color = Data.CLASS_COLOR.get(u.key, Color("#d2452f")) if hero else Color("#ff8a1e")
-	bar.add_theme_stylebox_override("background", sb(Color(0, 0, 0, 0.75), Color(0.95, 0.92, 0.85, 0.95) if hero else Color(0.25, 0.05, 0.02, 0.95), 4, 2 if hero else 1))
+	var fill_col: Color = Unit.ALLY_COL if hero else Unit.FOE_COL  # un camp, une couleur : bleu les nôtres, rouge les leurs
+	bar.add_theme_stylebox_override("background", sb(Color(0, 0, 0, 0.75), Color(0.85, 0.93, 1.0, 0.95) if hero else Color(0.35, 0.04, 0.02, 0.95), 4, 2))
 	bar.add_theme_stylebox_override("fill", sb(fill_col, Color(0, 0, 0, 0), 4))
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	t.add_child(bar)
@@ -2165,7 +2268,8 @@ func choose(title: String, subtitle: String, options: Array, allow_skip := false
 		elif o.has("card"):
 			w = make_card(o.card)
 			var holder := Control.new()
-			var sc_k := 0.8 if many else (1.0 if split else 1.2)
+			# en grand pour choisir : on lit la carte sans plisser les yeux (butin, draft, forge)
+			var sc_k := 0.8 if many else (1.1 if split else (1.55 if options.size() <= 4 else (1.3 if options.size() <= 6 else 1.2)))
 			holder.custom_minimum_size = CARD * sc_k
 			holder.tooltip_text = w.tooltip_text
 			w.scale = Vector2.ONE * sc_k
@@ -2192,8 +2296,17 @@ func choose(title: String, subtitle: String, options: Array, allow_skip := false
 				w.accept_event()
 				if not fresh.call():
 					picked.emit(idx))
-		w.mouse_entered.connect(func(): w.modulate = Color(1.15, 1.1, 1.0))
-		w.mouse_exited.connect(func(): w.modulate = Color.WHITE)
+		w.mouse_entered.connect(func():
+			w.modulate = Color(1.15, 1.1, 1.0)
+			if o.has("card"):  # la carte survolée avance d'un cran
+				w.pivot_offset = w.size * 0.5
+				w.z_index = 5
+				w.create_tween().tween_property(w, "scale", Vector2.ONE * 1.06, 0.12))
+		w.mouse_exited.connect(func():
+			w.modulate = Color.WHITE
+			if o.has("card"):
+				w.z_index = 0
+				w.create_tween().tween_property(w, "scale", Vector2.ONE, 0.12))
 		w.focus_entered.connect(func(): w.modulate = Color(1.2, 1.12, 0.95))
 		w.focus_exited.connect(func(): w.modulate = Color.WHITE)
 		(row2 if split and not o.has("card") else row).add_child(w)

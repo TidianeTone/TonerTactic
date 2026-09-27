@@ -104,6 +104,7 @@ func _ready() -> void:
 		var kv := a.trim_prefix("--").split("=", true, 1)
 		args[kv[0]] = kv[1] if kv.size() > 1 else "1"
 	Lang.setup(_read_lang() == "en")
+	Engine.time_scale = 1.0  # global au moteur : un ralenti (hitstop) coupé par un rechargement de scène figerait la suivante
 	if args.has("party"):
 		party = Array(args.party.split(","))
 	if args.has("difficulty"):
@@ -132,6 +133,8 @@ func _ready() -> void:
 	add_child(battle)
 	ui = UI.new()
 	ui.main = self
+	if args.has("handk"):
+		ui.hand_k = float(args.handk)
 	ui.battle = battle
 	add_child(ui)
 	battle.changed.connect(ui.refresh)
@@ -162,6 +165,12 @@ func _ready() -> void:
 		_maptest.call_deferred()
 	elif args.has("tutotest"):
 		_tutotest.call_deferred()
+	elif args.has("tuto2run"):
+		_tuto2run.call_deferred()
+	elif args.has("uxtest"):
+		_uxtest.call_deferred()
+	elif args.has("cardsheet"):
+		_cardsheet.call_deferred()
 	elif args.has("capture"):
 		_capture.call_deferred()
 	else:
@@ -342,7 +351,7 @@ func _process(dt: float) -> void:
 			ui.frieze_unit = null
 	if ui and ui.hud.visible and not args.has("capture") and not pad and not mobile and not ui.menu_open():
 		var mp := get_viewport().get_mouse_position()
-		var h = fu.cell if fu else _pick(cam.project_ray_origin(mp), cam.project_ray_normal(mp))
+		var h = fu.cell if fu else (null if ui.over_hand(mp) else _pick(cam.project_ray_origin(mp), cam.project_ray_normal(mp)))
 		if h != hover:
 			hover = h
 			refresh_hover()
@@ -581,7 +590,9 @@ func _unhandled_input(e: InputEvent) -> void:
 		if e.pressed:
 			_rmb_drag = 0.0
 		elif _rmb_drag < 6.0:
-			battle.cancel()  # un clic droit bref annule toujours
+			# un clic droit bref annule ; sans rien à annuler, il tourne le héros actif vers la case visée
+			if battle.card_sel >= 0 or battle.inspect or battle._move_plan != null or hover == null or not battle.face_cell(hover):
+				battle.cancel()
 	elif e is InputEventMouseButton and e.pressed:
 		match e.button_index:
 			MOUSE_BUTTON_WHEEL_UP:
@@ -592,6 +603,8 @@ func _unhandled_input(e: InputEvent) -> void:
 				if exploring and ui.overlay == null:
 					if _adv_hover != null:
 						_adv_click(_adv_hover)
+				elif ui.hud.visible and ui.over_hand(e.position):
+					pass  # un clic à côté d'une carte ne traverse jamais la main jusqu'au plateau
 				elif ui.hud.visible and not pad:
 					var c = _pick(cam.project_ray_origin(e.position), cam.project_ray_normal(e.position))
 					if c != hover:
@@ -632,10 +645,13 @@ func _unhandled_input(e: InputEvent) -> void:
 				ui.refresh()
 			KEY_M:
 				toggle_mute()
+			KEY_T:
+				if ui.hud.visible:
+					set_tactic(not tactic)
 			KEY_TAB:
 				if battle.active:
 					battle.select(battle.active)
-					focus(battle.active.position)
+					follow(battle.active.position, minf(dist, 18.0))
 			KEY_G:
 				quality = (quality + 1) % 3
 				_apply_quality()
@@ -808,14 +824,14 @@ const TUTO := [
 		"party": ["lame"], "heroes": [Vector2i(4, 8)],
 		"foes": [["husk", Vector2i(4, 4), Vector2i(0, 1)], ["husk", Vector2i(7, 3), Vector2i(0, -1)]],
 		"steps": [
-			{"do": "move", "at": Vector2i(4, 5), "hand": ["estoc", "double", "fente"], "say": "Au tour de la Lame. Les cases éclairées : jusqu'où elle va. Cliquez la case marquée."},
+			{"do": "move", "at": Vector2i(4, 5), "hand": ["estoc", "double", "fente"], "say": "Au tour de la Lame. Les cases éclairées : jusqu'où elle va. Cliquez la case marquée, puis recliquez."},
 			{"do": "play", "card": "estoc", "at": Vector2i(4, 4), "say": "Une carte : l'Estoc, en bas, puis cliquez le Moussu. Chaque carte coûte du mana : 3 par tour."},
-			{"do": "orient", "say": "C'est fini pour ce tour : cliquez « Fin · Lame », en bas à droite."},
-			{"do": "face", "say": "Où regarde la Lame ? Les Moussus aussi frappent de dos : cliquez une case vers eux."},
+			{"do": "face", "say": "La flèche dorée : où regarde la Lame. Ils frappent de dos : clic droit sur une case vers eux (ou ← →)."},
+			{"do": "end", "say": "Fini pour ce tour : « Fin · Lame », en bas à droite. Sans consigne, elle se tourne vers l'ennemi proche."},
 			{"do": "move", "at": Vector2i(7, 4), "hand": ["double", "estoc", "fente"], "say": "Ce Moussu vous tourne le dos. Passez derrière lui : la case marquée."},
 			{"do": "play", "card": "double", "at": Vector2i(7, 3), "say": "Double lame, dans son dos : ×1,5 sur chaque coup."},
-			{"do": "orient", "say": "Fin du tour : « Fin · Lame »."},
-			{"do": "face", "say": "Aucun Moussu dans son dos : cliquez une case vers eux."}]},
+			{"do": "face", "say": "Aucun Moussu dans son dos : clic droit sur une case vers eux."},
+			{"do": "end", "say": "Fin du tour : « Fin · Lame »."}]},
 	{"name": "Le terrain", "glyph": "✹", "text": "Un brasero, l'eau, une rune de force et un coffre : le décor frappe aussi.",
 		"party": ["lame"], "heroes": [Vector2i(4, 8)],
 		"water": [Vector2i(7, 4), Vector2i(8, 4), Vector2i(9, 4), Vector2i(7, 5), Vector2i(8, 5), Vector2i(9, 5), Vector2i(7, 6), Vector2i(8, 6), Vector2i(9, 6)],
@@ -826,7 +842,7 @@ const TUTO := [
 			{"do": "play", "card": "c_aiguille", "at": Vector2i(2, 4), "say": "Un brasero ✹ explose quand on le frappe : 7 dégâts autour. Visez-le avec l'Aiguille."},
 			{"do": "play", "card": "c_lam2_kunai_leste", "at": Vector2i(6, 5), "say": "Le Kunaï lesté repousse d'une case. Poussez ce Moussu à l'eau : la noyade fait 8."},
 			{"do": "prop", "at": Vector2i(4, 4), "say": "Un coffre ◆ au contact : cliquez-le. L'ouvrir ne coûte rien."},
-			{"do": "end", "say": "Fin du tour : « Fin · Lame », puis où elle regarde."}]},
+			{"do": "end", "say": "Fin du tour : « Fin · Lame »."}]},
 	{"name": "L'escouade", "art": "res://assets/ui/tuto_2.png", "glyph": "◆", "text": "Garde, Lame, Oracle : l'ordre du round, un paquet chacun, la provocation, le soin.",
 		"party": ["garde", "lame", "oracle"], "heroes": [Vector2i(3, 8), Vector2i(4, 8), Vector2i(5, 8)], "hurt": {"garde": 14},
 		"foes": [["husk", Vector2i(4, 4), Vector2i(0, 1)], ["husk", Vector2i(6, 4), Vector2i(0, 1)]],
@@ -854,11 +870,11 @@ const TUTO := [
 		"water": [Vector2i(8, 4), Vector2i(9, 4), Vector2i(8, 5), Vector2i(9, 5), Vector2i(8, 6), Vector2i(9, 6)],
 		"foes": [["husk", Vector2i(5, 4), Vector2i(0, -1)], ["husk", Vector2i(7, 5), Vector2i(-1, 0)]],
 		"steps": [
-			{"do": "move", "at": Vector2i(5, 5), "hand": ["double", "c_lam2_kunai_leste", "estoc"], "say": "Cliquez la case marquée : la Lame y va, dans le dos du Moussu."},
+			{"do": "move", "at": Vector2i(5, 5), "hand": ["double", "c_lam2_kunai_leste", "estoc"], "say": "Cliquez la case marquée (le chemin s'affiche), recliquez : la Lame y va, dans son dos."},
 			{"do": "play", "card": "double", "at": Vector2i(5, 4), "say": "Une carte en bas, puis la cible. De dos, c'est ×1,5 : Double lame !"},
 			{"do": "play", "card": "c_lam2_kunai_leste", "at": Vector2i(7, 5), "say": "Le Kunaï lesté repousse : poussez l'autre Moussu à l'eau. Noyade : 8."},
-			{"do": "orient", "say": "Fin du tour : « Fin · Lame », en bas à droite."},
-			{"do": "face", "say": "Eux aussi frappent de dos : cliquez une case vers eux."}]},
+			{"do": "face", "say": "Eux aussi frappent de dos : clic droit sur une case vers eux (ou ← →)."},
+			{"do": "end", "say": "Fin du tour : « Fin · Lame », en bas à droite."}]},
 ]
 const TUTO_TRAITS := {"garde": "costaud", "lame": "gaucher", "oracle": "lynx"}
 const TUTO_ITEM := "epee_ecluse"
@@ -931,6 +947,9 @@ func _tuto_from(n: int) -> void:
 
 
 func _tuto_end() -> void:
+	if args.has("tuto2run"):
+		bot_pick = 1
+		args.erase("tutotest")
 	var i := await ui.choose("INITIATION TERMINÉE", "Le reste, la descente vous l'apprendra", [
 		{"title": "Retour au titre", "glyph": "⌂", "text": "Les chapitres se rejouent depuis l'Initiation.", "color": Color("#8f86a8")},
 		{"title": "Lancer une descente", "glyph": "⚔", "text": "Mode, difficulté, escouade : la vraie descente commence.", "color": UI.GOLD}])
@@ -1087,9 +1106,7 @@ func tuto_gate(kind: String, arg = null) -> String:
 		"target":
 			ok = s.do == "play" and arg == s.at
 		"end":
-			ok = s.do in ["orient", "face", "end"]
-		"face":
-			ok = s.do == "end" or (s.do == "face" and _tuto_face_ok())
+			ok = s.do == "end"
 		_:
 			ok = s.do == kind and arg == s.at
 	if ok:
@@ -1100,8 +1117,8 @@ func tuto_gate(kind: String, arg = null) -> String:
 		"ok":
 			return "Lisez, puis « Suite »."
 		"face":
-			return "Un ennemi voit son dos : tournez-la vers eux."
-		"orient", "end":
+			return "Clic droit sur une case vers les ennemis : le héros se tourne."
+		"end":
 			return "Terminez le tour : « Fin », en bas à droite."
 	return "Pas là : suivez la flèche."
 
@@ -1114,7 +1131,7 @@ func tuto_hand(h: Unit) -> Array:
 
 func _coach(evt: String, _info) -> void:
 	## Ce que fait le joueur : le geste attendu fait passer à l'étape suivante.
-	if tuto and tuto_i < tuto_steps.size() and evt == {"move": "moved", "play": "done", "prop": "coffre", "orient": "orient", "face": "ended", "end": "ended"}.get(tuto_steps[tuto_i].do, ""):
+	if tuto and tuto_i < tuto_steps.size() and evt == {"move": "moved", "play": "done", "prop": "coffre", "face": "faced", "end": "ended"}.get(tuto_steps[tuto_i].do, "") and (evt != "faced" or _tuto_face_ok()):
 		_tuto_next()
 
 
@@ -1474,6 +1491,15 @@ func toggle_mute() -> void:
 	ui.toast("Musique coupée" if _mute else "Musique")
 
 
+func follow(p: Vector3, d: float) -> void:
+	## Suivi de caméra : le centre de l'orbite va sur l'unité qui joue, et on s'en approche.
+	if args.has("capture") or args.has("speed"):
+		return  # les captures cadrent elles-mêmes ; l'auto-jeu accéléré n'a pas d'yeux
+	target = Vector3(p.x, clampf(p.y, 0.0, 4.0), p.z)
+	_focus = null
+	dist = d
+
+
 func reset_camera() -> void:
 	## Vue par défaut du combat : l'angle de départ, tout le plateau, centrée sur l'escouade.
 	yaw = 45.0
@@ -1523,8 +1549,6 @@ func _fight(type: String, ids_override: Array = []) -> bool:
 			ids.append(ex[rng.randi_range(0, ex.size() - 1)])
 	elif extra < 0 and type == "combat" and ids.size() > 3:
 		ids.resize(ids.size() + extra)
-	if tactic and not tuto:  # vue tactique : même combat, sur un damier plat plus lisible
-		arch = "damier"
 	_build_room(run_seed + floor_i * 1009 + step * 37 + fights * 131, _biome(), size, arch, true)
 	if tuto:
 		_tuto_arena()
@@ -1558,9 +1582,11 @@ func _fight(type: String, ids_override: Array = []) -> bool:
 	battle.start(heroes, ids, deck, relics)
 	target = _units_center()
 	ui.show_hud(true)
+	_apply_tactic()
 	var won: bool = await battle.ended
 	play_music("calme")
 	ui.show_hud(false)
+	_apply_tactic()  # le décor revient hors combat
 	board.highlight({})
 	return won
 
@@ -2065,7 +2091,7 @@ func _load_run() -> bool:
 
 func _testing() -> bool:
 	## Les essais n'écrivent ni dans la bibliothèque ni dans la sauvegarde du joueur.
-	return ["autoplay", "uitest", "advtest", "capture", "cardtest", "voctest", "looktest", "hdtest", "haventest", "eventtest", "tutotest", "maptest"].any(func(k): return args.has(k))
+	return ["autoplay", "uitest", "advtest", "capture", "cardtest", "voctest", "looktest", "hdtest", "haventest", "eventtest", "tutotest", "maptest", "tuto2run", "uxtest", "cardsheet"].any(func(k): return args.has(k))
 
 
 func _save_library() -> void:
@@ -2696,13 +2722,30 @@ func _next_lvl(ci: Dictionary) -> Dictionary:
 
 
 func _confirm_upgrade(before: Dictionary, after: Dictionary) -> bool:
-	## Aperçu avant / après : on voit ce que la carte gagne avant de valider.
+	## Les trois niveaux côte à côte (on ne monte pas au 2 sans voir le 3) ; le niveau visé se clique pour valider.
 	var gain := Data.upgrade_diff(before, after)
-	var i := await ui.choose("AMÉLIORER ?", "Niveau %d → %d : %s" % [Data.level(before), Data.level(after), gain],
-		[{"card": before, "tag": "Avant"}, {"card": after, "tag": "Après"}], true, "Choisir une autre carte")
-	if i == 1:
-		ui.banner("%s · niveau %d" % [Data.def(after.id).name, Data.level(after)], gain)
-	return i == 1
+	var now := Data.level(before)
+	var to := Data.level(after)
+	var opts: Array = []
+	for lv in range(1, Data.MAX_LVL + 1):
+		var ci: Dictionary = before.duplicate()
+		ci["lvl"] = lv
+		ci.erase("up")
+		ci.erase("bump")
+		var tag := "Niveau %d" % lv
+		if lv == now:
+			tag += " · actuel"
+		elif lv == to:
+			tag = "✦ Niveau %d · valider" % lv
+		elif lv > to:
+			tag += " · ensuite"
+		opts.append({"card": ci, "tag": tag})
+	var i := await ui.choose("AMÉLIORER ?", "Niveau %d → %d : %s · cliquez le niveau %d pour valider" % [now, to, gain, to],
+		opts, true, "Choisir une autre carte")
+	if i == to - 1:
+		ui.banner("%s · niveau %d" % [Data.def(after.id).name, to], gain)
+		return true
+	return false
 
 
 func _level_up(k: int) -> void:
@@ -3203,6 +3246,211 @@ func _tutotest() -> void:
 	get_tree().quit()
 
 
+func _cardsheet() -> void:
+	## -- --cardsheet=FICHIER.png [--cards=id,id] [--k=1.0] : une planche de cartes telles que dessinées en jeu.
+	party = ["garde", "lame", "oracle"]
+	_make_party()
+	_build_room(3, 0, 12, "damier", false)
+	var ids: Array = Array(args.get("cards", "estoc,fente,g_benir,c_interposition,charge,braise,seve,defi,pavois,g_onction").split(","))
+	var k := float(args.get("k", "1.0"))
+	var layer := Control.new()
+	layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	ui.root.add_child(layer)
+	var bgc := ColorRect.new()
+	bgc.color = Color(0.1, 0.09, 0.1)
+	bgc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(bgc)
+	var per := int(floor((ui.root.size.x - 40) / (UI.CARD.x * k + 30)))
+	for i in ids.size():
+		var w := ui.make_card({"id": ids[i], "lvl": 1, "h": "garde"})
+		w.scale = Vector2.ONE * k
+		w.pivot_offset = Vector2.ZERO
+		w.position = Vector2(40 + (i % per) * (UI.CARD.x * k + 30), 50 + (i / per) * (UI.CARD.y * k + 50))
+		layer.add_child(w)
+	await _frames(30)
+	get_viewport().get_texture().get_image().save_png(args.cardsheet)
+	get_tree().quit()
+
+
+func _uxtest() -> void:
+	## -- --uxtest=DIR : les gestes du combat un par un (ciblage par portrait, échange, ruée, déplacement en deux clics,
+	## butin au sol, défi relevé) ; chaque geste imprime OK ou ÉCHEC, une capture par étape.
+	var dir: String = args.uxtest
+	DirAccess.make_dir_recursive_absolute(dir)
+	run_seed = 7
+	rng.seed = run_seed
+	floor_i = 1
+	floor_biomes = [0, 0, 0]
+	if not args.has("party"):
+		party = ["garde", "lame", "oracle"]
+	deck = Data.starter(party)
+	_make_party()
+	_build_room(run_seed, 0, 12, "damier", false)
+	ui.show_hud(true)
+	battle.start(heroes, ["husk", "husk"], deck, relics)
+	while not battle.player_turn:
+		await get_tree().process_frame
+	await _frames(60)
+	_shot(dir, "01_debut")
+	var ok := func(what: String, cond: bool): print(("OK     " if cond else "ÉCHEC  ") + what)
+	var h: Unit = battle.active
+	var give := func(ids: Array):
+		while battle.busy:
+			await get_tree().process_frame
+		battle.hand = ids.map(func(id): return {"id": id, "lvl": 1, "h": h.key})
+		battle.energy = 9
+		battle.card_sel = -1
+		battle.changed.emit()
+	# 1. une carte de soin sur soi, par le portrait (le héros caché derrière la main)
+	h.hp = h.max_hp - 8
+	give.call(["g_benir"])
+	await _frames(20)
+	battle.select_card(0)
+	await _frames(20)
+	_shot(dir, "02_benir_choisie")
+	battle.pick_hero(h)
+	for q in 12:
+		await _frames(30)
+		if not battle.busy:
+			break
+	ok.call("Bénir sur soi par le portrait (PV %d/%d, armure %d)" % [h.hp, h.max_hp, h.block], h.hp > h.max_hp - 8 and h.block > 0)
+	# 2. échange de place avec un allié
+	var mate: Unit = battle.alive_heroes().filter(func(u): return u != h)[0]
+	mate.place(h.cell + Vector2i(2, 0) if board.walkable(h.cell + Vector2i(2, 0)) and battle.unit_at(h.cell + Vector2i(2, 0)) == null else h.cell + Vector2i(0, 2), board)
+	var a0 := h.cell
+	var b0 := mate.cell
+	for q in 40:
+		if not battle.busy:
+			break
+		await _frames(15)
+	give.call(["c_interposition"])
+	await _frames(20)
+	battle.select_card(0)
+	await _frames(10)
+	var tg: Array = battle.card_targets(Data.card(battle.hand[0]), h) if battle.card_sel >= 0 else []
+	ok.call("Interposition : l'allié est une cible (%s dans %s)" % [b0, tg], tg.has(b0) or battle.card_sel < 0)
+	if battle.card_sel >= 0:
+		battle.click(b0)
+	await _frames(60)
+	ok.call("Interposition : places échangées (%s <-> %s)" % [h.cell, mate.cell], h.cell == b0 and mate.cell == a0)
+	# 3. ruée hors de la ligne droite
+	var foe: Unit = battle.alive_foes()[0]
+	var spot := foe.cell + Vector2i(-2, 1)
+	for c in [foe.cell + Vector2i(-2, 1), foe.cell + Vector2i(2, 1), foe.cell + Vector2i(1, 2), foe.cell + Vector2i(-1, -2), foe.cell + Vector2i(1, -2)]:
+		if board._in(c) and board.walkable(c) and battle.unit_at(c) == null:
+			spot = c
+			break
+	h.place(spot, board)
+	h.moved = false
+	give.call(["fente"])
+	await _frames(20)
+	battle.select_card(0)
+	await _frames(20)
+	await main_hover_shot(dir, "03_fente_visee", foe.cell)
+	var hp0 := foe.hp
+	var diag: bool = h.cell.x != foe.cell.x and h.cell.y != foe.cell.y
+	ok.call("Fente : ennemi en diagonale ciblable (%s -> %s)" % [h.cell, foe.cell], diag and battle.card_targets(Data.card(battle.hand[0]), h).has(foe.cell))
+	battle.click(foe.cell)
+	await _frames(90)
+	ok.call("Fente : a couru et frappé (PV %d -> %d, au contact : %s)" % [hp0, foe.hp, Battle.dist(h.cell, foe.cell) == 1], foe.hp < hp0 or not foe.alive)
+	for q in 40:
+		if not battle.busy:
+			break
+		await _frames(15)
+	# 4. déplacement en deux clics
+	h.moved = false
+	give.call([])
+	battle.select(h)
+	var R := battle.reach(h)
+	var goal: Vector2i = h.cell
+	for c in R.cells:
+		if Battle.dist(c, h.cell) >= 2:
+			goal = c
+			break
+	target = h.position
+	dist = 13.0
+	var from := h.cell
+	battle.click(goal)
+	await _frames(30)
+	await main_hover_shot(dir, "04_chemin_prevu", goal)
+	print("plan : marque ", battle._plan_mark != null and battle._plan_mark.visible, " busy ", battle.busy, " sel ", battle.selected == h, " h ", h.cell, " but ", goal)
+	ok.call("Déplacement : le 1er clic ne fait que viser", h.cell == from and battle._move_plan == goal)
+	battle.click(goal)
+	await _frames(90)
+	ok.call("Déplacement : le 2e clic y va", h.cell == goal)
+	# 5. course : cases orange
+	battle.energy = 3
+	await _frames(20)
+	_shot(dir, "05_course")
+	# 6. butin au sol, survolé
+	var f2: Unit = battle.alive_foes()[-1] if battle.alive_foes().size() > 0 else null
+	if f2:
+		var keep: Vector2i = f2.cell
+		f2.cell = h.cell + Vector2i(1, 1) if board.walkable(h.cell + Vector2i(1, 1)) and battle.unit_at(h.cell + Vector2i(1, 1)) == null else h.cell + Vector2i(-1, 1)
+		f2.tool = "fiole"
+		battle._drop(f2)
+		f2.tool = ""
+		var lc: Vector2i = f2.cell
+		f2.cell = keep
+		ok.call("Butin posé au sol en %s" % lc, battle.loot.has(lc))
+		await _frames(30)
+		await main_hover_shot(dir, "06_butin", lc)
+	# 7. défi relevé
+	ui.reward_flash({"id": "estoc", "lvl": 1, "h": h.key, "ench": "vampire"}, "Défi relevé")
+	await _frames(40)
+	_shot(dir, "07_defi")
+	# 8. main survolée
+	if battle.hand.size() == 0:
+		give.call(["estoc", "fente", "c_interposition", "g_benir"])
+	await _frames(30)
+	ui._hover_card = 1
+	await _frames(30)
+	_shot(dir, "08_main_survol")
+	tactic = true
+	_apply_tactic()
+	ui._hover_card = -1
+	await _frames(30)
+	_shot(dir, "09_tactique")
+	tactic = false
+	_apply_tactic()
+	get_tree().quit()
+
+
+func main_hover_shot(dir: String, name: String, c) -> void:
+	hover = c
+	refresh_hover()
+	await _frames(20)
+	_shot(dir, name)
+
+
+func _tuto2run() -> void:
+	## -- --tuto2run=DIR : version rapide, « Lancer une descente », puis les écrans de départ et le premier combat (captures).
+	args["tutotest"] = args.tuto2run
+	if go_run:
+		_title()
+		var n := 0
+		for i in 60:
+			await _frames(30)
+			n += 1
+			_shot(args.tuto2run, "apres_%02d" % n)
+			if ui.overlay != null:
+				ui.picked.emit(-1 if ui.last_n == Data.PACTS.size() else (int(args.get("premier", "0")) if n < 3 else 0))
+			if exploring and ui.overlay == null and not _adv_busy:
+				var goal: Vector2i = leader.cell
+				for d in Board.DIRS:
+					if aboard.walkable(leader.cell + d * 2) and not _adv_path(leader.cell + d * 2).is_empty():
+						goal = leader.cell + d * 2
+				print("tuto2run : exploration, chef en ", leader.cell, " -> ", goal, " · busy ", _adv_busy)
+				_adv_click(goal)
+			if battle.active != null and battle.player_turn:
+				print("tuto2run : combat en cours, héros actif ", battle.active.nm, " · Engine.time_scale ", Engine.time_scale)
+				break
+		get_tree().quit()
+		return
+	_tuto_bot()
+	await _tuto_from(0)
+
+
 func _tuto_bot() -> void:
 	## Pilote de --tutotest : il fait le geste attendu (par les mêmes portes que le joueur) et capture avant chaque geste.
 	var dir: String = args.tutotest
@@ -3242,7 +3490,7 @@ func _tuto_bot() -> void:
 					battle.click(s.at)
 			"face":
 				var f := _tuto_near()
-				battle.click(battle.active.cell + battle._dir(battle.active.cell, f.cell))
+				battle.face_cell(f.cell)
 			"ok":
 				_tuto_ok()
 			_:
@@ -4832,13 +5080,28 @@ func set_voc_start(on: bool) -> void:
 
 
 func set_tactic(on: bool) -> void:
-	## Vue tactique : un réglage d'affichage (damier plat), appliqué dès le prochain combat.
+	## Vue tactique (réglage, ou T en combat) : un affichage épuré du même combat, appliqué tout de suite.
 	tactic = on
 	var cf := ConfigFile.new()
 	cf.load("user://reglages.cfg")
 	cf.set_value("ecran", "tactique", on)
 	cf.save("user://reglages.cfg")
-	ui.toast("Vue tactique %s : dès le prochain combat." % ("activée" if on else "désactivée"))
+	_apply_tactic()
+	ui.toast("Vue tactique %s." % ("activée · T pour revenir" if on else "désactivée"))
+
+
+func _apply_tactic() -> void:
+	## Seulement en combat : le titre et le donjon gardent leur décor.
+	var on: bool = tactic and ui.hud.visible and not exploring
+	board.set_tactic(on)
+	ambient_root.visible = not on
+	if on:
+		env.background_mode = Environment.BG_COLOR
+		env.background_color = Color(0.07, 0.065, 0.08)
+		env.fog_enabled = false
+	else:
+		env.background_mode = Environment.BG_SKY
+		env.fog_enabled = true
 
 
 func _read_lang() -> String:

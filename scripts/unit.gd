@@ -212,6 +212,9 @@ func reset_fight() -> void:
 var model: Node3D
 var weapon: Node3D
 var ring: MeshInstance3D
+const ALLY_COL := Color(0.3, 0.62, 1.0)    # les nôtres
+const FOE_COL := Color(1.0, 0.2, 0.14)     # les leurs
+const ACTIVE_COL := Color(1.0, 0.8, 0.32)  # le héros qui joue
 var _meshes: Array = []
 var _xmats: Array = []
 var _phase := randf() * TAU
@@ -259,7 +262,7 @@ func setup(k: String, s: String) -> void:
 		wl.omni_range = 1.8
 		wl.position.y = 0.6
 		add_child(wl)
-	# anneau au sol : or pour les héros, braise pour les ennemis
+	# anneau au sol : bleu pour les héros (or pour celui qui joue), rouge pour les ennemis
 	ring = MeshInstance3D.new()
 	var q := QuadMesh.new()
 	q.size = Vector2(1.0, 1.0) * {"gardien": 2.0, "grelin": 1.5, "hale": 1.5, "brasse": 1.5, "chevrier": 1.5, "dame": 1.5, "brule_haie": 1.5}.get(k, 1.0)
@@ -267,7 +270,7 @@ func setup(k: String, s: String) -> void:
 	ring.mesh = q
 	var m := ShaderMaterial.new()
 	m.shader = _ring_shader()
-	m.set_shader_parameter("col", Color(1.0, 0.8, 0.4) if s == "hero" else Color(1.0, 0.35, 0.2))
+	m.set_shader_parameter("col", ALLY_COL if s == "hero" else FOE_COL)
 	ring.material_override = m
 	ring.position.y = 0.015
 	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -315,9 +318,13 @@ uniform vec4 col : source_color;
 uniform float sel = 0.0;
 void fragment(){
 	float d = length(UV - 0.5) * 2.0;
-	float r = smoothstep(0.62, 0.8, d) * (1.0 - smoothstep(0.84, 0.98, d));
-	float fill = (1.0 - smoothstep(0.0, 0.8, d)) * 0.25;
-	ALBEDO = col.rgb * (r * (0.9 + sel * 1.6) + fill * (0.4 + sel));
+	float r = smoothstep(0.56, 0.72, d) * (1.0 - smoothstep(0.86, 0.98, d));
+	float fill = (1.0 - smoothstep(0.0, 0.85, d)) * 0.3;
+	// celui qui joue : l'anneau bat, et une onde s'en échappe
+	float beat = sel * (0.55 + 0.45 * sin(TIME * 4.0));
+	float w = fract(TIME * 0.7);
+	float wave = sel * (1.0 - w) * smoothstep(0.08, 0.0, abs(d - (0.55 + w * 0.43)));
+	ALBEDO = col.rgb * (r * (1.3 + beat * 1.8) + fill * (0.5 + sel * 0.6) + wave * 1.6);
 }"""
 	return _rs
 
@@ -411,7 +418,7 @@ func make_champion(a: String) -> void:
 	bs *= 1.12
 	model.scale = Vector3.ONE * bs
 	head *= 1.12
-	(ring.material_override as ShaderMaterial).set_shader_parameter("col", Color(1.0, 0.8, 0.25))
+	(ring.material_override as ShaderMaterial).set_shader_parameter("col", Color(1.0, 0.3, 0.75))  # champion : rouge-magenta, pas l'or du héros actif
 
 
 func set_xray(on: bool) -> void:
@@ -429,6 +436,8 @@ func dodge() -> void:
 
 func set_selected(on: bool) -> void:
 	(ring.material_override as ShaderMaterial).set_shader_parameter("sel", 1.0 if on else 0.0)
+	if side == "hero" and not companion:
+		ring_color(ACTIVE_COL if on else ALLY_COL)
 
 
 func place(c: Vector2i, board: Board) -> void:

@@ -934,6 +934,69 @@ static func _normal_tex(seed: int) -> NoiseTexture2D:
 
 # ------------------------------------------------------------------ surbrillance
 
+var _tac: Node3D
+func set_tactic(on: bool) -> void:
+	## Vue tactique : le décor s'efface (couronne, végétation, eau, lumières), le plateau jouable devient un damier sobre
+	## où se lisent la hauteur (plus clair = plus haut), l'eau et les obstacles. Réglage d'affichage, le combat ne change pas.
+	for ch in get_children():
+		if ch != _hl and ch != _tac:
+			ch.visible = not on
+	if _tac:
+		_tac.queue_free()
+		_tac = null
+	if not on:
+		return
+	_tac = Node3D.new()
+	add_child(_tac)
+	var cells: Array = []
+	for c: Vector2i in h:
+		if _in(c) and kind[c] != "monument":
+			cells.append(c)
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	var bx := BoxMesh.new()
+	bx.size = Vector3.ONE
+	mm.mesh = bx
+	mm.instance_count = cells.size()
+	for i in cells.size():
+		var c: Vector2i = cells[i]
+		var k: String = kind[c]
+		var top := top_y(c)
+		var col: Color
+		if k == "water":
+			top = WATER_Y
+			col = Color(0.1, 0.2, 0.28)
+		elif k == "tower":
+			col = Color(0.09, 0.085, 0.1)
+		elif blocked.has(c):
+			col = Color(0.13, 0.17, 0.11)  # arbre du décor : infranchissable
+		else:
+			col = Color(0.36, 0.33, 0.27).lightened(0.1 * (h[c] - 1))  # sombre : le plein soleil l'éclaircit beaucoup
+			if (c.x + c.y) % 2 == 0:
+				col = col.darkened(0.07)
+		var hg := maxf(top, 0.06)
+		mm.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3(0.93, hg, 0.93)), Vector3(c.x, hg * 0.5, c.y)))
+		mm.set_instance_color(i, col)
+	var mi := MultiMeshInstance3D.new()
+	mi.multimesh = mm
+	var m := StandardMaterial3D.new()
+	m.vertex_color_use_as_albedo = true
+	m.roughness = 1.0
+	mi.material_override = m
+	_tac.add_child(mi)
+	# le fond sous les joints : une plaque sombre, pour que chaque case se détache
+	var base := MeshInstance3D.new()
+	var bb := BoxMesh.new()
+	bb.size = Vector3(dim + 0.4, 0.05, dim + 0.4)
+	base.mesh = bb
+	var bm := StandardMaterial3D.new()
+	bm.albedo_color = Color(0.09, 0.085, 0.1)
+	base.material_override = bm
+	base.position = Vector3((dim - 1) * 0.5, -0.03, (dim - 1) * 0.5)
+	_tac.add_child(base)
+
+
 func highlight(cells: Dictionary) -> void:
 	## cells : Vector2i -> Color ; alpha < 0.5 = contour seul, sinon case pleine
 	var mm := MultiMesh.new()

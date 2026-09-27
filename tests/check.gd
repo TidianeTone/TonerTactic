@@ -135,7 +135,7 @@ func _init() -> void:
 		var hand: Array = []
 		for st in ch.get("steps", []):
 			hand = st.get("hand", hand)
-			if not st.do in ["move", "play", "prop", "ok", "orient", "face", "end"] or (st.do == "play" and not (Data.CARDS.has(st.card) and hand.has(st.card))) \
+			if not st.do in ["move", "play", "prop", "ok", "face", "end"] or (st.do == "play" and not (Data.CARDS.has(st.card) and hand.has(st.card))) \
 				or (st.get("at") is Vector2i and (st.at.x < 0 or st.at.y < 0 or st.at.x > 9 or st.at.y > 9)) or st.say.length() > 110:
 				print("initiation : étape fausse ", ch.name, " ", st)
 				fails += 1
