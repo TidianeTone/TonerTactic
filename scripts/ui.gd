@@ -2612,10 +2612,15 @@ func title_screen(resume := "") -> int:
 	grad.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(grad)
 	var col := VBoxContainer.new()
-	col.position = Vector2(90, 70)
+	col.position = Vector2(70, 40)
 	col.add_theme_constant_override("separation", 4)
 	overlay.add_child(col)
-	var logo := _shadowed(_label("TonerTactic", 104, INK, Fx.goth("fette_trump")), 14)
+	var logo := TextureRect.new()  # le logo peint (Higgsfield) : parchemin, épée et bâton croisés, une carte de chaque côté
+	logo.texture = load("res://assets/ui/logo.png")
+	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+	logo.custom_minimum_size = Vector2(430, 226) if not big else Vector2(290, 152)
+	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(logo)
 	# le lieu du décor, comme « ‹ Magaari, Ember Highlands › » : on peut en changer
 	var place := HBoxContainer.new()
@@ -2638,7 +2643,7 @@ func title_screen(resume := "") -> int:
 		if d < 0:
 			place.add_child(place_l)
 	var sp := Control.new()
-	sp.custom_minimum_size = Vector2(0, 70)
+	sp.custom_minimum_size = Vector2(0, 70 if not big else 12)
 	col.add_child(sp)
 	var entries: Array = []
 	if resume != "":
@@ -2708,6 +2713,12 @@ func title_screen(resume := "") -> int:
 	cr.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
 	cr.position = Vector2(90, -34)
 	overlay.add_child(cr)
+	# un téléphone n'a que 720 de haut : la colonne (logo et entrées) se réduit pour tenir au-dessus des crédits
+	var fit := func() -> void:
+		var hh: float = col.get_combined_minimum_size().y
+		var room: float = root.size.y - col.position.y - 44.0
+		col.scale = Vector2.ONE * minf(1.0, room / maxf(hh, 1.0))
+	fit.call_deferred()
 	if Input.get_connected_joypads().size() > 0:
 		first.grab_focus.call_deferred()
 	var k := 0

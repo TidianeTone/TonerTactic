@@ -100,6 +100,17 @@ func wear_voc(k: String) -> void:
 
 
 var _body: Node3D
+var anim: AnimationPlayer  # modèle HD animé ; null pour les modèles voxel rigides
+
+
+func play(n: String, speed := 1.0) -> bool:
+	## Joue une animation du modèle HD puis revient au repos ; false si le modèle n'en a pas.
+	if anim == null or not anim.has_animation(n):
+		return false
+	anim.play(n, 0.12, speed)
+	if n != "walk" and n != "death":
+		anim.queue("idle")
+	return true
 
 
 func ring_color(c: Color) -> void:
@@ -114,9 +125,19 @@ func _load_body(path: String) -> void:
 			mi.material_overlay = null
 	_meshes.clear()
 	_xmats.clear()
+	# PC ultra : modèle voxel fin riggé et animé (blender/voxeliser_rig.py), s'il existe
+	var hdp := "res://assets/hd/" + path.get_file()
+	if Board.hd and ResourceLoader.exists(hdp):
+		path = hdp
 	var inst: Node3D = load(path).instantiate()
 	_body = inst
 	model.add_child(inst)
+	anim = inst.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	if anim:
+		for n in ["idle", "walk"]:
+			if anim.has_animation(n):
+				anim.get_animation(n).loop_mode = Animation.LOOP_LINEAR
+		anim.play("idle")
 	weapon = inst.find_child(key + "_weapon", true, false)
 	if weapon == null and data.has("model"):
 		weapon = inst.find_child(str(data.model) + "_weapon", true, false)
@@ -131,7 +152,7 @@ func _load_body(path: String) -> void:
 			mi.set_instance_shader_parameter("rim", Vector3(0.55, 0.75, 1.0) * 0.3 if side == "hero" else Vector3(col.r, col.g, col.b) * 0.2)
 			_meshes.append(mi)
 			if String(mi.name).ends_with("_body"):
-				head = mi.get_aabb().end.y * bs + 0.35
+				head = (2.3 if anim else mi.get_aabb().end.y) * bs + 0.35
 
 
 func reset_fight() -> void:
@@ -383,7 +404,7 @@ func _process(dt: float) -> void:
 	_yaw = lerp_angle(_yaw, target, 1.0 - exp(-dt * 12.0))
 	model.rotation.y = _yaw
 	var t := Time.get_ticks_msec() / 1000.0
-	if not _busy:
+	if not _busy and anim == null:
 		model.scale.y = bs * (1.0 + sin(t * 2.4 + _phase) * 0.018)
 		if fly:
 			model.position.y = 0.35 + sin(t * 2.0 + _phase) * 0.12
@@ -399,15 +420,17 @@ func _process(dt: float) -> void:
 
 func walk(path: Array, board: Board) -> void:
 	_busy = true
+	play("walk", 2.0)
 	for c in path:
 		var a := position
 		var b := board.world(c)
 		face(c - cell)
 		cell = c
 		var tw := create_tween()
-		var arc := 0.18 + absf(b.y - a.y) * 0.6
+		var arc := (0.0 if anim else 0.18) + absf(b.y - a.y) * 0.6
 		tw.tween_method(func(k: float): position = a.lerp(b, k) + Vector3(0, sin(k * PI) * arc, 0), 0.0, 1.0, 0.17)
 		await tw.finished
+	play("idle")
 	_busy = false
 
 
@@ -446,6 +469,10 @@ func lunge(toward: Vector3) -> void:
 
 func cast() -> void:
 	_busy = true
+	if play("cast", 1.8):
+		await get_tree().create_timer(0.5).timeout
+		_busy = false
+		return
 	var tw := create_tween()
 	tw.tween_property(model, "position:y", 0.25, 0.14).set_trans(Tween.TRANS_SINE)
 	if weapon:
@@ -458,6 +485,7 @@ func cast() -> void:
 
 
 func hurt() -> void:
+	play("hit", 1.6)
 	var tw := create_tween()
 	tw.tween_method(_set_flash, 0.65, 0.0, 0.2)
 	var s := create_tween()
@@ -476,6 +504,10 @@ func die() -> void:
 	alive = false
 	_busy = true
 	ring.visible = false
+	if play("death", 2.0):
+		await get_tree().create_timer(2.2).timeout
+		visible = false
+		return
 	var tw := create_tween()
 	tw.tween_property(model, "rotation:x", -1.4 if not fly else 0.0, 0.35).set_trans(Tween.TRANS_BACK)
 	tw.parallel().tween_property(model, "position:y", -0.1, 0.35)
@@ -492,3 +524,4 @@ func revive() -> void:
 	model.rotation = Vector3.ZERO
 	model.scale = Vector3.ONE * bs
 	model.position = Vector3.ZERO
+	play("idle")

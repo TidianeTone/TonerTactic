@@ -150,6 +150,8 @@ func _ready() -> void:
 		_voctest.call_deferred()
 	elif args.has("looktest"):
 		_looktest.call_deferred()
+	elif args.has("hdtest"):
+		_hdtest.call_deferred()
 	elif args.has("haventest"):
 		_haventest.call_deferred()
 	elif args.has("eventtest"):
@@ -1863,7 +1865,7 @@ func _load_run() -> bool:
 
 func _testing() -> bool:
 	## Les essais n'écrivent ni dans la bibliothèque ni dans la sauvegarde du joueur.
-	return ["autoplay", "uitest", "advtest", "capture", "cardtest", "voctest", "looktest", "haventest", "eventtest", "tutotest", "maptest"].any(func(k): return args.has(k))
+	return ["autoplay", "uitest", "advtest", "capture", "cardtest", "voctest", "looktest", "hdtest", "haventest", "eventtest", "tutotest", "maptest"].any(func(k): return args.has(k))
 
 
 func _save_library() -> void:
@@ -2719,6 +2721,31 @@ func _looktest() -> void:
 		_snap_cam()
 		await _frames(30)
 		_shot(dir, "hybride_%s" % ks[k])
+	get_tree().quit()
+
+
+func _hdtest() -> void:
+	## Captures d'un héros HD animé (assets/hd) de près : repos, sort, coup reçu, marche. --party=oracle,garde,lame
+	var dir: String = args.hdtest
+	DirAccess.make_dir_recursive_absolute(dir)
+	deck = Data.starter(party)
+	_make_party()
+	_build_room(4242, 0, 12, "cour")
+	var u: Unit = heroes[0]
+	target = u.position + Vector3(0, 1.0, 0)
+	dist = 6.0
+	_snap_cam()
+	await _frames(40)
+	_shot(dir, "1_repos")
+	for a in [["cast", 1.8, 22, "2_sort"], ["hit", 1.6, 12, "3_coup"], ["walk", 2.0, 14, "4_marche"]]:
+		u.play(a[0], a[1])
+		await _frames(a[2])
+		_shot(dir, a[3])
+	yaw += 150.0
+	u.play("idle")
+	_snap_cam()
+	await _frames(20)
+	_shot(dir, "5_dos")
 	get_tree().quit()
 
 
