@@ -2353,7 +2353,7 @@ const ITEM_RAR := ["", "Commune", "Peu commune", "Rare", "Mythique"]
 const PARCH_INK := Color("#2b1a0e")
 
 
-func _vignette(title: String, icon: String, text: String, col: Color, tag: String, seen := true, w := 176.0) -> Control:
+func _vignette(title: String, icon: String, text: String, col: Color, tag: String, seen := true, w := 176.0, glyph := "") -> Control:
 	## Vignette façon étal (reliques, équipement) : nom au-dessus, cadre de cuir, rareté dans le bandeau,
 	## grande icône, gemme de rareté sur le séparateur, effet en dessous. Pas encore vue : silhouette et « ??? ».
 	var h := w * 609.0 / 360.0
@@ -2395,6 +2395,12 @@ func _vignette(title: String, icon: String, text: String, col: Color, tag: Strin
 		if not seen:
 			ic.modulate = Color(0.3, 0.17, 0.07, 0.22)  # à peine une empreinte dans le cuir
 		put.call(ic, 0.14, 0.15, 0.86, 0.52)
+	elif glyph != "" and seen:
+		# pas encore d'icône (reliques neuves) : le glyphe en grand à sa place
+		var gl := _label(glyph, int(w * 0.36), col.lightened(0.2), title_f)
+		gl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		gl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		put.call(gl, 0.14, 0.15, 0.86, 0.52)
 	var gem := Panel.new()
 	gem.add_theme_stylebox_override("panel", sb(col if seen else DIM.darkened(0.3), Color(0.12, 0.06, 0.02), 2, 2))
 	gem.size = Vector2(14, 14)
@@ -2414,7 +2420,7 @@ func _option(o: Dictionary, w := 250) -> Control:
 	var col: Color = o.get("color", GOLD)
 	if o.has("vignette"):
 		# équipement et reliques : la vignette de l'étal
-		var vg := _vignette(o.title, o.get("image", ""), o.get("text", ""), col, o.vignette, true, 118.0 if w < 170 else clampf(w * 0.8, 140.0, 190.0))
+		var vg := _vignette(o.title, o.get("image", ""), o.get("text", ""), col, o.vignette, true, 118.0 if w < 170 else clampf(w * 0.8, 140.0, 190.0), o.get("glyph", ""))
 		if o.get("dim", false):
 			vg.modulate = Color(0.55, 0.55, 0.6)
 		var pc := PanelContainer.new()
@@ -3119,7 +3125,7 @@ func library_screen() -> void:
 			flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			list.add_child(flow)
 			for r in ids:
-				flow.add_child(_vignette(Data.RELICS[r].name, "res://assets/ui/relic_%s.png" % r, Data.RELICS[r].text, GOLD, "Relique", main.library.has("relic:" + r), 150.0))
+				flow.add_child(_vignette(Data.RELICS[r].name, "res://assets/ui/relic_%s.png" % r, Data.RELICS[r].text, GOLD, Data.RELIC_TIERS[Data.RELICS[r].tier], main.library.has("relic:" + r), 150.0, Data.RELICS[r].glyph))
 			return
 		if which == "classes":
 			for k in Data.HEROES:

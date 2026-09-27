@@ -103,6 +103,49 @@ var _body: Node3D
 var anim: AnimationPlayer  # modèle HD animé ; null pour les modèles voxel rigides
 
 
+var _hand: Node3D  # os de la main droite du modèle HD : le bâton suit sa position, pas sa rotation
+var _staff_k := 1.0
+
+
+func _grip(inst: Node3D, old_path: String) -> void:
+	## Le modèle HD vient les mains vides : on prend l'arme du modèle voxel d'origine et on la met dans la main droite.
+	if not ResourceLoader.exists(old_path):
+		return
+	var sks := inst.find_children("*", "Skeleton3D", true, false)
+	if sks.is_empty():
+		return
+	var sk: Skeleton3D = sks[0]
+	var bi := -1
+	for n in ["mixamorig:RightHand", "mixamorig_RightHand"]:
+		if bi < 0:
+			bi = sk.find_bone(n)
+	var old: Node3D = load(old_path).instantiate()
+	var w: Node3D = old.find_child(key + "_weapon", true, false)
+	if bi < 0 or w == null:
+		old.free()
+		return
+	w.get_parent().remove_child(w)
+	old.free()
+	weapon = w
+	var ba := BoneAttachment3D.new()
+	ba.bone_name = sk.get_bone_name(bi)
+	sk.add_child(ba)
+	inst.add_child(w)
+	_hand = ba
+	_staff_k = 0.55
+
+
+func _follow_hand() -> void:
+	## Bâton droit, un peu penché vers l'avant, tenu à la hauteur de la main.
+	if _hand == null or weapon == null:
+		return
+	var h := _hand.global_position
+	var side := h - model.global_position
+	side.y = 0.0
+	weapon.global_position = h + side.normalized() * 0.12 * bs  # écarté du corps : visible de face
+	weapon.global_basis = model.global_basis.orthonormalized() * Basis.from_euler(Vector3(-0.18, 0, -0.1)) * Basis.from_scale(Vector3.ONE * _staff_k * bs)
+
+
 func play(n: String, speed := 1.0) -> bool:
 	## Joue une animation du modèle HD puis revient au repos ; false si le modèle n'en a pas.
 	if anim == null or not anim.has_animation(n):
@@ -125,6 +168,7 @@ func _load_body(path: String) -> void:
 			mi.material_overlay = null
 	_meshes.clear()
 	_xmats.clear()
+	_hand = null
 	# PC ultra : modèle voxel fin riggé et animé (blender/voxeliser_rig.py), s'il existe
 	var hdp := "res://assets/hd/" + path.get_file()
 	if Board.hd and ResourceLoader.exists(hdp):
@@ -138,6 +182,8 @@ func _load_body(path: String) -> void:
 			if anim.has_animation(n):
 				anim.get_animation(n).loop_mode = Animation.LOOP_LINEAR
 		anim.play("idle")
+		if inst.find_child(key + "_weapon", true, false) == null:
+			_grip(inst, "res://assets/" + path.get_file())
 	weapon = inst.find_child(key + "_weapon", true, false)
 	if weapon == null and data.has("model"):
 		weapon = inst.find_child(str(data.model) + "_weapon", true, false)
@@ -149,10 +195,12 @@ func _load_body(path: String) -> void:
 			mi.material_override = Board.material("unit")
 			var col: Color = Data.CLASS_COLOR.get(key, Color(1.0, 0.3, 0.15))
 			_xmats.append(_xray(col if side == "hero" else Color(1.0, 0.35, 0.2)))
-			mi.set_instance_shader_parameter("rim", Vector3(0.55, 0.75, 1.0) * 0.3 if side == "hero" else Vector3(col.r, col.g, col.b) * 0.2)
+			# liseré de contour : sur le voxel fin animé, il s'allume sur chaque petite face de biais et fait du bruit
+			var rk := 0.0 if anim else 1.0
+			mi.set_instance_shader_parameter("rim", (Vector3(0.55, 0.75, 1.0) * 0.3 if side == "hero" else Vector3(col.r, col.g, col.b) * 0.2) * rk)
 			_meshes.append(mi)
 			if String(mi.name).ends_with("_body"):
-				head = (2.3 if anim else mi.get_aabb().end.y) * bs + 0.35
+				head = (1.75 if anim else mi.get_aabb().end.y) * bs + 0.35
 
 
 func reset_fight() -> void:
@@ -400,6 +448,7 @@ func face(d: Vector2i) -> void:
 func _process(dt: float) -> void:
 	if not alive:
 		return
+	_follow_hand()
 	var target := atan2(float(facing.x), float(facing.y))
 	_yaw = lerp_angle(_yaw, target, 1.0 - exp(-dt * 12.0))
 	model.rotation.y = _yaw

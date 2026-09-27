@@ -89,7 +89,8 @@ def sheets(SRC, PRE):
 
 
 sheets(ITEMS, "item_")
-sheets(os.path.join(HERE, "reliques"), "relic_")  # reliques (27/09) : à la place des pictogrammes
+sheets(os.path.join(HERE, "reliques"), "relic_")
+sheets(os.path.join(HERE, "reliques2"), "relic_")  # reliques (27/09) : à la place des pictogrammes
 dos = os.path.join(HERE, "dos_carte.png")
 if os.path.exists(dos):
 	d = np.asarray(Image.open(dos).convert("RGB")).astype(int)

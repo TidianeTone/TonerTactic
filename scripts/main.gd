@@ -1552,9 +1552,18 @@ func _rewards(type: String) -> void:
 		fight_loot.append(Data.def(opts[i].card.id).name)
 		if Data.def(opts[i].card.id).get("rar", 1) == 4:
 			ui.banner("Légendaire !", "%s rejoint le paquet de %s" % [Data.def(opts[i].card.id).name, Data.HEROES[Data.holder(opts[i].card)].name])
+	if i < 0 and relics.has("sebile_cuivre"):
+		gold += 20  # Sébile de cuivre : passer le butin de cartes
+		fight_loot.append("+20 or")
+		ui.set_gold(gold)
 	if type == "elite":
 		_gain_item(_roll_item(2))
-		await _relic_pick("RELIQUE D'ÉLITE", "Les gardiens tombés laissent un trésor")
+		if mode == "descente" and step == ROOMS_PER_FLOOR - 1 and floor_i < 3:
+			# le gardien de l'étage : la seule source normale de reliques de gardien
+			await _relic_pick("RELIQUE DE GARDIEN", "Le gardien de l'étage laisse un pouvoir, et son prix", false, "boss")
+		else:
+			var defi: bool = pending_cards.any(func(p): return "|" in str(p))  # un défi relevé : le choix parmi trois
+			await _relic_pick("RELIQUE D'ÉLITE", "Défi relevé : une relique parmi trois" if defi else "Les gardiens tombés laissent un trésor", false, "elite", 3 if defi else 1)
 
 
 # ------------------------------------------------------------------ vocation et guildes (multiclasse)
@@ -2109,7 +2118,12 @@ var myst_fight := 0.1
 
 
 func _purge_price() -> int:
-	return 75 + 25 * purges
+	return 50 if relics.has("ciseaux_epure") else 75 + 25 * purges
+
+
+func _price(x: int) -> int:
+	## Jeton du Comptoir : tout 20 % moins cher chez le marchand, services compris.
+	return int(round(x * 0.8)) if relics.has("jeton_comptoir") else x
 
 
 func _merchant_shop() -> void:
@@ -2120,22 +2134,33 @@ func _merchant_shop() -> void:
 			stock.append(id)
 	var shelf := _shelf_stock()
 	var tstock: Array = [_obj_roll(2), _obj_roll(3)]
+	# trois reliques : deux tirées comme un coffre, une du palier marchand
+	var rstock: Array = []
+	for k in ["coffre", "coffre", "marchand"]:
+		var r := _relic_draw(k, rstock.map(func(o): return o.id))
+		if r != "":
+			rstock.append({"id": r, "price": rng.randi_range(24, 30) * 5 if k == "marchand" else {"commune": 75, "peu_commune": 110, "rare": 160}[Data.RELICS[r].tier]})
 	var done := {}
 	while true:
+		for o in shelf:
+			if not o.has("p0"):
+				o["p0"] = o.price
+			o.price = _price(o.p0)  # le Jeton peut s'acheter en cours de route
 		var opts: Array = _shelf_opts(shelf)
 		var nc := opts.size()
 		for id in stock:
-			opts.append(_item_opt(id, Data.PRICE[Data.ITEMS[id].rarity]))
+			opts.append(_item_opt(id, _price(Data.PRICE[Data.ITEMS[id].rarity])))
 		for id in tstock:
-			opts.append({"title": "%s  ·  %d or" % [Data.def(id).name, _obj_price(id)], "image": "res://assets/ui/tool_%s.png" % Data.def(id).tool, "text": "Carte-objet — " + Data.card_text(Data.card({"id": id, "lvl": 1, "h": party[0]})), "color": Data.CLASS_COLOR.objet})
+			opts.append({"title": "%s  ·  %d or" % [Data.def(id).name, _price(_obj_price(id))], "image": "res://assets/ui/tool_%s.png" % Data.def(id).tool, "text": "Carte-objet — " + Data.card_text(Data.card({"id": id, "lvl": 1, "h": party[0]})), "color": Data.CLASS_COLOR.objet})
 		# services : un passage chacun par marchand ; déjà fait = coché, avec ce qui a été fait
+		opts.append({"title": "Reliques", "glyph": "◆", "text": "À l'étal : " + ", ".join(rstock.map(func(o): return Data.RELICS[o.id].name)) if rstock.size() > 0 else "L'étal des reliques est vide."})
 		var grey := Color("#8a8478")
 		opts.append({"title": "Soins  ·  fait ✓", "glyph": "✓", "text": "Le groupe a déjà été soigné ici.", "color": grey} if done.has("heal") else
-			{"title": "Soins  ·  35 or", "glyph": "✚", "text": "Chaque héros récupère 50 % de ses PV max."})
+			{"title": "Soins  ·  %d or" % _price(35), "glyph": "✚", "text": "Chaque héros récupère 50 % de ses PV max."})
 		opts.append({"title": "Épurer  ·  fait ✓", "glyph": "✓", "text": "Déjà épuré ici : %s retirée du paquet." % done.purge, "color": grey} if done.has("purge") else
-			{"title": "Épurer  ·  %d or" % _purge_price(), "glyph": "✂", "text": "Retirer une carte du paquet. Le prix monte à chaque épuration de la run."})
+			{"title": "Épurer  ·  %d or" % _price(_purge_price()), "glyph": "✂", "text": "Retirer une carte du paquet. Le prix monte à chaque épuration de la run." if not relics.has("ciseaux_epure") else "Retirer une carte du paquet. Ciseaux d'épure : toujours 50 or."})
 		opts.append({"title": "Forge  ·  fait ✓", "glyph": "✓", "text": "Déjà forgé ici : %s." % done.forge, "color": grey} if done.has("forge") else
-			{"title": "Forge  ·  35 or", "glyph": "⚒", "text": "Une carte du paquet gagne un niveau."})
+			{"title": "Forge  ·  %d or" % _price(35), "glyph": "⚒", "text": "Une carte du paquet gagne un niveau."})
 		opts.append({"title": "Paquet", "glyph": "▤", "text": "Voir toutes les cartes de l'escouade (%d)." % deck.size()})
 		opts.append({"title": "Équipe", "glyph": "⚔", "text": "PV, équipement, sac : s'équiper avant de repartir."})
 		var i := await ui.choose("MARCHAND", "Vous avez %d or · une carte achetée rejoint le paquet de son héros" % gold, opts, true, "Partir")
@@ -2153,7 +2178,7 @@ func _merchant_shop() -> void:
 		i -= nc
 		if i < stock.size():
 			var id: String = stock[i]
-			var price: int = Data.PRICE[Data.ITEMS[id].rarity]
+			var price: int = _price(Data.PRICE[Data.ITEMS[id].rarity])
 			if gold < price:
 				ui.toast("Pas assez d'or.")
 				continue
@@ -2162,15 +2187,30 @@ func _merchant_shop() -> void:
 			_gain_item(id)
 		elif i < stock.size() + tstock.size():
 			var tid: String = tstock[i - stock.size()]
-			if gold < _obj_price(tid):
+			if gold < _price(_obj_price(tid)):
 				ui.toast("Pas assez d'or.")
 				continue
 			var hh := await _pick_hero("OBJET", "Qui prend %s ?" % Data.def(tid).name)
-			gold -= _obj_price(tid)
+			gold -= _price(_obj_price(tid))
 			tstock.remove_at(i - stock.size())
 			gain_obj(tid, hh.key)
+		elif i == stock.size() + tstock.size():
+			# l'étal des reliques : deux tirées comme un coffre, une du palier marchand
+			if rstock.is_empty():
+				continue
+			var j := await ui.choose("RELIQUES", "Vous avez %d or" % gold, rstock.map(func(o): return _relic_opt(o.id, "%s  ·  %d or" % [Data.RELICS[o.id].name, _price(o.price)])), true, "← Retour")
+			if j < 0:
+				continue
+			var ro: Dictionary = rstock[j]
+			if gold < _price(ro.price):
+				ui.toast("Pas assez d'or.")
+				continue
+			gold -= _price(ro.price)
+			rstock.remove_at(j)
+			ui.set_gold(gold)
+			await _add_relic(ro.id)
 		else:
-			var k: String = ["heal", "purge", "forge", "deck", "team"][i - stock.size() - tstock.size()]
+			var k: String = ["heal", "purge", "forge", "deck", "team"][i - stock.size() - tstock.size() - 1]
 			if k == "deck":
 				await view_deck()
 				continue
@@ -2180,7 +2220,7 @@ func _merchant_shop() -> void:
 			if done.has(k):
 				ui.toast("Déjà fait chez ce marchand.")
 				continue
-			var price: int = {"heal": 35, "purge": _purge_price(), "forge": 35}[k]
+			var price: int = _price({"heal": 35, "purge": _purge_price(), "forge": 35}[k])
 			if gold < price:
 				ui.toast("Pas assez d'or.")
 				continue
@@ -2196,7 +2236,7 @@ func _merchant_shop() -> void:
 					if q < before.size() and Data.level(deck[q]) != before[q]:
 						done.forge = "%s au niveau %d" % [Data.def(deck[q].id).name, Data.level(deck[q])]
 						if Data.def(deck[q].id).get("forge2", false) and Data.level(deck[q]) == 3:
-							gold -= 35  # Fiole, Élixir, Sablier, Bombe : la légende se paie double
+							gold -= _price(35)  # Fiole, Élixir, Sablier, Bombe : la légende se paie double
 			else:
 				var copts: Array = deck.map(func(c): return {"card": c})
 				var j := await ui.choose("ÉPURER", "Quelle carte retirer ?", copts, true)
@@ -2259,32 +2299,126 @@ func _shelf(shelf: Array) -> void:
 		shelf.remove_at(i)
 
 
-func _relic_pick(title: String, subtitle: String, back := false) -> bool:
-	var free: Array = Data.RELICS.keys().filter(func(r): return not relics.has(r))
-	var opts: Array = []
-	var ids: Array = []
-	while opts.size() < mini(3, free.size()):
-		var r: String = free[rng.randi_range(0, free.size() - 1)]
-		if ids.has(r):
-			continue
-		ids.append(r)
-		library_see("relic:" + r)
-		opts.append({"title": Data.RELICS[r].name, "image": "res://assets/ui/relic_%s.png" % r, "text": Data.RELICS[r].text, "vignette": "Relique"})
-	if opts.is_empty():
+# ------------------------------------------------------------------ reliques : paliers, tirages, pertinence
+
+const DROP_TIERS := ["commune", "peu_commune", "rare"]
+const RELIC_EXCL := {"cle_ecluse": ["cloche", "remous", "nasse"]}  # exclusions mutuelles
+
+
+func _relic_useful(r: String) -> bool:
+	## Filtre de pertinence : une relique n'est proposée que si la run peut s'en servir (champ "need").
+	var need: String = Data.RELICS[r].get("need", "")
+	if need == "":
 		return true
-	var i := await ui.choose(title.to_upper(), subtitle, opts, back, "← Retour")
+	var cards := func(p: Callable) -> bool: return deck.any(func(ci): return p.call(Data.card(ci)))
+	var hero := func(p: Callable) -> bool: return heroes.any(p)
+	match need:
+		"glace", "vase":  # un étage restant de ce biome, ou une carte qui pose ce sol
+			return floor_biomes.slice(floor_i - 1, 3).any(func(b): return Data.ground_of(b) == need) or cards.call(func(c): return c.get("ground", "") == need)
+		"poison":
+			return cards.call(func(c): return int(c.get("poison", 0)) > 0 or c.get("trig", {}).has("poison")) or hero.call(func(h): return h.has_p("venin"))
+		"tidiane":
+			return hero.call(func(h): return h.key == "tidiane" or h.voc == "tidiane" or h.voc2 == "tidiane")
+		"compagnon":
+			return companion != ""
+		"sans_compagnon":
+			return companion == ""
+		"piege":
+			return cards.call(func(c): return c.get("place", "") in Battle.TRAP_KINDS or c.get("trap_behind", false) or c.has("traps_around") or c.get("tool", "") == "picots")
+		"exec":
+			return cards.call(func(c): return c.get("exec", false)) or hero.call(func(h): return h.has_p("execution"))
+		"objet":
+			return cards.call(func(c): return c.has("tool"))
+		"vol":
+			return cards.call(func(c): return c.get("steal", false) or c.get("place", "") == "collet")
+		"soin":
+			return cards.call(func(c): return (c.get("target", "") == "ally" and int(c.get("heal", 0)) > 0) or c.has("heal_all") or c.get("heal_adj", false))
+		"distance":
+			return cards.call(func(c): return c.kind == "atk" and c.has("range") and int(c.range[1]) >= 3)
+		"provocation":
+			return cards.call(func(c): return c.get("taunt", false))
+		"attire":
+			return cards.call(func(c): return int(c.get("pull", 0)) > 0)
+		"multi":
+			return cards.call(func(c): return int(c.get("hits", 1)) >= 2)
+		"enchant":
+			return deck.any(func(ci): return ci.has("ench"))
+		"sans_vocation":
+			return hero.call(func(h): return h.voc == "")
+	return true
+
+
+func _relic_ok(r: String, skip: Array = []) -> bool:
+	## Jamais deux fois la même relique dans une run, ni deux reliques qui s'excluent, ni une relique inutile.
+	if relics.has(r) or skip.has(r):
+		return false
+	for a in RELIC_EXCL:
+		if (r == a and RELIC_EXCL[a].any(func(x): return relics.has(x))) or (relics.has(a) and RELIC_EXCL[a].has(r)):
+			return false
+	return _relic_useful(r)
+
+
+func _relic_draw(kind: String, skip: Array = []) -> String:
+	## Une relique selon sa source. coffre : 50/33/17 (40/38/22 au 3e étage) ; elite : 45/35/20 ; ancien : peu commune
+	## ou rare ; event : comme un coffre, sans rare au 1er étage ; boss, marchand : leur palier. Repli sur le palier
+	## inférieur s'il est vide. "" si rien ne convient.
+	var tiers: Array = [kind]
+	if not kind in ["boss", "marchand", "evenement"]:
+		var odds: Array = {"elite": [45, 35, 20], "ancien": [0, 50, 50]}.get(kind, [40, 38, 22] if floor_i >= 3 else [50, 33, 17])
+		if kind == "event" and floor_i == 1:
+			odds = [60, 40, 0]
+		var x := rng.randi_range(0, 99)
+		var t := 0 if x < odds[0] else (1 if x < odds[0] + odds[1] else 2)
+		tiers = [t, t - 1, t - 2, t + 1, t + 2].filter(func(k): return k >= 0 and k <= 2 and (k < 2 or odds[2] > 0)).map(func(k): return DROP_TIERS[k])
+		if kind == "event" and rng.randf() < 0.3:
+			tiers.push_front("evenement")  # ponytail: pas encore d'événement écrit pour eux ; à retirer quand chacun aura le sien
+	for t in tiers:
+		var pool: Array = Data.RELICS.keys().filter(func(r): return Data.RELICS[r].tier == t and _relic_ok(r, skip))
+		if pool.size() > 0:
+			return pool[rng.randi_range(0, pool.size() - 1)]
+	return ""
+
+
+func _relic_opt(r: String, title := "") -> Dictionary:
+	library_see("relic:" + r)
+	var d: Dictionary = Data.RELICS[r]
+	return {"title": title if title != "" else d.name, "image": "res://assets/ui/relic_%s.png" % r, "glyph": d.glyph, "text": d.text, "vignette": Data.RELIC_TIERS[d.tier]}
+
+
+func _relic_pick(title: String, subtitle: String, back := false, kind := "coffre", n := 3) -> bool:
+	## Une relique parmi n. Gardien (kind "boss") hors bienfait : on peut la refuser contre 50 or.
+	var ids: Array = []
+	for k in n:
+		var r := _relic_draw(kind, ids)
+		if r != "":
+			ids.append(r)
+	if ids.is_empty():
+		return true
+	var refuse := kind == "boss" and not back
+	var i := await ui.choose(title.to_upper(), subtitle, ids.map(func(r): return _relic_opt(r)), back or refuse, "Refuser : +50 or" if refuse else "← Retour")
 	if i < 0:
+		if refuse:
+			gold += 50
+			ui.set_gold(gold)
+			return true
 		return false
 	await _add_relic(ids[i])
 	return true
 
 
+func _event_relic() -> void:
+	## Une salle « ? » qui offre une relique : tirée comme un coffre, sans rare au 1er étage.
+	var r := _relic_draw("event")
+	if r != "":
+		await _add_relic(r)
+
+
 func _add_relic(r: String) -> void:
 	relics.append(r)
 	library_see("relic:" + r)
-	if r == "heron":
+	if r in ["heron", "chaine_forcat"]:
 		for h in heroes:
-			h.base_move += 1
+			h.base_move = maxi(1, h.base_move + (1 if r == "heron" else -1))  # Chaîne du forçat : -1 déplacement
 			h.apply_gear()
 	ui.refresh_relics(relics)
 	if r == "livret":
@@ -2317,21 +2451,26 @@ func _sanctuary_menu() -> void:
 
 
 func _sanctuary_loop() -> void:
-	while true:
-		var i := await ui.choose("SANCTUAIRE", "Une eau calme sous les arches", [
-			{"title": "Se reposer", "glyph": "✚", "text": "Chaque héros récupère 35 % de ses PV max."},
-			{"title": "Forger", "glyph": "⚒", "text": "Une carte du paquet gagne un niveau (5 au maximum)."},
-			{"title": "Fusionner", "glyph": "⧉", "text": "Deux exemplaires de même niveau n'en font plus qu'un, d'un niveau au-dessus."},
-		])
-		if i == 0:
+	## Un choix ; Braise de veille : deux choix différents. Couronne de plomb : plus de repos.
+	var all := {"rest": {"title": "Se reposer", "glyph": "✚", "text": "Chaque héros récupère 35 % de ses PV max."},
+		"forge": {"title": "Forger", "glyph": "⚒", "text": "Une carte du paquet gagne un niveau (5 au maximum)."},
+		"fuse": {"title": "Fusionner", "glyph": "⧉", "text": "Deux exemplaires de même niveau n'en font plus qu'un, d'un niveau au-dessus."}}
+	var keys: Array = all.keys().filter(func(k): return k != "rest" or not relics.has("couronne_plomb"))
+	var left := 2 if relics.has("braise_veille") else 1
+	while left > 0 and keys.size() > 0:
+		var again := left == 1 and relics.has("braise_veille")
+		var i := await ui.choose("SANCTUAIRE", "Une eau calme sous les arches" + ("  ·  encore un choix" if again else ""), keys.map(func(k): return all[k]), again, "Partir")
+		if i < 0:
+			return
+		var k: String = keys[i]
+		if k == "rest":
 			for h in heroes:
 				h.hp = mini(h.max_hp, h.hp + int(h.max_hp * 0.35))
 			ui.toast("Le groupe reprend son souffle.")
-			return
-		if i == 1 and await _forge("FORGE", "Quelle carte forger ? (+1 niveau)"):
-			return
-		if i == 2 and await _fuse():
-			return
+		elif (k == "forge" and not await _forge("FORGE", "Quelle carte forger ? (+1 niveau)")) or (k == "fuse" and not await _fuse()):
+			continue
+		keys.erase(k)
+		left -= 1
 
 
 func _forge(title: String, subtitle: String, budget := -1) -> bool:
@@ -2594,6 +2733,12 @@ func _autoplay() -> void:
 			library_see(oids[q] + "#3")
 	_make_party()
 	companion = str(args.get("companion", ""))  # --companion=crabe : une bête apprivoisée dans chaque combat
+	relics = []
+	for r in str(args.get("relics", "")).split(",", false):  # --relics=tuile,souffle : des reliques dès le départ
+		if Data.RELICS.has(r):
+			await _add_relic(r)
+		else:
+			print("relique inconnue : ", r)
 	if party == ["garde", "lame", "oracle"]:
 		heroes[0].equip = {"arme": "masse_os", "armure": "anneau_bouclier", "bottes": "bottes_vase", "bijou": "bague_charognard"}
 		heroes[1].equip = {"arme": "kriss", "armure": "mantelet_feuilles", "bottes": "ecaille_eau", "bijou": "croc_brochet"}
@@ -2643,6 +2788,8 @@ func _autoplay() -> void:
 	bag = ["gantelet", "bottes_heron"]
 	_gain_item("coeur_pierre", heroes[0])
 	await open_chest(heroes[1])
+	for k in ["coffre", "elite", "ancien", "event", "boss", "marchand"]:  # tirages de reliques et filtre de pertinence
+		print("  relique ", k, " : ", _relic_draw(k))
 	print("AUTOPLAY OK, %d/%d combats gagnés" % [won, fights_n])
 	get_tree().quit()
 
@@ -2732,8 +2879,9 @@ func _hdtest() -> void:
 	_make_party()
 	_build_room(4242, 0, 12, "cour")
 	var u: Unit = heroes[0]
-	target = u.position + Vector3(0, 1.0, 0)
-	dist = 6.0
+	target = u.position + Vector3(0, 0.9, 0)
+	dist = float(args.get("dist", "6"))
+	pitch = float(args.get("pitch", str(pitch)))
 	_snap_cam()
 	await _frames(40)
 	_shot(dir, "1_repos")
@@ -3899,6 +4047,8 @@ func _ancient() -> void:
 	var picks: Array = pool.slice(0, 3)
 	if voc_start and floor_i == 1 and not tuto and not picks.has("vocation"):
 		picks[0] = "vocation"  # réglage « Vocation dès le départ »
+	if floor_i >= 2 and not tuto and rng.randf() < 1.0 / 3.0 and _relic_draw("boss") != "":
+		picks[2] = "relique_boss"  # étages 2 et 3 : parfois une relique de gardien de plus, à la place d'un bienfait
 	var opts: Array = picks.map(func(b): return {"title": Data.BOONS[b].name, "glyph": Data.BOONS[b].glyph, "art": "res://assets/ui/boon_%s.png" % b, "text": Data.BOONS[b].text, "color": an.col})
 	ui.team_on = true
 	ui.speaker = keys[posmod(run_seed + floor_i, keys.size())]
@@ -3916,9 +4066,12 @@ func _boon(k: String, back := false) -> bool:
 	## back : le sous-écran propose « ← Retour » et rend false si on revient au choix du bienfait.
 	match k:
 		"relique":
-			var free: Array = Data.RELICS.keys().filter(func(r): return not relics.has(r))
-			if free.size() > 0:
-				await _add_relic(free[rng.randi_range(0, free.size() - 1)])
+			var r := _relic_draw("ancien")
+			if r != "":
+				await _add_relic(r)
+		"relique_boss":
+			if not await _relic_pick("RELIQUE DE GARDIEN", "Un pouvoir, et son prix", back, "boss"):
+				return false
 		"relique_sang":
 			if not await _relic_pick("RELIQUE DE SANG", "Chaque héros perd 5 PV max", back):
 				return false
@@ -4104,10 +4257,9 @@ func _event_new(ev: String, r: Dictionary) -> bool:
 							h.base_hp = maxi(10, h.base_hp - 6)
 							h.apply_gear()
 		"passeur":
-			var free: Array = Data.RELICS.keys().filter(func(k): return not relics.has(k))
-			if free.is_empty():
+			var rel := _relic_draw("event")
+			if rel == "":
 				return true
-			var rel: String = free[rng.randi_range(0, free.size() - 1)]
 			var i := await ui.choose("LE PASSEUR", "Une barque sans rame, une lanterne, une main tendue. « L'obole d'abord. » Vous avez %d or." % gold, [
 				{"title": "%s  ·  90 or" % Data.RELICS[rel].name, "image": "res://assets/ui/relic_%s.png" % rel, "text": Data.RELICS[rel].text},
 				{"title": "Lui confier un souvenir", "glyph": "✂", "text": "Retirer une carte du paquet. Il ne rend jamais la monnaie.", "color": blue},
@@ -4132,7 +4284,7 @@ func _event_new(ev: String, r: Dictionary) -> bool:
 			if i == 0:
 				if not await _event_fight(r, "elite", ["enrages"]):
 					return false
-				await _relic_pick("TROPHÉE DU DUEL", "La garde du bretteur, en souvenir")
+				await _relic_pick("TROPHÉE DU DUEL", "La garde du bretteur, en souvenir", false, "event")
 				await _boon("rare")
 			else:
 				await _gain_pj(big, 2)
@@ -4271,7 +4423,7 @@ func _event_new(ev: String, r: Dictionary) -> bool:
 				var big: Unit = heroes.reduce(func(a, b): return a if a.max_hp >= b.max_hp else b)
 				big.base_hp = maxi(10, big.base_hp - 8)
 				big.apply_gear()
-				await _relic_pick("AMBITION", "Ce qu'on prend, on le garde")
+				await _relic_pick("AMBITION", "Ce qu'on prend, on le garde", false, "event")
 		"mimique":
 			var i := await ui.choose("UN COFFRE, SEUL", "Un coffre cerclé d'or au milieu de la salle. Trop beau. Beaucoup trop beau.", [
 				{"title": "L'ouvrir", "glyph": "◆", "text": "Une chance sur deux : une relique et 50 or. Sinon, il a des dents (combat d'élite).", "color": UI.GOLD},
@@ -4280,12 +4432,12 @@ func _event_new(ev: String, r: Dictionary) -> bool:
 			if i == 0:
 				if rng.randf() < 0.5:
 					gold += 50
-					await _boon("relique")
+					await _event_relic()
 				else:
 					ui.banner("Mimique !", "Le coffre ouvre un œil")
 					if not await _event_fight(r, "elite", ["enrages"]):
 						return false
-					await _boon("relique")
+					await _event_relic()
 			elif i == 1:
 				if rng.randf() < 0.5:
 					gold += 30
@@ -4293,7 +4445,7 @@ func _event_new(ev: String, r: Dictionary) -> bool:
 					ui.banner("Mimique !", "Il hurle avant d'avoir mordu")
 					if not await _event_fight(r, "combat", []):
 						return false
-					await _boon("relique")
+					await _event_relic()
 	return true
 
 
@@ -4310,7 +4462,7 @@ func _mystery(r: Dictionary) -> void:
 			h.hp = mini(h.max_hp, h.hp + int(h.max_hp * 0.1))
 		await _journal_reroll()
 	# embuscade : 10 %, +10 % à chaque « ? » paisible (au plus 50 %), retour à 10 % après une embuscade
-	if not tuto and rng.randf() < myst_fight:
+	if not tuto and rng.randf() < myst_fight and not relics.has("lampe_brume"):
 		myst_fight = 0.1
 		ui.banner("Embuscade !", "La salle n'était pas vide")
 		if await _event_fight(r, "combat", []) and mode != "aventure":
@@ -4378,7 +4530,7 @@ func _mystery(r: Dictionary) -> void:
 				else:
 					gold -= 30
 					if rng.randf() < 0.5:
-						await _boon("relique")
+						await _event_relic()
 					else:
 						ui.toast("Rien ne remonte.")
 		"cage":

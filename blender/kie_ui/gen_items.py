@@ -162,16 +162,75 @@ RELICS = {  # les 31 reliques (27/09) : même pixel art que l'équipement, à la
 	"bourse": "a ferryman's obol coin on a black ribbon, silver",
 	"journal_route": "a worn travel journal with a map sticking out and a compass",
 }
+RELICS2 = {  # les 57 reliques du concile (27/09), planches à part pour ne pas décaler les premières
+	"baril_contrebande": "small smuggler's powder keg with a torn customs tag",
+	"coin_carrier": "iron wedge driven into a cracked stone block",
+	"etoupe": "coil of tarred oakum, black and glossy, smouldering orange tip",
+	"clou_halage": "big forged iron nail with a frayed hemp rope knotted around it",
+	"collet_crin": "coiled horsehair snare loop with a small wooden stake",
+	"piquet_frene": "sharpened ash-wood stake with iron teeth bound by cord",
+	"amadou": "chunk of dry tinder fungus with a glowing ember on it",
+	"battant": "heavy bronze bell clapper on a short leather strap",
+	"gobelet": "dented pewter goblet brimming with clear glowing water",
+	"passe_partout": "ring of old iron skeleton keys, one worn shiny",
+	"denier_fossoyeur": "tarnished bronze coin with a small shovel stamped on it",
+	"sebile_cuivre": "small hammered copper begging bowl with a few coins inside",
+	"semelles_jonc": "pair of woven reed sandal soles with mud stains",
+	"ecorce_saule": "curled strip of willow bark tied with twine",
+	"givre_etrave": "frosted ship prow fragment with icicles",
+	"chaine_amarre": "short length of massive rusted mooring chain dripping water",
+	"craie_arpenteur": "stub of white surveyor's chalk in a brass holder beside a chalk cross",
+	"plaque_vanne": "small square riveted iron sluice-gate plate dented in the center",
+	"onguent": "small clay pot of amber resin salve with a wooden spatula",
+	"lentille": "thick hand-blown glass lens in a copper ring, slightly warped",
+	"diapason": "steel tuning fork resting on a folded cloth, faint vibration lines",
+	"doublure": "coat lining turned inside out showing many hidden stitched pockets",
+	"vessie": "dried toad bladder pouch leaking a green droplet",
+	"poudre_fine": "small leather pouch spilling black gunpowder",
+	"pique": "wooden pike with a tattered war banner",
+	"hachoir": "wide butcher's cleaver with a notched blade",
+	"soufflet": "small leather forge bellows with brass nozzle and scorch marks",
+	"goupille": "oversized steel cotter pin on a leather cord",
+	"encrier": "squat glass inkwell with violet glowing ink and a quill",
+	"grelot": "small brass bell tied to a braided leather leash",
+	"etendard": "faded tattered banner on a broken pole, waterlogged cloth",
+	"remous": "small whirlpool swirl in a stone basin",
+	"tenaille": "blacksmith pincer tongs clamped shut",
+	"corde_noeuds": "knotted hemp prayer rope with four large knots",
+	"cle_jumeaux": "old iron key with two identical bows, faint violet glow",
+	"clou_quai": "large rusted dock spike nail",
+	"souffle": "cracked bronze cannon mouth puffing smoke",
+	"quille": "heavy dented lead skittle pin",
+	"marelle": "stub of white chalk beside a hopscotch square drawn on stone",
+	"echo_caverne": "spiral seashell carved from dark stone with ripple lines",
+	"braise_veille": "small iron lantern holding one glowing ember",
+	"relais_poste": "brass post horn hanging from a wooden signpost",
+	"couteau_palette": "painter's palette knife smeared with glowing red, blue and gold paint",
+	"ecusson": "corroded bronze shield-shaped badge with barnacles and a faint central glow",
+	"corne_aube": "curved horn bugle with a dawn-colored brass band",
+	"couronne_plomb": "crude heavy lead crown with dull grey spikes",
+	"chaine_forcat": "rusted iron shackle with a short broken chain",
+	"cle_ecluse": "enormous ornate iron key with a lock-gate shaped bow, green algae",
+	"machoire_ogre": "huge jawbone with jagged teeth and a leather strap",
+	"ecrin": "small velvet-lined jewelry box whose interior is a dark bottomless void",
+	"coeur_fournaise": "glowing molten heart inside an iron cage",
+	"jeton_comptoir": "square brass trade token stamped with a balance scale",
+	"ciseaux_epure": "pair of slender tailor's scissors with blackened blades",
+	"nasse": "wicker fish trap basket dripping water",
+	"lampe_brume": "small hooded ship lantern with frosted green glass, mist curling from its vents",
+	"registre_prevot": "leather-bound ledger with a wax seal and a list of crossed-out names",
+	"colonne_volee": "cracked stone pillar segment strapped on a wooden sled",
+}
 
 
-def reliques():
-	out = os.path.join(HERE, "reliques")
+def reliques(src=RELICS, sub="reliques"):
+	out = os.path.join(HERE, sub)
 	os.makedirs(out, exist_ok=True)
-	ids = list(RELICS)
+	ids = list(src)
 	batches = [ids[i:i + 16] for i in range(0, len(ids), 16)]
 	json.dump(batches, open(os.path.join(out, "batches.json"), "w"), indent=0)
 	for k, b in enumerate(batches):
-		parts = ["Cell %d (row %d, column %d): %s." % (i + 1, i // 4 + 1, i % 4 + 1, RELICS[x]) for i, x in enumerate(b)]
+		parts = ["Cell %d (row %d, column %d): %s." % (i + 1, i // 4 + 1, i % 4 + 1, src[x]) for i, x in enumerate(b)]
 		for i in range(len(b), 16):
 			parts.append("Cell %d: empty." % (i + 1))
 		still("A 4x4 grid of sixteen separate video game relic icons in crisp pixel art, exactly the style of the reference images: "
@@ -182,4 +241,4 @@ def reliques():
 
 
 if __name__ == "__main__":
-	{"dos": dos, "dos_classes": dos_classes, "reliques": reliques}.get(sys.argv[1] if sys.argv[1:] else "", planches)()
+	{"dos": dos, "dos_classes": dos_classes, "reliques": reliques, "reliques2": lambda: reliques(RELICS2, "reliques2")}.get(sys.argv[1] if sys.argv[1:] else "", planches)()

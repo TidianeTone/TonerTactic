@@ -13,6 +13,8 @@ RIG, ANIMS, OUT = a[0], a[1], a[2]
 N = int(a[3]) if len(a) > 3 else 96
 TARGET_H = float(a[4]) if len(a) > 4 else 2.3
 GLOW_HEX = a[5] if len(a) > 5 else "#ffc93a"
+GLOW_DZ = float(os.environ.get("DELVE_GLOW_DZ", "0"))   # décale les parties lumineuses (m, taille Mixamo) : yeux sous un bord de chapeau
+BRIGHT = float(os.environ.get("DELVE_BRIGHT", "1.0"))    # éclaircit la texture (le jeu la rend plus sombre que Blender)
 
 
 def lin(c):
@@ -78,7 +80,7 @@ def sample(loc, ti):
             wt[b] = wt.get(b, 0.0) + g * w[k]
     top = sorted(wt.items(), key=lambda kv: -kv[1])[:4]
     s = sum(g for _, g in top) or 1.0
-    return tuple(col), [(b, g / s) for b, g in top]
+    return tuple(min(c * BRIGHT, 1.0) for c in col), [(b, g / s) for b, g in top]
 
 
 vox = {}
@@ -102,7 +104,7 @@ for g in glows:
     cells = set()
     for ix in range(int((gl.x - org.x) / vs), int((gh.x - org.x) / vs) + 1):
         for iz in range(int((gl.z - org.z) / vs), int((gh.z - org.z) / vs) + 1):
-            cells.add((ix, int((ctr.y - org.y) / vs), iz))
+            cells.add((ix, int((ctr.y - org.y) / vs), iz + int(round(GLOW_DZ / vs))))
     for cl in cells:
         loc, nrm, ti, d = bvh.find_nearest(org + Vector(((cl[0] + 0.5) * vs, (cl[1] + 0.5) * vs, (cl[2] + 0.5) * vs)))
         glow[cl] = (GLOW, sample(loc, ti)[1])
@@ -128,7 +130,7 @@ def skirt(cell, wt):
     z = org.z + (cell[2] + 0.5) * vs
     if hip_z is None or z > hip_z or z < (knee_z or 0) - vs * 6:
         return dict(wt)  # au-dessus du bassin, ou les bottes : inchangé
-    k = 0.8 if z > (knee_z or 0) else 0.55  # plus on descend vers les bottes, plus les jambes reprennent la main
+    k = 0.92 if z > (knee_z or 0) else 0.75  # plus on descend vers les bottes, plus les jambes reprennent la main
     out = {}
     for b, g in wt:
         if b in LEGS:
@@ -160,7 +162,7 @@ def smooth(cells, iters=4):
         cells[c] = (cells[c][0], [(b, g / s) for b, g in top])
 
 
-smooth(vox)
+smooth(vox, 12)
 
 
 def build(name, cells, ao, emissive):

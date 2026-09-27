@@ -93,6 +93,24 @@ func _init() -> void:
 	if n_en < 200:
 		print("trop peu de cartes enchantables : ", n_en)
 		fails += 1
+	# reliques : un palier valide, un glyphe ; le filtre de pertinence tourne sur une run neuve
+	for r in Data.RELICS:
+		if not Data.RELIC_TIERS.has(Data.RELICS[r].get("tier", "")) or Data.RELICS[r].get("glyph", "") == "":
+			print("relique sans palier ou glyphe : ", r)
+			fails += 1
+	var m: Node = load("res://scripts/main.gd").new()
+	m.floor_biomes = [5, 0, 2]
+	m.deck = Data.starter(["garde", "lame", "oracle"])
+	for r in Data.RELICS:
+		m._relic_useful(r)
+	if not m._relic_useful("givre_etrave") or m._relic_useful("diapason") or m._relic_useful("collier") or not m._relic_useful("sifflet"):
+		print("filtre de pertinence faux")
+		fails += 1
+	m.relics = ["cle_ecluse"]
+	if m._relic_ok("remous") or m._relic_ok("cle_ecluse"):
+		print("exclusions de reliques fausses")
+		fails += 1
+	m.free()
 	# anglais : correspondance exacte, recollage de phrases voisines, chemins d'image intacts
 	var L := Lang.new()
 	L.load_dict("res://assets/i18n/en.json")
