@@ -3531,6 +3531,13 @@ func _nearest_free(from: Vector2i) -> Vector2i:
 	return best
 
 
+func debug_win() -> void:
+	## Menu « Passer la salle » : tous les ennemis tombent, le combat se termine en victoire (pour tester vite).
+	for f in alive_foes():
+		kill(f)
+	check_end()
+
+
 func check_end() -> void:
 	if over:
 		return

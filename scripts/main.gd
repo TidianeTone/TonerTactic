@@ -1,7 +1,7 @@
 extends Node3D
 ## Monde (lumière, caméra), boucle de run, entrées, mode capture pour le critique.
 
-const ROOMS_PER_FLOOR := 7
+const ROOMS_PER_FLOOR := 8
 const CENTER := Vector3(7.5, 1.2, 7.5)
 
 var ui: UI
@@ -552,6 +552,8 @@ func _unhandled_input(e: InputEvent) -> void:
 			ui.sheet_layer = null
 		elif ui.lib_layer and is_instance_valid(ui.lib_layer):
 			ui.lib_closed.emit()
+		elif ui.overlay != null and ui.skip_ok and not ui.menu_open():
+			ui.picked.emit(-1)  # Échap ferme l'écran (paquet, défausse, choix qu'on peut passer) au lieu d'ouvrir la pause
 		elif ui.menu_open() or not (battle.card_sel >= 0 or battle.inspect):
 			ui.toggle_menu()
 		else:
@@ -1263,24 +1265,50 @@ func _pick_pacts() -> Array:
 
 
 func _draft() -> Array:
-	## Trois héros parmi six ; « au hasard » complète l'escouade.
+	## Trois héros parmi huit, en deux rangées de quatre ; un héros choisi reste à sa place (coché), un clic le retire.
 	var out: Array = []
 	while out.size() < 3:
-		var left: Array = Data.HEROES.keys().filter(func(k): return not out.has(k))
+		var keys: Array = Data.HEROES.keys()
 		var opts: Array = []
-		for k in left:
+		for k in keys:
 			var d: Dictionary = Data.HEROES[k]
-			opts.append({"title": d.name, "image": "res://assets/art/portrait_%s.png" % k, "color": Data.CLASS_COLOR[k],
-				"chips": [["pv", str(d.hp)], ["deplacement", str(d.move)]], "text": "%s\n%s" % [d.title, d.role]})
+			var took: bool = out.has(k)
+			opts.append({"title": ("✓ " if took else "") + d.name, "image": "res://assets/art/portrait_%s.png" % k, "color": Data.CLASS_COLOR[k],
+				"chips": [["pv", str(d.hp)], ["deplacement", str(d.move)]], "text": d.title, "tip": d.role, "dim": took, "cards": emblem_cards(k), "encart": k})
 		var chosen: String = ", ".join(out.map(func(k): return Data.HEROES[k].name))
 		var i := await ui.choose("L'ESCOUADE", "Choisissez trois héros (%d / 3)%s" % [out.size(), ("  ·  " + chosen) if chosen != "" else ""], opts, true, "Compléter au hasard")
 		if i < 0:
 			while out.size() < 3:
-				left = Data.HEROES.keys().filter(func(k): return not out.has(k))
+				var left: Array = keys.filter(func(k): return not out.has(k))
 				out.append(left[rng.randi_range(0, left.size() - 1)])
+		elif out.has(keys[i]):
+			out.erase(keys[i])
 		else:
-			out.append(left[i])
+			out.append(keys[i])
 	return out
+
+
+func emblem_cards(cls: String) -> Array:
+	## Trois cartes qui disent la classe : une par route (Data.ARCHETYPES), communes ou peu communes seulement.
+	var out: Array = []
+	for route in Data.ARCHETYPES.get(cls, []):
+		for id in Data.CARDS:
+			var d: Dictionary = Data.CARDS[id]
+			if d.get("owner", "") == cls and d.get("arch", "") == route[0] and int(d.get("rar", 1)) <= 2 and not out.has(id):
+				out.append(id)
+				break
+	for id in Data.STARTER.get(cls, []):
+		if out.size() >= 3:
+			break
+		if not out.has(id):
+			out.append(id)
+	return out.slice(0, 3)
+
+
+func guild_emblems(g: int) -> Array:
+	## Trois cartes de la guilde (communes et peu communes : rien de ce que débloquent les paliers).
+	var ids: Array = Guildes.cards_of(g, [1, 2])
+	return ids.slice(0, 3)
 
 
 func _biome() -> int:
@@ -1316,7 +1344,7 @@ func _loop() -> void:
 		else:
 			await _relic_pick("Reliquaire", "Une relique parmi trois")
 		step += 1
-		if step >= ROOMS_PER_FLOOR:
+		if step >= (fmap.size() if fmap.size() > 0 else ROOMS_PER_FLOOR):  # une vieille sauvegarde garde sa carte à 7 salles
 			floor_i += 1
 			step = 0
 			obj_chance = 0.4
@@ -1385,7 +1413,7 @@ func _door() -> String:
 	var nexts: Array = range(fmap[step].size()) if lane < 0 else fmap[step - 1][lane].links
 	while true:
 		var i := await ui.map_screen("ÉTAGE %d" % floor_i, "%s · salle %d / %d · %d or · difficulté %d/5" % [Data.BIOMES[_biome()].name, step + 1, ROOMS_PER_FLOOR, gold, difficulty + 1],
-			fmap, step, lane, nexts, visited, "Équipement · %d objet(s) au sac" % bag.size(), _biome())
+			fmap, step, lane, nexts, visited, "Équipement · %d" % bag.size(), _biome())
 		if i == -2:
 			await _equipment()
 			continue
@@ -1640,7 +1668,7 @@ func _roll_item(min_rarity := 1) -> String:
 		rar = 4
 	var ids: Array = []
 	while ids.is_empty() and rar > 0:
-		ids = Data.ITEMS.keys().filter(func(id): return Data.ITEMS[id].rarity == rar and (Data.ITEMS[id].owner == "any" or party.has(Data.ITEMS[id].owner)))
+		ids = Data.ITEMS.keys().filter(func(id): return Data.ITEMS[id].rarity == rar)  # plus de verrou de classe : tout l'équipement pour tout le monde
 		rar -= 1
 	return ids[rng.randi_range(0, ids.size() - 1)]
 
@@ -1651,7 +1679,7 @@ func rack_weapon(h: Unit) -> void:
 	var rar := 3 if r > 0.7 else 2
 	var ids: Array = []
 	while ids.is_empty() and rar > 0:
-		ids = Data.ITEMS.keys().filter(func(id): return Data.ITEMS[id].slot == "arme" and Data.ITEMS[id].rarity == rar and (Data.ITEMS[id].owner == "any" or Data.ITEMS[id].owner == h.key))
+		ids = Data.ITEMS.keys().filter(func(id): return Data.ITEMS[id].slot == "arme" and Data.ITEMS[id].rarity == rar)
 		rar -= 1
 	if ids.size() > 0:
 		_gain_item(ids[rng.randi_range(0, ids.size() - 1)], h)
@@ -1663,7 +1691,7 @@ func _gain_item(id: String, h: Unit = null) -> void:
 	library_see("item:" + id)
 	var who: Array = [h] if h else heroes
 	for u in who:
-		if (it.owner == "any" or it.owner == u.key) and u.equip[it.slot] == "":
+		if u.equip[it.slot] == "":
 			u.equip[it.slot] = id
 			u.apply_gear()
 			fight_loot.append("%s (équipé)" % it.name)
@@ -1769,13 +1797,20 @@ func _rewards(type: String) -> void:
 		fight_loot.append(Data.def(opts[i].card.id).name)
 		if Data.def(opts[i].card.id).get("rar", 1) == 4:
 			ui.banner("Légendaire !", "%s rejoint le paquet de %s" % [Data.def(opts[i].card.id).name, Data.HEROES[Data.holder(opts[i].card)].name])
+		await _replace_starter(opts[i].card)
+	if type == "elite":
+		# une élite : chaque autre héros a aussi sa carte (les paquets grandissent vers ~14 cartes en fin de run)
+		var got: String = Data.holder(opts[i].card) if i >= 0 and opts[i].has("card") and i < opts.size() - (1 if oid != "" else 0) else ""
+		for h in heroes:
+			if h.key != got:
+				await _hero_offer(h.key)
 	if i < 0 and relics.has("sebile_cuivre"):
 		gold += 20  # Sébile de cuivre : passer le butin de cartes
 		fight_loot.append("+20 or")
 		ui.set_gold(gold)
 	if type == "elite":
 		_gain_item(_roll_item(2))
-		if mode == "descente" and step == ROOMS_PER_FLOOR - 1 and floor_i < 3:
+		if mode == "descente" and step == fmap.size() - 1 and floor_i < 3:
 			# le gardien de l'étage : la seule source normale de reliques de gardien
 			await _relic_pick("RELIQUE DE GARDIEN", "Le gardien de l'étage laisse un pouvoir, et son prix", false, "boss")
 		else:
@@ -1784,6 +1819,38 @@ func _rewards(type: String) -> void:
 
 
 # ------------------------------------------------------------------ vocation et guildes (multiclasse)
+
+func _hero_offer(k: String) -> void:
+	## Butin d'élite : trois cartes de la classe d'un héros, pour lui.
+	var opts: Array = []
+	var tries := 0
+	while opts.size() < 3 and tries < 40:
+		tries += 1
+		var id := _card_roll(1, "elite", k)
+		if opts.any(func(o): return o.card.id == id):
+			continue
+		var ar: String = Data.def(id).get("arch", "")
+		opts.append({"card": {"id": id, "lvl": 1}, "tag": "Pour %s" % Data.HEROES[k].name + (" · route " + ar if ar != "" else "")})
+	var i := await ui.choose("BUTIN D'ÉLITE", "Une carte pour %s (paquet : %d cartes)" % [Data.HEROES[k].name, deck.filter(func(c): return Data.holder(c) == k).size()], opts, true)
+	if i >= 0:
+		deck.append(opts[i].card)
+		fight_loot.append(Data.def(opts[i].card.id).name)
+		await _replace_starter(opts[i].card)
+
+
+func _replace_starter(ci: Dictionary) -> void:
+	## La nouvelle carte peut prendre la place d'une carte de départ du même héros (gratuit) : le paquet change de visage
+	## sans se diluer. Rien à remplacer : rien ne s'affiche.
+	var k := Data.holder(ci)
+	var idx: Array = range(deck.size()).filter(func(q): return deck[q].get("st", false) and Data.holder(deck[q]) == k)
+	if idx.is_empty() or tuto:
+		return
+	var j := await ui.choose("REMPLACER ?", "%s rejoint le paquet de %s. Retirer une de ses cartes de départ ?" % [Data.def(ci.id).name, Data.HEROES[k].name],
+		idx.map(func(q): return {"card": deck[q], "tag": "Retirer"}), true, "Garder les deux")
+	if j >= 0:
+		ui.toast("%s quitte le paquet." % Data.def(deck[idx[j]].id).name)
+		deck.remove_at(idx[j])
+
 
 func mastery(h: Unit) -> int:
 	## Palier de maîtrise : I au départ, II à la vocation, III les rares de guilde, IV la légendaire.
@@ -2106,7 +2173,7 @@ func _save_library() -> void:
 	cf.save("user://bibliotheque.cfg")
 
 
-func _card_roll(min_rar := 1, loot := "") -> String:
+func _card_roll(min_rar := 1, loot := "", only := "") -> String:
 	## Hors butin : commune 60 %, peu commune 30 %, rare 10 %. Butin de combat (loot = "combat" / "elite", Slay the Spire) :
 	## rare 3 % (élite 10 %), peu commune 37 % (40 %), décalés par la malchance : +1 % par commune tirée, retour à −5 % à la rare.
 	var roll := rng.randf()
@@ -2119,7 +2186,7 @@ func _card_roll(min_rar := 1, loot := "") -> String:
 		elif rar == 1:
 			rare_off = minf(rare_off + 0.01, 0.4)
 	rar = maxi(rar, min_rar)
-	var ids: Array = Data.CARDS.keys().filter(func(id): return party.has(Data.CARDS[id].owner) and Data.CARDS[id].get("rar", 1) == rar)
+	var ids: Array = Data.CARDS.keys().filter(func(id): return (Data.CARDS[id].owner == only if only != "" else party.has(Data.CARDS[id].owner)) and Data.CARDS[id].get("rar", 1) == rar)
 	return ids[rng.randi_range(0, ids.size() - 1)]
 
 
@@ -3331,9 +3398,17 @@ func _uxtest() -> void:
 	ok.call("Interposition : l'allié est une cible (%s dans %s)" % [b0, tg], tg.has(b0) or battle.card_sel < 0)
 	if battle.card_sel >= 0:
 		battle.click(b0)
-	await _frames(60)
+	await _frames(20)
+	for q in 60:
+		if not battle.busy:
+			break
+		await _frames(10)
 	ok.call("Interposition : places échangées (%s <-> %s)" % [h.cell, mate.cell], h.cell == b0 and mate.cell == a0)
 	# 3. ruée hors de la ligne droite
+	if battle.alive_foes().is_empty():
+		print("ÉCHEC  plus d'ennemis vivants avant la ruée")
+		get_tree().quit()
+		return
 	var foe: Unit = battle.alive_foes()[0]
 	var spot := foe.cell + Vector2i(-2, 1)
 	for c in [foe.cell + Vector2i(-2, 1), foe.cell + Vector2i(2, 1), foe.cell + Vector2i(1, 2), foe.cell + Vector2i(-1, -2), foe.cell + Vector2i(1, -2)]:
@@ -3434,7 +3509,7 @@ func _tuto2run() -> void:
 			n += 1
 			_shot(args.tuto2run, "apres_%02d" % n)
 			if ui.overlay != null:
-				ui.picked.emit(-1 if ui.last_n == Data.PACTS.size() else (int(args.get("premier", "0")) if n < 3 else 0))
+				ui.picked.emit(-1 if ui.last_n in [Data.PACTS.size(), Data.HEROES.size()] else (int(args.get("premier", "0")) if n < 3 else 0))
 			if exploring and ui.overlay == null and not _adv_busy:
 				var goal: Vector2i = leader.cell
 				for d in Board.DIRS:
@@ -3722,7 +3797,7 @@ func _uitest() -> void:
 	chooser.call()
 	await _frames(30)
 	_shot(dir, "butin")
-	var holder: Control = ui.overlay.find_children("*", "Control", true, false).filter(func(c): return c.custom_minimum_size == UI.CARD * 1.2)[1]
+	var holder: Control = ui.overlay.find_children("*", "Control", true, false).filter(func(c): return is_equal_approx(c.custom_minimum_size.x, UI.CARD.x * 1.55))[1]
 	var ev := InputEventMouseButton.new()
 	ev.button_index = MOUSE_BUTTON_LEFT
 	ev.pressed = true
@@ -4504,6 +4579,8 @@ func _ancient() -> void:
 	var keys: Array = Data.ANCIENTS.keys()
 	var an: Dictionary = Data.ANCIENTS[keys[posmod(run_seed + floor_i, keys.size())]]
 	var pool: Array = an.boons.duplicate()
+	if floor_i == 1:
+		pool.erase("soin")  # au départ, l'escouade est pleine : un soin serait un choix mort
 	for i in range(pool.size() - 1, 0, -1):
 		var j := rng.randi_range(0, i)
 		var t = pool[i]

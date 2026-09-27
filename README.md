@@ -61,6 +61,6 @@ dans Blender par script (`blender/`).
 
 Polices libres (SIL OFL / licence Bitstream Vera) : Fraunces, Lato, DejaVu Sans Mono, Noto Sans Math, Noto Emoji.
 
-Icônes : [game-icons.net](https://game-icons.net) (Lorc, Delapouite, Darkzaitzev, Sbed, Faithtoken, Caro Asercion,
+Icônes : [game-icons.net](https://game-icons.net) (Lorc, Delapouite, Darkzaitzev, Sbed, Faithtoken, Caro Asercion, Skoll, PriorBlue,
 Carl Olsen et al.), licence [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/), repassées en pixel art.
 Idéogrammes PV, déplacement, armure, attaque, portée générés avec KIE.

@@ -8,7 +8,9 @@ signal lib_closed
 const INK := Color("#efe6d2")
 const DIM := Color("#a79d8b")
 const GOLD := Color("#e3b45c")
-const CARD := Vector2(196, 272)  # proportions des cadres KIE
+const CARD_BASE := Vector2(196, 272)  # proportions des cadres KIE, telles que peintes
+const CARD_EXTRA := 48.0  # la bande du texte s'allonge d'autant : la carte respire
+const CARD := Vector2(196, 272 + 48)  # proportions des cadres KIE
 var hand_k := 0.84  # échelle de la main au repos (survol : ×1,33) ; --handk= pour essayer
 const KIND_NAME := {"atk": "Attaque", "skill": "Technique", "move": "Mouvement", "power": "Pouvoir"}
 const ICON := {
@@ -66,7 +68,9 @@ var menu: Control
 var lib_layer: Control     # bibliothèque : sa propre couche, ouvrable par-dessus un choix ou la pause
 var _eq_act := {}          # action choisie sur l'écran d'équipement
 var keys_plate: PanelContainer
-var show_keys := -1         # H : -1 auto (1er round), 0 masquée, 1 affichée
+var show_keys := 0          # H : 0 masquée, 1 affichée (sinon : au survol du bouton « Commandes »)
+var _keys_hover := false
+var tactic_btn: Button
 var played_box: VBoxContainer
 var orb_frame: TextureRect
 var voc_badge: TextureRect
@@ -130,7 +134,7 @@ func _build_touch() -> void:
 	## Mode portable : ce que font Échap, Q/E, clic droit et D, à portée de pouce sur le bord droit.
 	touch_box = HBoxContainer.new()
 	touch_box.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	touch_box.position = Vector2(-454, -206)  # au-dessus de « Fin du tour », sous la fiche d'ennemi
+	touch_box.position = Vector2(-454, -290)  # au-dessus de « Fin du tour » et des boutons Caméra / Commandes
 	touch_box.add_theme_constant_override("separation", 10)
 	touch_box.z_index = 50
 	root.add_child(touch_box)
@@ -513,9 +517,9 @@ func _build_hud() -> void:
 	# raccourcis au-dessus de Fin du tour : caméra par défaut, musique
 	var quick := HBoxContainer.new()
 	quick.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	quick.position = Vector2(-230, -170)
-	quick.size = Vector2(190, 42)
-	quick.alignment = BoxContainer.ALIGNMENT_CENTER
+	quick.position = Vector2(-330, -214)
+	quick.size = Vector2(290, 42)
+	quick.alignment = BoxContainer.ALIGNMENT_END
 	quick.add_theme_constant_override("separation", 10)
 	hud.add_child(quick)
 	for q in [["⟲  Caméra", "Revenir à la vue par défaut (Tab : recentrer sur le héros)", func(): main.reset_camera()], ["♪", "Couper ou remettre la musique (M)", func(): main.toggle_mute()]]:
@@ -531,6 +535,24 @@ func _build_hud() -> void:
 		qb.custom_minimum_size = Vector2(0, 38)
 		qb.pressed.connect(q[2])
 		quick.add_child(qb)
+	# juste sous la caméra : l'aide des commandes (au survol) et la vue tactique (son état reste visible)
+	var quick2 := HBoxContainer.new()
+	quick2.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	quick2.position = Vector2(-330, -170)
+	quick2.size = Vector2(290, 42)
+	quick2.alignment = BoxContainer.ALIGNMENT_END
+	quick2.add_theme_constant_override("separation", 10)
+	hud.add_child(quick2)
+	var kb := _quick_btn("?  Commandes", "Les touches (survol)", func(): show_keys = 0 if show_keys == 1 else 1)
+	kb.mouse_entered.connect(func():
+		_keys_hover = true
+		keys_plate.visible = not big)
+	kb.mouse_exited.connect(func():
+		_keys_hover = false
+		keys_plate.visible = show_keys == 1 and not big)
+	quick2.add_child(kb)
+	tactic_btn = _quick_btn("◧", "Vue tactique (T) : un affichage épuré du combat", func(): main.set_tactic(not main.tactic))
+	quick2.add_child(tactic_btn)
 	var hint := _shadowed(_label("Espace", 12, DIM))
 	hint.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
 	hint.position = Vector2(-230, -54)
@@ -545,9 +567,9 @@ func _build_hud() -> void:
 	keys.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	keys.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	keys.offset_left = -40
-	keys.offset_top = -140
+	keys.offset_top = -262
 	keys.offset_right = -40
-	keys.offset_bottom = -140
+	keys.offset_bottom = -262  # au-dessus des boutons Caméra / Commandes
 	var kv := VBoxContainer.new()
 	kv.add_theme_constant_override("separation", 6)
 	kv.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -740,8 +762,15 @@ func banner(title: String, subtitle := "") -> void:
 	tw.tween_property(banner_box, "modulate:a", 0.0, 0.4)
 
 
+func _reopen_menu() -> void:
+	## Un réglage changé depuis la pause : le menu se redessine, son libellé dit tout de suite le nouvel état.
+	toggle_menu()
+	toggle_menu()
+
+
 func toast(text: String) -> void:
 	toast_lbl.text = text
+	toast_plate.z_index = 120  # au-dessus du menu de pause et des écrans de choix
 	_fit(toast_plate)
 	var tw := create_tween()
 	tw.tween_property(toast_plate, "modulate:a", 1.0, 0.15)
@@ -859,7 +888,8 @@ func _place_turn_arrow() -> void:
 	## Le héros dont c'est le tour : un chevron doré qui rebondit au-dessus de lui, dans un halo qui bat
 	## (plein tant qu'il n'a rien fait, plus discret ensuite).
 	var h: Unit = battle.active if battle else null
-	var show: bool = hud.visible and h != null and battle.player_turn and not battle.busy and overlay == null and not (tuto_arrow != null and tuto_arrow.visible)
+	# plus rien dès qu'on a pris son héros en main : une carte choisie, un chemin tracé, un geste fait
+	var show: bool = hud.visible and h != null and battle.player_turn and not battle.busy and overlay == null and not (tuto_arrow != null and tuto_arrow.visible) and not h.moved and battle.played == 0 and battle.card_sel < 0 and battle._move_plan == null
 	var p := Vector3.ZERO
 	if show:
 		p = h.global_position + Vector3(0, h.head + 0.7, 0)
@@ -889,12 +919,10 @@ func _place_turn_arrow() -> void:
 	turn_arrow.visible = show
 	if show:
 		var t := Time.get_ticks_msec() * 0.001
-		var fresh: bool = not h.moved and battle.played == 0
-		var bob := absf(sin(t * 5.0)) * (12.0 if fresh else 5.0)
+		var bob := absf(sin(t * 5.0)) * 12.0
 		turn_arrow.position = main.cam.unproject_position(p) - Vector2(30, 56 + bob)
-		turn_arrow.scale = Vector2.ONE * (1.0 if fresh else 0.75)
 		var halo: TextureRect = turn_arrow.get_meta("halo")
-		halo.modulate.a = (0.55 + 0.35 * sin(t * 4.0)) * (1.0 if fresh else 0.6)
+		halo.modulate.a = 0.55 + 0.35 * sin(t * 4.0)
 
 
 func _place_arrow() -> void:
@@ -1048,7 +1076,16 @@ func toggle_menu() -> void:
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(t)
 	var first: Button
-	for e in [["Reprendre", func(): toggle_menu(), "menu_reprendre"], ["Bibliothèque", func(): library_screen(), "menu_bibliotheque"], ["Mode portable : %s" % ("oui" if big else "non"), func(): main.set_mobile(not big), "menu_portable"], ["Vue tactique : %s" % ("oui" if main.tactic else "non"), func(): main.set_tactic(not main.tactic), "menu_tactique"], ["Vocation dès le départ : %s" % ("oui" if main.voc_start else "non"), func(): main.set_voc_start(not main.voc_start), "menu_vocation"], ["Langue : Français" if not Lang.on else "Language: English", func(): main.set_lang("fr" if Lang.on else "en"), "menu_langue"], ["Abandonner la run", func(): main.abandon(), "menu_abandonner"], ["Quitter le jeu", func(): get_tree().quit(), "menu_quitter"]]:
+	var entries: Array = [["Reprendre", func(): toggle_menu(), "menu_reprendre"], ["Bibliothèque", func(): library_screen(), "menu_bibliotheque"], ["Mode portable : %s" % ("oui" if big else "non"), func(): main.set_mobile(not big), "menu_portable"], ["Vue tactique : %s" % ("oui" if main.tactic else "non"), func():
+		main.set_tactic(not main.tactic)
+		_reopen_menu(), "menu_tactique"], ["Vocation dès le départ : %s" % ("oui" if main.voc_start else "non"), func():
+		main.set_voc_start(not main.voc_start)
+		_reopen_menu(), "menu_vocation"], ["Langue : Français" if not Lang.on else "Language: English", func(): main.set_lang("fr" if Lang.on else "en"), "menu_langue"], ["Abandonner la run", func(): main.abandon(), "menu_abandonner"], ["Quitter le jeu", func(): get_tree().quit(), "menu_quitter"]]
+	if hud.visible and battle.player_turn and not battle.over:
+		entries.insert(1, ["Passer la salle (debug)", func():
+			toggle_menu()
+			battle.debug_win(), "menu_reprendre"])
+	for e in entries:
 		var b := _bar_button(e[0], e[2], 440.0, 54.0, 20)
 		b.pressed.connect(e[1])
 		var c := CenterContainer.new()
@@ -1336,7 +1373,9 @@ func refresh() -> void:
 	pile_lbl.text = ("%s · pioche %d · défausse %d" % [battle.active.nm, battle.draw_pile.size(), battle.discard.size()]) if battle.active else "Tour ennemi"
 	end_btn.disabled = not battle.player_turn or battle.busy
 	end_btn.text = "Fin du tour" if battle.active == null else "Fin · %s" % battle.active.nm
-	keys_plate.visible = (battle.turn <= 1 and not main.tuto if show_keys < 0 else show_keys == 1) and not big  # au doigt, pas de clavier
+	keys_plate.visible = (_keys_hover or show_keys == 1) and not big  # au survol de « Commandes » (ou H) ; au doigt, pas de clavier
+	tactic_btn.text = "◧  Tactique" if not main.tactic else "◧  Tactique ✓"
+	(tactic_btn.get_theme_stylebox("normal") as StyleBoxFlat).border_color = GOLD if main.tactic else GOLD.darkened(0.3)
 	var psig := "%s|%d|%d|%s" % [JSON.stringify(battle.powers), battle.discard.size(), battle.draw_pile.size(), log_box.visible]
 	if psig != _played_sig:
 		_played_sig = psig
@@ -1398,6 +1437,22 @@ func _rebuild_played() -> void:
 		_played_sig = ""))
 
 
+func _quick_btn(text: String, tip: String, cb: Callable) -> Button:
+	var qb := Button.new()
+	qb.text = text
+	qb.tooltip_text = tip
+	qb.focus_mode = Control.FOCUS_NONE
+	qb.add_theme_font_override("font", title_f)
+	qb.add_theme_font_size_override("font_size", 16)
+	qb.add_theme_color_override("font_color", INK)
+	qb.add_theme_stylebox_override("normal", sb(Color(0.08, 0.07, 0.075, 0.9), GOLD.darkened(0.3), 10, 1, 6))
+	qb.add_theme_stylebox_override("hover", sb(Color(0.18, 0.15, 0.1, 0.95), GOLD, 10, 1, 6))
+	qb.add_theme_stylebox_override("pressed", sb(Color(0.3, 0.22, 0.1, 0.95), GOLD, 10, 2, 6))
+	qb.custom_minimum_size = Vector2(0, 38)
+	qb.pressed.connect(cb)
+	return qb
+
+
 func _small_btn(text: String, cb: Callable) -> Button:
 	var b := Button.new()
 	b.text = text
@@ -1448,9 +1503,35 @@ const F_ART := Rect2(0.14, 0.175, 0.72, 0.475)
 const F_TXT := Rect2(0.14, 0.685, 0.72, 0.225)
 
 
-func make_card(ci: Dictionary) -> Control:
+func _frame_slices(tex: Texture2D, marge: float) -> Control:
+	## Le cadre peint en trois tranches : le haut et le bas tels quels, la bande du texte (0,72 -> 0,86 de la carte)
+	## étirée de CARD_EXTRA. Les ornements ne se déforment pas, la carte s'allonge.
+	var holder := Control.new()
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var W := float(tex.get_width())
+	var H := float(tex.get_height())
+	var S := CARD_BASE * (1.0 + 2.0 * marge)
+	var cy := func(f: float) -> float: return (marge + f) / (1.0 + 2.0 * marge)
+	var a: float = cy.call(0.72)
+	var b: float = cy.call(0.86)
+	for part in [[0.0, a, 0.0], [a, b, CARD_EXTRA], [b, 1.0, 0.0]]:
+		var at := AtlasTexture.new()
+		at.atlas = tex
+		at.region = Rect2(0, part[0] * H, W, (part[1] - part[0]) * H)
+		var tr := TextureRect.new()
+		tr.texture = at
+		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tr.stretch_mode = TextureRect.STRETCH_SCALE
+		tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tr.position = Vector2(-CARD_BASE.x * marge, -CARD_BASE.y * marge + part[0] * S.y + (CARD_EXTRA if part[0] >= b else 0.0))
+		tr.size = Vector2(S.x, (part[1] - part[0]) * S.y + part[2])
+		holder.add_child(tr)
+	return holder
+
+
+func make_card(ci: Dictionary, see := true) -> Control:
 	var c := Data.card(ci)
-	if main and main.has_method("library_see"):
+	if see and main and main.has_method("library_see"):
 		main.library_see(c.id)
 	var col: Color = Data.CLASS_COLOR[c.cls[0]]
 	var col2: Color = Data.CLASS_COLOR[c.cls[1]] if c.cls.size() > 1 else col
@@ -1471,10 +1552,10 @@ func make_card(ci: Dictionary) -> Control:
 	if rar >= 3:
 		bgs.shadow_color = Data.RARITY_COL[rar] * Color(1, 1, 1, 0.55)
 	var bg := _panel(card, bgs)
-	bg.position = CARD * Vector2(0.05, 0.05)
-	bg.size = CARD * Vector2(0.9, 0.91)
-	var art_r := Rect2(CARD * F_ART.position, CARD * F_ART.size)
-	var txt_r := Rect2(CARD * F_TXT.position, CARD * F_TXT.size)
+	bg.position = CARD_BASE * Vector2(0.05, 0.05)
+	bg.size = CARD_BASE * Vector2(0.9, 0.91) + Vector2(0, CARD_EXTRA)
+	var art_r := Rect2(CARD_BASE * F_ART.position, CARD_BASE * F_ART.size)
+	var txt_r := Rect2(CARD_BASE * F_TXT.position, CARD_BASE * F_TXT.size + Vector2(0, CARD_EXTRA))
 	var art := TextureRect.new()
 	var path := "res://assets/art/card_%s.png" % c.id
 	art.texture = load(path) if ResourceLoader.exists(path) else (_art2(col, col2, c.kind) if c.has("guild") else _art(col, c.kind))
@@ -1513,22 +1594,16 @@ func make_card(ci: Dictionary) -> Control:
 		lf.size = art_r.size
 	# le cadre peint : celui de la classe, ou de la guilde (moitié de chaque classe), ou de l'objet.
 	# Toile plus grande que la carte (cut_classes.py) : les ornements débordent.
-	var fr := TextureRect.new()
 	var fname := "c_objet" if obj else "c_%s" % c.cls[0]
 	if not obj and c.cls.size() > 1:
 		var gl: Array = Guildes.LIST[c.g] if c.has("g") else [c.cls[0], c.cls[1]]
 		fname = "g_%s_%s" % [gl[0], gl[1]]
 	var fpath := "res://assets/ui/frame_%s.png" % fname
+	var marge := FRAME_MARGE
 	if not ResourceLoader.exists(fpath):
 		fpath = "res://assets/ui/frame_%s.png" % FRAME_OF.get(c.kind, "technique")
-		fr.size = CARD
-	else:
-		fr.position = -CARD * FRAME_MARGE
-		fr.size = CARD * (1.0 + 2.0 * FRAME_MARGE)
-	fr.texture = load(fpath)
-	fr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	fr.stretch_mode = TextureRect.STRETCH_SCALE
-	fr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		marge = 0.0
+	var fr := _frame_slices(load(fpath), marge)
 	if obj and legend:
 		fr.modulate = Color(1.0, 0.85, 0.6)
 	card.add_child(fr)
@@ -1552,8 +1627,8 @@ func make_card(ci: Dictionary) -> Control:
 	var nm := _shadowed(_label(shown, fs, INK, title_f), 5)
 	nm.clip_text = true
 	nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	nm.position = Vector2(CARD.x * 0.18, CARD.y * 0.06)
-	nm.size = Vector2(CARD.x * 0.64, CARD.y * 0.1)
+	nm.position = Vector2(CARD.x * 0.18, CARD_BASE.y * 0.06)
+	nm.size = Vector2(CARD.x * 0.64, CARD_BASE.y * 0.1)
 	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	nm.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	card.add_child(nm)
@@ -1592,7 +1667,7 @@ func make_card(ci: Dictionary) -> Control:
 	card.tooltip_text = ""
 	card.set_meta("kwcard", ci)
 	var gem := _shadowed(_label("✦" if legend else "◆", 19 if rar >= 3 else 15, Data.RARITY_COL[rar], title_f), 4)
-	gem.position = Vector2(CARD.x * 0.83, CARD.y * 0.05)
+	gem.position = Vector2(CARD.x * 0.83, CARD_BASE.y * 0.05)
 	card.add_child(gem)
 	if rar > 1:
 		nm.add_theme_color_override("font_color", Data.RARITY_COL[rar].lightened(0.3))
@@ -1628,7 +1703,7 @@ func make_card(ci: Dictionary) -> Control:
 			fx.append(["attaque", str(c.dmg) + ("×%d" % c.hits if c.get("hits", 1) > 1 else ""), BUBBLE_DMG])
 		if c.get("heal", 0) > 0 or c.get("heal_all", 0) > 0:
 			fx.append(["pv", str(c.get("heal", c.get("heal_all", 0))), BUBBLE_HEAL])
-		if c.get("block", 0) > 0 and not String(c.text).contains("allié gagne {block}"):  # l'armure d'un autre reste dans la phrase
+		if c.get("block", 0) > 0:
 			fx.append(["armure", str(c.block), BUBBLE_ARM])
 		for k in fx.size():
 			var d := 48.0 if k == 0 else 38.0
@@ -1651,12 +1726,12 @@ func make_card(ci: Dictionary) -> Control:
 	card.add_child(body)
 	var long := txt.length() + tt.length()
 	if txt != "":
-		var r := _rich(kw_bbcode(txt), 13 if long <= 50 else (12 if long <= 80 else 11), INK)
+		var r := _rich(kw_bbcode(txt), 15 if long <= 50 else (14 if long <= 80 else 13), INK)
 		r.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED  # déjà traduit, mots-clés compris
 		r.custom_minimum_size.x = txt_r.size.x + 8
 		body.add_child(r)
 	if tt != "":
-		var r2 := _rich(kw_bbcode(tt), 11 if long <= 80 else 10, Color("#ffd98a"))
+		var r2 := _rich(kw_bbcode(tt), 13 if long <= 80 else 12, Color("#ffd98a"))
 		r2.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 		r2.custom_minimum_size.x = txt_r.size.x + 8
 		body.add_child(r2)
@@ -1833,9 +1908,12 @@ func _kw_update() -> void:
 		tgt = kw_force
 	if tgt == null and big and battle and battle.card_sel >= 0 and battle.card_sel < _cards.size():
 		tgt = _cards[battle.card_sel]
-	if tgt == _kw_for:
-		if tgt and is_instance_valid(tgt):
-			_kw_place(tgt)
+	# une carte libérée (écran refermé) vaut null dans une comparaison : sans ce garde-fou, ses encarts restaient affichés
+	if tgt != null and tgt == _kw_for and is_instance_valid(_kw_for):
+		_kw_place(tgt)
+		return
+	if tgt == null and (kw_panel == null or not kw_panel.visible):
+		_kw_for = null
 		return
 	_kw_for = tgt
 	if kw_panel == null:
@@ -1868,7 +1946,7 @@ func _kw_update() -> void:
 		hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		p.add_child(hb)
 		var im := TextureRect.new()
-		var ip := "res://assets/ui/kw_%s.png" % e.icon
+		var ip := ("res://assets/ui/%s.png" if e.icon.begins_with("guild_") or e.icon.begins_with("vocation_") else "res://assets/ui/kw_%s.png") % e.icon
 		if ResourceLoader.exists(ip):
 			im.texture = load(ip)
 		im.custom_minimum_size = Vector2(34, 34)
@@ -1920,9 +1998,8 @@ func _process(dt: float) -> void:
 	_kw_update()
 	_place_arrow()
 	_place_turn_arrow()
-	if big:
-		_fit_screen(overlay)
-		_fit_screen(sheet_layer)
+	_fit_screen(overlay)  # un écran trop haut se réduit (téléphone, ou l'escouade en deux rangées)
+	_fit_screen(sheet_layer)
 	if touch_box:
 		# menu toujours là ; caméra, annuler et danger seulement sur le plateau
 		for i in range(1, touch_box.get_child_count()):
@@ -2153,8 +2230,10 @@ func _place_tags() -> void:
 # ------------------------------------------------------------------ écrans de choix
 
 var last_n := 0            # nombre d'options du dernier choix (pilote de test)
+var skip_ok := false  # l'écran en cours se passe (Échap, clic droit)
 func choose(title: String, subtitle: String, options: Array, allow_skip := false, skip_text := "Passer", portrait := "", top_card := {}) -> int:
 	_close_overlay()
+	skip_ok = allow_skip
 	last_n = options.size()
 	overlay = Control.new()
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -2231,7 +2310,7 @@ func choose(title: String, subtitle: String, options: Array, allow_skip := false
 		grid.add_theme_constant_override("h_separation", 14)
 		grid.add_theme_constant_override("v_separation", 14)
 		var sc := ScrollContainer.new()
-		sc.custom_minimum_size = Vector2(1400, 600)
+		sc.custom_minimum_size = Vector2(1400, maxf(260.0, root.size.y - 360.0))  # le bouton « Fermer » reste toujours à l'écran
 		sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 		var cc := CenterContainer.new()
 		cc.custom_minimum_size = Vector2(1390, 0)
@@ -2251,10 +2330,21 @@ func choose(title: String, subtitle: String, options: Array, allow_skip := false
 				row = hb
 			else:
 				row2 = hb
+	elif options.size() >= 8 and not options.any(func(o): return o.has("card") or o.has("hidden")):
+		# huit choix (l'escouade) : deux rangées de quatre, pour que ça respire
+		var grid := GridContainer.new()
+		grid.columns = 4
+		grid.add_theme_constant_override("h_separation", 22)
+		grid.add_theme_constant_override("v_separation", 18)
+		var cc := CenterContainer.new()
+		cc.add_child(grid)
+		box.add_child(cc)
+		row = grid
 	else:
 		var hb := HBoxContainer.new()
 		hb.alignment = BoxContainer.ALIGNMENT_CENTER
-		hb.add_theme_constant_override("separation", 26 if options.size() <= 6 else 12)
+		# des cartes en grand : les ornements des cadres débordent, il faut de la marge entre elles
+		hb.add_theme_constant_override("separation", (70 if options.size() <= 4 else 40) if options.any(func(o): return o.has("card")) else (26 if options.size() <= 6 else 12))
 		box.add_child(hb)
 		row = hb
 	for i in options.size():
@@ -2287,7 +2377,7 @@ func choose(title: String, subtitle: String, options: Array, allow_skip := false
 			_passthrough(w)
 			w = holder
 		else:
-			w = _option(o, int(o.get("w", 164 if split else (250 if options.size() <= 4 else (205 if options.size() <= 6 else (186 if options.size() <= 7 else 170))))))
+			w = _option(o, int(o.get("w", 164 if split else (250 if options.size() <= 4 or options.size() >= 8 else (205 if options.size() <= 6 else 186)))))
 		w.mouse_filter = Control.MOUSE_FILTER_STOP
 		var idx := i
 		w.focus_mode = Control.FOCUS_ALL
@@ -2443,8 +2533,24 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 	area.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	area.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(area)
+	# les salles posées à la main (6 étapes + gardien) : rééchantillonnées le long de chaque voie s'il y en a plus
+	var cols: Array = m[1]
+	var n_steps: int = fmap.size() - 1
+	var hand: int = m[1].size() - 1
+	if n_steps != hand and n_steps > 0:
+		cols = []
+		for k in n_steps:
+			var t: float = float(k) * float(hand - 1) / float(maxi(n_steps - 1, 1))
+			var k0 := int(floor(t))
+			var k1 := mini(k0 + 1, hand - 1)
+			var f := t - k0
+			var col: Array = []
+			for i in m[1][k0].size():
+				col.append((m[1][k0][i] as Vector2).lerp(m[1][k1][mini(i, m[1][k1].size() - 1)], f))
+			cols.append(col)
+		cols.append(m[1][hand])
 	var pos := func(k: int, i: int) -> Vector2:
-		var col: Array = m[1][mini(k, m[1].size() - 1)]
+		var col: Array = cols[mini(k, cols.size() - 1)]
 		var p: Vector2 = col[0] if col.size() == 1 else col[clampi(i + (1 if fmap[k].size() == 1 else 0), 0, col.size() - 1)]
 		return stage.position + p * stage.size
 	# le sentier : une sente de terre battue qui serpente, bords fondus dans l'image ; des pas dorés sur les chemins
@@ -2464,13 +2570,15 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 					pts.append(a.lerp(b, u) + nrm * (wob + (10.0 if int(sd) % 2 == 0 else -10.0)) * env)
 				var trod: bool = visited.has(Vector2i(k, i)) and visited.has(Vector2i(k + 1, j))
 				var open: bool = k == step - 1 and i == lane and nexts.has(j)
-				for layer in [[20.0, 0.24], [12.0, 0.46]]:  # le bord usé, puis le cœur de la sente
+				# bien lisible sur le décor : un bord sombre, un cœur clair ; le chemin ouvert en or, celui déjà suivi en terre
+				var core := Color(1.0, 0.8, 0.32, 1.0) if open else (Color(0.5, 0.36, 0.22, 0.95) if trod else Color(0.98, 0.92, 0.76, 0.8))
+				for layer in [[18.0, Color(0.06, 0.04, 0.03, 0.6)], [8.0, core]]:
 					var ln := Line2D.new()
 					ln.points = pts
-					ln.width = layer[0] * (1.15 if trod or open else 1.0)
+					ln.width = layer[0] * (1.35 if open else 1.0)
 					ln.texture = trail_tex()
 					ln.texture_mode = Line2D.LINE_TEXTURE_STRETCH
-					ln.default_color = Color(0.24, 0.16, 0.09, layer[1] * (1.4 if trod or open else 1.0))
+					ln.default_color = layer[1]
 					ln.joint_mode = Line2D.LINE_JOINT_ROUND
 					ln.begin_cap_mode = Line2D.LINE_CAP_ROUND
 					ln.end_cap_mode = Line2D.LINE_CAP_ROUND
@@ -2624,14 +2732,27 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 	eq.custom_minimum_size = Vector2(320, 46)
 	eq.pressed.connect(func(): picked.emit(-2))
 	var dk := eq.duplicate(0)
-	dk.text = "Voir le paquet"
+	dk.text = "Paquet"
 	dk.pressed.connect(func(): picked.emit(-4))
+	for pair in [[eq, "equipement"], [dk, "paquet"]]:
+		_painted_button(pair[0], pair[1])
 	var ec := HBoxContainer.new()
 	ec.alignment = BoxContainer.ALIGNMENT_CENTER
 	ec.add_theme_constant_override("separation", 20)
 	ec.add_child(eq)
 	ec.add_child(dk)
 	foot.add_child(ec)
+	# l'équipe, comme en combat : PV, stats ; le portrait ouvre la fiche (équipement, trait, paquet)
+	var team := VBoxContainer.new()
+	team.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	team.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	team.offset_left = 24
+	team.offset_bottom = -24
+	team.add_theme_constant_override("separation", 6)
+	overlay.add_child(team)
+	var tp := {}
+	_rebuild_heroes(team, main.heroes, tp)
+	_refresh_heroes(tp)
 	if first and Input.get_connected_joypads().size() > 0:
 		first.grab_focus.call_deferred()
 	overlay.modulate.a = 0
@@ -2639,6 +2760,27 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 	var i: int = await picked
 	_close_overlay()
 	return i
+
+
+func _painted_button(b: Button, k: String) -> void:
+	## Bouton peint (KIE, assets/ui/bouton_<k>.png) : médaillon à gauche, plaque de cuir pour le texte à droite.
+	var path := "res://assets/ui/bouton_%s.png" % k
+	if not ResourceLoader.exists(path):
+		return
+	var tex: Texture2D = load(path)
+	var h := 64.0
+	var w := h * tex.get_width() / tex.get_height()
+	for state in ["normal", "hover", "pressed", "focus"]:
+		var st := StyleBoxTexture.new()
+		st.texture = tex
+		st.content_margin_left = w * 0.48  # le texte sur la plaque, pas sur le médaillon
+		st.content_margin_right = w * 0.1
+		st.modulate_color = Color(1.25, 1.18, 1.05) if state in ["hover", "focus"] else (Color(0.85, 0.8, 0.75) if state == "pressed" else Color.WHITE)
+		b.add_theme_stylebox_override(state, st)
+	b.custom_minimum_size = Vector2(w, h)
+	b.add_theme_color_override("font_color", Color("#f4e6c4"))
+	b.add_theme_color_override("font_hover_color", Color.WHITE)
+	b.add_theme_font_size_override("font_size", 15)
 
 
 func _passthrough(n: Node) -> void:
@@ -2730,6 +2872,27 @@ func _vignette(title: String, icon: String, text: String, col: Color, tag: Strin
 	return v
 
 
+# encarts de classe peints (KIE, tools/encarts.py) : marges 9-slice puis bord uni, en pixels de l'image réduite
+const ENCARTS := {"garde": [45, 51, 45, 47, 24, 33, 21, 22], "lame": [42, 54, 42, 42, 7, 23, 7, 9], "oracle": [28, 52, 28, 32, 10, 32, 10, 12], "artificier": [33, 49, 33, 42, 11, 29, 11, 10], "moine": [43, 63, 43, 42, 17, 36, 17, 16], "trappeur": [44, 63, 44, 44, 25, 44, 24, 26], "tidiane": [26, 42, 26, 28, 7, 27, 7, 8], "receleur": [32, 46, 32, 34, 14, 28, 13, 15]}
+func encart(k: String, pad := 10) -> StyleBox:
+	## L'encart peint de la classe (9-slice), ou null s'il n'est pas (encore) dans assets/ui.
+	var path := "res://assets/ui/encart_%s.png" % k
+	if not ENCARTS.has(k) or not ResourceLoader.exists(path):
+		return null
+	var m: Array = ENCARTS[k]
+	var st := StyleBoxTexture.new()
+	st.texture = load(path)
+	st.texture_margin_left = m[0]
+	st.texture_margin_top = m[1]
+	st.texture_margin_right = m[2]
+	st.texture_margin_bottom = m[3]
+	st.content_margin_left = m[4] + pad
+	st.content_margin_top = m[5] + pad
+	st.content_margin_right = m[6] + pad
+	st.content_margin_bottom = m[7] + pad
+	return st
+
+
 func _option(o: Dictionary, w := 250) -> Control:
 	var col: Color = o.get("color", GOLD)
 	if o.has("vignette"):
@@ -2750,6 +2913,9 @@ func _option(o: Dictionary, w := 250) -> Control:
 	s.content_margin_top = 12 if small else 26
 	s.content_margin_bottom = 12 if small else 20
 	p.add_theme_stylebox_override("panel", s)
+	var enc := encart(o.get("encart", ""), 8)
+	if enc:
+		p.add_theme_stylebox_override("panel", enc)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 12)
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -2767,7 +2933,7 @@ func _option(o: Dictionary, w := 250) -> Control:
 	elif o.has("image") and ResourceLoader.exists(o.image):
 		var im := TextureRect.new()
 		im.texture = load(o.image)
-		im.custom_minimum_size = Vector2(56, 56) if small else Vector2(110, 110)
+		im.custom_minimum_size = Vector2(56, 56) if small else (Vector2(78, 78) if o.has("cards") else Vector2(110, 110))
 		im.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		im.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		im.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -2790,11 +2956,62 @@ func _option(o: Dictionary, w := 250) -> Control:
 		for c in o.chips:
 			cr.add_child(_chip(c[0], c[1], Color.WHITE, 24))
 		v.add_child(cr)
-	var d := _label(o.get("text", ""), 12 if small else 15, DIM)
+	var d := _label(o.get("text", ""), 12 if small else (13 if o.has("cards") else 15), DIM)
 	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(d)
+	if o.has("cards"):
+		v.add_theme_constant_override("separation", 6)
+		v.add_child(mini_cards(o.cards, 0.36))
+	if o.has("tip"):
+		p.tooltip_text = o.tip
 	return p
+
+
+func mini_cards(ids: Array, k := 0.34) -> HBoxContainer:
+	## Trois cartes en miniature (classe ou guilde) ; au survol, la carte en grand à côté. Le clic passe au parent.
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 6)
+	row.mouse_filter = Control.MOUSE_FILTER_PASS
+	for id in ids:
+		var ci := {"id": id, "lvl": 1}
+		var holder := Control.new()
+		holder.custom_minimum_size = CARD * k
+		holder.mouse_filter = Control.MOUSE_FILTER_PASS
+		var w := make_card(ci, false)
+		w.scale = Vector2.ONE * k
+		w.pivot_offset = Vector2.ZERO
+		_passthrough(w)
+		holder.add_child(w)
+		holder.mouse_entered.connect(func(): _card_peek(ci, holder))
+		holder.mouse_exited.connect(func(): _card_peek({}, null))
+		row.add_child(holder)
+	return row
+
+
+var _peek: Control
+func _card_peek(ci: Dictionary, near: Control) -> void:
+	## La carte survolée en taille normale, posée à côté de sa miniature (au-dessus de tout).
+	if _peek and is_instance_valid(_peek):
+		_peek.queue_free()
+	_peek = null
+	if ci.is_empty() or near == null:
+		return
+	var w := make_card(ci, false)
+	var k := 1.2
+	w.scale = Vector2.ONE * k
+	w.pivot_offset = Vector2.ZERO
+	_passthrough(w)
+	w.z_index = 110
+	var r := near.get_global_rect()
+	var pos := Vector2(r.end.x + 12, r.position.y - CARD.y * k * 0.5)
+	if pos.x + CARD.x * k > root.size.x:
+		pos.x = r.position.x - CARD.x * k - 12
+	pos.y = clampf(pos.y, 8, root.size.y - CARD.y * k - 8)
+	w.position = pos
+	root.add_child(w)
+	_peek = w
 
 
 func _fit_screen(layer: Control) -> void:
@@ -2907,6 +3124,8 @@ func fight_summary(title: String, rows: Array, loot: Array, can_equip: bool) -> 
 
 
 func _close_overlay() -> void:
+	_card_peek({}, null)
+	skip_ok = false
 	if overlay and is_instance_valid(overlay):
 		overlay.queue_free()
 	overlay = null
@@ -3213,6 +3432,8 @@ func vocation_screen(h: Unit, picks: Array) -> int:
 	var hs := sb(Color(0.07, 0.06, 0.07, 0.95), col, 12, 3, 12)
 	hs.set_content_margin_all(16)
 	hp.add_theme_stylebox_override("panel", hs)
+	if encart(h.key):
+		hp.add_theme_stylebox_override("panel", encart(h.key))
 	hp.custom_minimum_size = Vector2(250, 0)
 	row.add_child(hp)
 	var hv := VBoxContainer.new()
@@ -3248,7 +3469,7 @@ func vocation_screen(h: Unit, picks: Array) -> int:
 	pv.add_child(pvv)
 	var svc := SubViewportContainer.new()
 	svc.stretch = true
-	svc.custom_minimum_size = Vector2(392, 300)
+	svc.custom_minimum_size = Vector2(392, 240)
 	svc.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pvv.add_child(svc)
 	var sv := SubViewport.new()
@@ -3277,7 +3498,16 @@ func vocation_screen(h: Unit, picks: Array) -> int:
 	info.custom_minimum_size = Vector2(392, 0)
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	pvv.add_child(info)
+	var ex_slot := VBoxContainer.new()  # trois cartes de la guilde, en miniature (en grand au survol)
+	ex_slot.mouse_filter = Control.MOUSE_FILTER_PASS
+	pvv.add_child(ex_slot)
 	var show := func(k: String) -> void:
+		for ch in ex_slot.get_children():
+			ch.queue_free()
+		var ex_lbl := _label("Cartes de la guilde", 13, GOLD, title_f)
+		ex_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		ex_slot.add_child(ex_lbl)
+		ex_slot.add_child(mini_cards(main.guild_emblems(Guildes.index(h.key, k)), 0.4))
 		for ch in pivot.get_children():
 			ch.queue_free()
 		var path := "res://assets/u_%s__%s.glb" % [h.key, k]
@@ -3298,6 +3528,7 @@ func vocation_screen(h: Unit, picks: Array) -> int:
 		cam3.look_at(Vector3(0, ht * 0.5, 0))
 		var g := Guildes.index(h.key, k)
 		var gl: Array = Guildes.LIST[g]
+		pv.add_theme_stylebox_override("panel", encart(k) if encart(k) else ps)  # l'encart de la voie survolée
 		var kc: Color = Data.CLASS_COLOR[k]
 		info.text = "[center][font_size=22][color=#%s]%s + %s[/color][/font_size]\n[color=#e3b45c]Guilde : %s[/color] — %s[/center]\n%s\n\n[color=#%s]%s[/color]" % [
 			kc.lightened(0.3).to_html(false), Data.HEROES[h.key].name, Data.HEROES[k].name, gl[2], gl[3], Guildes.DESC[g],
@@ -3855,7 +4086,7 @@ func equipment_screen(heroes: Array, bag: Array) -> Dictionary:
 		for i in bag_tiles.size():
 			bag_tiles[i].modulate = Color(1.3, 1.2, 0.9) if i == sel[0] else (Color(0.7, 0.7, 0.75) if sel[0] >= 0 else Color.WHITE)
 		for i in hero_panels.size():
-			var ok: bool = sel[0] < 0 or Data.ITEMS[bag[sel[0]]].owner in ["any", heroes[i].key]
+			var ok: bool = true  # tout se porte par tout le monde
 			hero_panels[i].modulate = Color.WHITE if ok else Color(0.4, 0.4, 0.45)
 			hero_panels[i].mouse_filter = Control.MOUSE_FILTER_STOP if ok else Control.MOUSE_FILTER_IGNORE
 	if bag.is_empty():
@@ -3864,7 +4095,7 @@ func equipment_screen(heroes: Array, bag: Array) -> Dictionary:
 		var id: String = bag[bi]
 		var it: Dictionary = Data.ITEMS[id]
 		var t := _gear_tile(id, 76, ITEM_COL[it.rarity])
-		var fits: Array = heroes.filter(func(u): return it.owner == "any" or it.owner == u.key)
+		var fits: Array = heroes
 		t.mouse_entered.connect(func():
 			show.call(id, ("pour " + ", ".join(fits.map(func(u): return u.nm))) if fits.size() > 0 else "personne ici ne sait s'en servir"))
 		t.gui_input.connect(func(e):
