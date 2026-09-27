@@ -256,6 +256,65 @@ func _speech(text: String) -> Control:
 	return cc
 
 
+# Lettrage des titres d'écran : l'alphabet peint dans le style du logo (Higgsfield, tools/lettres.py -> assets/ui/lettres.png).
+# glyphe -> [x, y, largeur, hauteur, ligne de base] dans l'atlas
+const LETTRES := {"A": [0, 0, 74, 74, 74], "B": [76, 0, 61, 74, 74], "C": [139, 0, 61, 74, 74], "D": [202, 0, 63, 74, 74], "E": [267, 0, 55, 73, 73], "F": [324, 0, 56, 74, 74], "G": [382, 0, 66, 73, 73], "H": [450, 0, 66, 73, 73], "I": [518, 0, 37, 75, 75], "J": [557, 0, 58, 74, 74], "K": [617, 0, 64, 74, 74], "L": [683, 0, 53, 74, 74], "M": [738, 0, 77, 74, 74], "N": [817, 0, 66, 74, 74], "O": [885, 0, 66, 74, 74], "P": [953, 0, 61, 75, 75], "Q": [1016, 0, 70, 79, 74], "R": [1088, 0, 64, 74, 74], "S": [1154, 0, 56, 74, 74], "T": [1212, 0, 64, 74, 74], "U": [1278, 0, 65, 73, 73], "V": [1345, 0, 67, 73, 73], "W": [1414, 0, 86, 73, 73], "X": [1502, 0, 67, 73, 73], "Y": [1571, 0, 72, 73, 73], "Z": [1645, 0, 58, 73, 73], "É": [1705, 0, 55, 92, 92], "È": [1762, 0, 56, 90, 90], "Ê": [1820, 0, 55, 90, 90], "À": [1877, 0, 70, 90, 90], "Ç": [1949, 0, 59, 88, 74], "Ô": [2010, 0, 64, 90, 90], "Û": [2076, 0, 64, 89, 89], "Î": [2142, 0, 40, 89, 89], "Ù": [2184, 0, 64, 89, 89], "Ë": [2250, 0, 54, 89, 89], "'": [2306, 0, 31, 41, 74], "-": [2339, 0, 42, 28, 51], "!": [2383, 0, 32, 79, 79], "?": [2417, 0, 54, 80, 80], "0": [2473, 0, 60, 76, 76], "1": [2535, 0, 46, 75, 75], "2": [2583, 0, 56, 76, 76], "3": [2641, 0, 58, 76, 76], "4": [2701, 0, 59, 75, 75], "5": [2762, 0, 57, 75, 75], "6": [2821, 0, 57, 75, 75], "7": [2880, 0, 55, 75, 75], "8": [2937, 0, 58, 76, 76], "9": [2997, 0, 58, 75, 75], "·": [3057, 0, 30, 33, 53], ":": [3089, 0, 29, 59, 59], ",": [3120, 0, 28, 41, 20], ".": [3150, 0, 30, 33, 33], "&": [3182, 0, 66, 74, 74], "/": [3250, 0, 52, 75, 75]}
+static var _lettres_tex: Texture2D
+
+
+func _title(text: String, size: int) -> Label:
+	## Un titre d'écran : le Label garde la mise en page (texte transparent), le mot peint est posé par-dessus.
+	var l := _label(text, size, Color(0, 0, 0, 0))
+	l.set_meta("tsize", size)
+	_paint_title(l)
+	return l
+
+
+func _paint_title(l: Label) -> void:
+	for c in l.get_children():
+		if c.has_meta("word"):
+			c.queue_free()
+	if _lettres_tex == null:
+		_lettres_tex = load("res://assets/ui/lettres.png")
+	var k: float = float(l.get_meta("tsize")) * 0.9 / 74.0
+	var asc := 0
+	var desc := 0
+	var txt: String = l.text.to_upper()
+	for ch in txt:
+		if LETTRES.has(ch):
+			asc = maxi(asc, LETTRES[ch][4])
+			desc = maxi(desc, LETTRES[ch][3] - LETTRES[ch][4])
+	var word := Control.new()
+	word.set_meta("word", true)
+	word.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var x := 0.0
+	for ch in txt:
+		if not LETTRES.has(ch):
+			x += 26.0 * k  # espace, ou un signe absent de l'alphabet peint
+			continue
+		var g: Array = LETTRES[ch]
+		var at := AtlasTexture.new()
+		at.atlas = _lettres_tex
+		at.region = Rect2(g[0], g[1], g[2], g[3])
+		var tr := TextureRect.new()
+		tr.texture = at
+		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tr.stretch_mode = TextureRect.STRETCH_SCALE
+		tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tr.position = Vector2(x, (asc - g[4]) * k)
+		tr.size = Vector2(g[2], g[3]) * k
+		word.add_child(tr)
+		x += (g[2] - 4) * k  # les contours se touchent, comme dans le logo
+	var sz := Vector2(x, (asc + desc) * k)
+	word.set_anchors_preset(Control.PRESET_CENTER)
+	word.offset_left = -sz.x / 2
+	word.offset_right = sz.x / 2
+	word.offset_top = -sz.y / 2
+	word.offset_bottom = sz.y / 2
+	l.custom_minimum_size = Vector2(0, sz.y)
+	l.add_child(word)
+
+
 func _shadowed(l: Label, outline := 6) -> Label:
 	l.add_theme_constant_override("outline_size", outline)
 	l.add_theme_color_override("font_outline_color", Color(0.04, 0.03, 0.03, 0.85))
@@ -590,7 +649,7 @@ func _build_banner() -> void:
 	banner_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	banner_box.modulate.a = 0
 	root.add_child(banner_box)
-	banner_title = _shadowed(_label("", 52, INK, wide_f), 12)
+	banner_title = _title("", 52)
 	banner_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	banner_sub = _shadowed(_label("", 16, GOLD), 6)
 	banner_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -606,6 +665,7 @@ func _build_banner() -> void:
 
 func banner(title: String, subtitle := "") -> void:
 	banner_title.text = title
+	_paint_title(banner_title)
 	banner_sub.text = subtitle
 	var tw := create_tween()
 	banner_box.position.y = 130
@@ -819,7 +879,7 @@ func toggle_menu() -> void:
 	box.add_theme_constant_override("separation", 16)
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	menu.add_child(box)
-	var t := _shadowed(_label("PAUSE", 56, INK, wide_f), 12)
+	var t := _title("PAUSE", 56)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(t)
 	var first: Button
@@ -1898,7 +1958,7 @@ func choose(title: String, subtitle: String, options: Array, allow_skip := false
 	box.add_theme_constant_override("separation", 18)
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(box)
-	var tl := _shadowed(_label(title, 44, INK, wide_f), 10)
+	var tl := _title(title, 44)
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(tl)
 	if speaker != "" and ResourceLoader.exists("res://assets/ui/boite_%s.png" % speaker) and subtitle != "":
@@ -2129,7 +2189,7 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 	head.add_theme_constant_override("separation", 2)
 	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(head)
-	var tl := _shadowed(_label(title, 44, INK, wide_f), 10)
+	var tl := _title(title, 44)
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	head.add_child(tl)
 	var sl := _shadowed(_label(subtitle, 16, GOLD), 6)
@@ -2353,7 +2413,7 @@ const ITEM_RAR := ["", "Commune", "Peu commune", "Rare", "Mythique"]
 const PARCH_INK := Color("#2b1a0e")
 
 
-func _vignette(title: String, icon: String, text: String, col: Color, tag: String, seen := true, w := 176.0, glyph := "") -> Control:
+func _vignette(title: String, icon: String, text: String, col: Color, tag: String, seen := true, w := 176.0, glyph := "", chips: Array = []) -> Control:
 	## Vignette façon étal (reliques, équipement) : nom au-dessus, cadre de cuir, rareté dans le bandeau,
 	## grande icône, gemme de rareté sur le séparateur, effet en dessous. Pas encore vue : silhouette et « ??? ».
 	var h := w * 609.0 / 360.0
@@ -2409,10 +2469,24 @@ func _vignette(title: String, icon: String, text: String, col: Color, tag: Strin
 	gem.position = Vector2(w * 0.5 - 7, h * 0.557 - 7)
 	gem.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(gem)
+	var y0 := 0.6
+	if seen and not chips.is_empty():
+		# bonus chiffrés : idéogrammes et valeurs, sous la gemme
+		var cr := HBoxContainer.new()
+		cr.alignment = BoxContainer.ALIGNMENT_CENTER
+		cr.add_theme_constant_override("separation", 8)
+		for c in chips:
+			var ch := _chip(c[0], c[1], Color.WHITE, 22 if w >= 140 else 18)
+			for l in ch.find_children("*", "Label", true, false):
+				l.add_theme_color_override("font_color", PARCH_INK)
+				l.add_theme_constant_override("outline_size", 0)
+			cr.add_child(ch)
+		put.call(cr, 0.06, 0.59, 0.94, 0.68)
+		y0 = 0.69
 	var tx := _label(text if seen else "", 12 if w >= 140 else 10, PARCH_INK)
 	tx.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	tx.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	put.call(tx, 0.11, 0.6, 0.89, 0.95)
+	put.call(tx, 0.11, y0, 0.89, 0.95)
 	return v
 
 
@@ -2420,7 +2494,7 @@ func _option(o: Dictionary, w := 250) -> Control:
 	var col: Color = o.get("color", GOLD)
 	if o.has("vignette"):
 		# équipement et reliques : la vignette de l'étal
-		var vg := _vignette(o.title, o.get("image", ""), o.get("text", ""), col, o.vignette, true, 118.0 if w < 170 else clampf(w * 0.8, 140.0, 190.0), o.get("glyph", ""))
+		var vg := _vignette(o.title, o.get("image", ""), o.get("text", ""), col, o.vignette, true, 118.0 if w < 170 else clampf(w * 0.8, 140.0, 190.0), o.get("glyph", ""), o.get("chips", []))
 		if o.get("dim", false):
 			vg.modulate = Color(0.55, 0.55, 0.6)
 		var pc := PanelContainer.new()
@@ -2513,7 +2587,7 @@ func fight_summary(title: String, rows: Array, loot: Array, can_equip: bool) -> 
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_theme_constant_override("separation", 16)
 	overlay.add_child(box)
-	var tl := _shadowed(_label(title, 44, INK, wide_f), 10)
+	var tl := _title(title, 44)
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(tl)
 	var hr := HBoxContainer.new()
@@ -2810,7 +2884,7 @@ func _fill_gear(list: VBoxContainer) -> void:
 		for id in ids:
 			var it: Dictionary = Data.ITEMS[id]
 			var seen: bool = main.library.has("item:" + id)
-			var tile := _vignette(it.name, Data.item_icon(id), Data.item_text(id), ITEM_COL[it.rarity], ITEM_RAR[it.rarity], seen, 150.0)
+			var tile := _vignette(it.name, Data.item_icon(id), Data.item_passives(id), ITEM_COL[it.rarity], Data.item_slot(id), seen, 150.0, "", Data.item_chips(id))
 			tile.mouse_filter = Control.MOUSE_FILTER_PASS
 			flow.add_child(tile)
 
@@ -2835,7 +2909,7 @@ func vocation_intro(h: Unit) -> void:
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(box)
 	var col: Color = Data.CLASS_COLOR[h.key]
-	var tl := _shadowed(_label("MAÎTRISE II", 50, INK, wide_f), 10)
+	var tl := _title("MAÎTRISE II", 50)
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(tl)
 	var sl := _shadowed(_label("%s a assez combattu pour apprendre une deuxième voie" % h.nm, 20, col.lightened(0.35), title_f), 6)
@@ -2900,7 +2974,7 @@ func vocation_screen(h: Unit, picks: Array) -> int:
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(box)
 	var col: Color = Data.CLASS_COLOR[h.key]
-	var tl := _shadowed(_label("VOCATION · %s" % h.nm.to_upper(), 46, INK, wide_f), 10)
+	var tl := _title("VOCATION · %s" % h.nm.to_upper(), 46)
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(tl)
 	var row := HBoxContainer.new()
@@ -3084,7 +3158,7 @@ func library_screen() -> void:
 	box.add_theme_constant_override("separation", 10)
 	lib_layer.add_child(box)
 	var total: int = Data.all_ids().size()
-	var tl := _shadowed(_label("BIBLIOTHÈQUE", 44, INK, wide_f), 10)
+	var tl := _title("BIBLIOTHÈQUE", 44)
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(tl)
 	var sl := _shadowed(_label("%d / %d cartes découvertes · clic sur une carte : ses trois niveaux" % [main.cards_known(), total], 16, GOLD), 6)
@@ -3214,7 +3288,7 @@ func _lib_focus(id: String) -> void:
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	fl.add_child(box)
 	var d := Data.def(id)
-	var tl := _shadowed(_label(d.name, 38, INK, wide_f), 8)
+	var tl := _title(d.name, 38)
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(tl)
 	# le niveau 3 d'une carte-objet est un secret : absent tant qu'on ne l'a pas forgé
@@ -3375,7 +3449,7 @@ func equipment_screen(heroes: Array, bag: Array) -> Dictionary:
 	box.add_theme_constant_override("separation", 16)
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(box)
-	var tl := _shadowed(_label("ÉQUIPEMENT", 44, INK, wide_f), 10)
+	var tl := _title("ÉQUIPEMENT", 44)
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(tl)
 	var sl := _shadowed(_label(("Touchez un objet pour lire son effet, puis un héros pour l'équiper" if big else "Survolez pour lire l'effet · un objet du sac, puis un héros") + " · un emplacement occupé se vide d'un clic", 16, GOLD), 6)
@@ -3625,7 +3699,7 @@ func trait_roulette(keys: Array, traits: Array) -> void:
 	box.add_theme_constant_override("separation", 22)
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(box)
-	var tl := _shadowed(_label("TRAITS", 44, INK, wide_f), 10)
+	var tl := _title("TRAITS", 44)
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(tl)
 	var sl := _shadowed(_label("Chacun arrive avec son caractère : un don, un défaut, parfois les deux", 16, GOLD), 6)

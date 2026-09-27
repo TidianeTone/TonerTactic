@@ -82,7 +82,7 @@ var smoke_nodes := {}
 var trap_kind := {}         # case -> "piege" | "picots"
 var picot_root := {}        # case -> tours d'entrave des picots (Ronces d'acier)
 var tiles := {}             # case -> rune au sol (Data.TILES)
-var ground_nodes: Array = []
+var ground_nodes := {}      # case -> plaque de sol
 var _ground_mat := {}
 var ground := {}            # case -> matière du sol (Data.GROUND) : glace, vase, par biome
 var twins := {}             # portail -> portail jumeau
@@ -2226,6 +2226,8 @@ func resolve(c: Dictionary, h: Unit, t: Vector2i) -> void:
 		if c.get("consume", false) and (await _consume(h)) == "":
 			return
 		await _place(c, t, h)
+		if c.has("ground"):
+			_ground_cells([t] + (Board.DIRS.map(func(d): return t + d) if c.get("aoe", false) else []), c.ground)
 		if c.get("draw", 0) > 0:
 			draw(c.draw)
 		if c.get("block", 0) > 0:
@@ -2256,6 +2258,8 @@ func resolve(c: Dictionary, h: Unit, t: Vector2i) -> void:
 			_make_tile(t, c.rune)
 		if c.get("omen", 0) > 0:
 			_omen(t, int(c.omen), h)
+		if c.has("ground"):
+			_ground_cells([t], c.ground)
 		if c.get("block", 0) > 0:
 			gain_block(h, c.block)
 		if c.get("draw", 0) > 0:
@@ -2267,6 +2271,8 @@ func resolve(c: Dictionary, h: Unit, t: Vector2i) -> void:
 			c = c.duplicate()
 			c.block = int(c.block) + int(c.per_missing_block) * ((h.max_hp - h.hp) / 5)
 		await _self_fx(c, h)
+		if c.has("ground"):
+			_ground_cells(Board.DIRS.map(func(d): return h.cell + d), c.ground)
 		if c.get("heal", 0) > 0:
 			heal(h, c.heal, c.get("spill", false))
 		if c.get("energy", 0) > 0:
@@ -2397,6 +2403,8 @@ func resolve(c: Dictionary, h: Unit, t: Vector2i) -> void:
 				_hit_tree(cell, _base(c, h, t) + h.gear_dmg() + h.dmg_bonus, c.owner in ["artificier", "oracle"])
 			elif board.props.get(cell, "") in BOOM:
 				await trigger_prop(cell, _dir(h.cell, cell))
+		if c.has("ground"):
+			_ground_cells(cells, c.ground)
 		if c.get("aoe_baril", false) and board.walkable(t) and unit_at(t) == null and not board.props.has(t) and not traps.has(t):
 			board.props[t] = "baril"
 			_make_prop(t)
@@ -2603,6 +2611,10 @@ func attack(h: Unit, f: Unit, c: Dictionary) -> void:
 		var tb: Vector2i = f.cell + _dir(h.cell, f.cell)
 		if board._in(tb) and board.walkable(tb) and unit_at(tb) == null and not traps.has(tb):
 			_make_trap(tb, "piege", int(c.get("tdmg", 8)))
+	if c.has("ground_behind") and f.alive:
+		var gb: Vector2i = f.cell + _dir(h.cell, f.cell)
+		if unit_at(gb) == null:
+			_ground_cells([gb], c.ground_behind)
 	if f.alive and c.get("push", 0) > 0:
 		double_trap = c.get("trap2", false)
 		crash_bonus = int(c.get("crash", 0))
@@ -5752,7 +5764,7 @@ func _smoke_tick() -> void:
 
 func _place_ground() -> void:
 	## Matière du sol, selon le biome : glace (hauts plateaux, cristal, grotte), vase (marais, écluse, bassins, bosquet). 2 à 3 plaques de 3 à 5 cases.
-	for n in ground_nodes:
+	for n in ground_nodes.values():
 		if is_instance_valid(n):
 			n.queue_free()
 	ground_nodes.clear()
@@ -5777,36 +5789,50 @@ func _place_ground() -> void:
 			if free.has(nx) and not patch.has(nx):
 				patch.append(nx)
 		for c in patch:
-			ground[c] = k
+			_set_ground(c, k)
 			free.erase(c)
-			var mi := MeshInstance3D.new()
-			var bx := BoxMesh.new()
-			bx.size = Vector3(1.0, 0.07, 1.0)
-			mi.mesh = bx
-			if _ground_mat.get(k) == null:
-				var nt := NoiseTexture2D.new()
-				nt.width = 64
-				nt.height = 64
-				nt.noise = FastNoiseLite.new()
-				nt.noise.frequency = 0.09
-				nt.color_ramp = Gradient.new()
-				nt.color_ramp.colors = PackedColorArray([Color(0.72, 0.72, 0.72), Color(1, 1, 1)])
-				var m := StandardMaterial3D.new()
-				m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-				m.albedo_color = Data.GROUND[k].col
-				m.albedo_texture = nt
-				m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST  # grain de voxel
-				m.roughness = 0.1 if k == "glace" else 1.0
-				m.metallic_specular = 1.0 if k == "glace" else 0.05
-				if k == "glace":
-					m.emission_enabled = true
-					m.emission = Color(0.25, 0.4, 0.5)
-				_ground_mat[k] = m
-			mi.material_override = _ground_mat[k]
-			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			mi.position = board.world(c) + Vector3(0, 0.035, 0)
-			units_root.add_child(mi)
-			ground_nodes.append(mi)
+
+
+func _set_ground(c: Vector2i, k: String) -> void:
+	## Pose (ou change) la matière du sol d'une case : une seule plaque par case.
+	if ground_nodes.has(c) and is_instance_valid(ground_nodes[c]):
+		ground_nodes[c].queue_free()
+	ground[c] = k
+	var mi := MeshInstance3D.new()
+	var bx := BoxMesh.new()
+	bx.size = Vector3(1.0, 0.07, 1.0)
+	mi.mesh = bx
+	if _ground_mat.get(k) == null:
+		var nt := NoiseTexture2D.new()
+		nt.width = 64
+		nt.height = 64
+		nt.noise = FastNoiseLite.new()
+		nt.noise.frequency = 0.09
+		nt.color_ramp = Gradient.new()
+		nt.color_ramp.colors = PackedColorArray([Color(0.72, 0.72, 0.72), Color(1, 1, 1)])
+		var m := StandardMaterial3D.new()
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.albedo_color = Data.GROUND[k].col
+		m.albedo_texture = nt
+		m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST  # grain de voxel
+		m.roughness = 0.1 if k == "glace" else 1.0
+		m.metallic_specular = 1.0 if k == "glace" else 0.05
+		if k == "glace":
+			m.emission_enabled = true
+			m.emission = Color(0.25, 0.4, 0.5)
+		_ground_mat[k] = m
+	mi.material_override = _ground_mat[k]
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.position = board.world(c) + Vector3(0, 0.035, 0)
+	units_root.add_child(mi)
+	ground_nodes[c] = mi
+
+
+func _ground_cells(cells: Array, k: String) -> void:
+	## Cartes qui posent un sol : terre ferme sans objet seulement.
+	for cc in cells:
+		if board.walkable(cc) and board.kind[cc] == "land":
+			_set_ground(cc, k)
 
 
 func _place_tiles() -> void:

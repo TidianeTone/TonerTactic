@@ -1477,7 +1477,7 @@ func open_chest(h: Unit) -> void:
 	if rng.randf() < (0.4 if floor_i == 1 else 0.6):  # acte 1 : moins de pièces, le sac se remplit trop vite
 		var it := _roll_item()
 		_gain_item(it, h)
-		gains.append({"title": Data.ITEMS[it].name, "image": Data.item_icon(it), "text": "%s · %s\n(au sac : s'équiper après le combat)" % [Data.SLOT_NAME[Data.ITEMS[it].slot], Data.item_text(it)], "color": UI.ITEM_COL[Data.ITEMS[it].rarity], "w": 250})
+		gains.append(_item_opt(it).merged({"text": Data.item_passives(it) + ("\n" if Data.item_passives(it) != "" else "") + "Au sac : s'équiper après le combat.", "w": 250}, true))
 		fight_loot.append(Data.ITEMS[it].name)
 	else:
 		g += rng.randi_range(20, 35)  # 2 à 3 coffres par combat
@@ -1910,8 +1910,8 @@ func _item_opt(id: String, price := 0) -> Dictionary:
 	var it: Dictionary = Data.ITEMS[id]
 	library_see("item:" + id)
 	var title: String = it.name + ("  ·  %d or" % price if price > 0 else "")
-	return {"title": title, "image": Data.item_icon(id), "text": Data.item_text(id),
-		"color": UI.ITEM_COL[it.rarity], "vignette": UI.ITEM_RAR[it.rarity]}
+	return {"title": title, "image": Data.item_icon(id), "text": Data.item_passives(id), "chips": Data.item_chips(id),
+		"color": UI.ITEM_COL[it.rarity], "vignette": Data.item_slot(id)}
 
 
 func _equipment() -> void:
@@ -2314,7 +2314,7 @@ func _relic_useful(r: String) -> bool:
 	var hero := func(p: Callable) -> bool: return heroes.any(p)
 	match need:
 		"glace", "vase":  # un étage restant de ce biome, ou une carte qui pose ce sol
-			return floor_biomes.slice(floor_i - 1, 3).any(func(b): return Data.ground_of(b) == need) or cards.call(func(c): return c.get("ground", "") == need)
+			return floor_biomes.slice(floor_i - 1, 3).any(func(b): return Data.ground_of(b) == need) or cards.call(func(c): return c.get("ground", "") == need or c.get("ground_behind", "") == need)
 		"poison":
 			return cards.call(func(c): return int(c.get("poison", 0)) > 0 or c.get("trig", {}).has("poison")) or hero.call(func(h): return h.has_p("venin"))
 		"tidiane":
