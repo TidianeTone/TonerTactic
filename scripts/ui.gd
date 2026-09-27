@@ -316,6 +316,49 @@ func _paint_title(l: Label) -> void:
 	l.add_child(word)
 
 
+static var _bars := {}
+
+
+func _bar_style(on: bool) -> StyleBoxTexture:
+	## Barre de menu peinte (Higgsfield) : cuir entre deux pointes, acier au repos, or au survol. Les pointes ne s'étirent pas.
+	if not _bars.has(on):
+		var st := StyleBoxTexture.new()
+		st.texture = load("res://assets/ui/barre_menu_on.png" if on else "res://assets/ui/barre_menu.png")
+		st.texture_margin_left = 62 if on else 52
+		st.texture_margin_right = 62 if on else 52
+		st.content_margin_left = 44
+		st.content_margin_right = 40
+		st.content_margin_top = 4
+		st.content_margin_bottom = 4
+		_bars[on] = st
+	return _bars[on]
+
+
+func _bar_button(text: String, icon_name := "", w := 380.0, h := 58.0, fs := 22) -> Button:
+	var b := Button.new()
+	b.text = text
+	if icon_name != "" and ResourceLoader.exists("res://assets/ui/%s.png" % icon_name):
+		b.icon = load("res://assets/ui/%s.png" % icon_name)
+		b.expand_icon = true
+		b.add_theme_constant_override("icon_max_width", int(h * 0.72))
+		b.add_theme_constant_override("h_separation", 12)
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.custom_minimum_size = Vector2(w, h)
+	b.focus_mode = Control.FOCUS_ALL
+	b.add_theme_font_override("font", title_f)
+	b.add_theme_font_size_override("font_size", fs)
+	b.add_theme_color_override("font_color", INK)
+	b.add_theme_color_override("font_hover_color", Color("#ffe3a3"))
+	b.add_theme_color_override("font_focus_color", Color("#ffe3a3"))
+	b.add_theme_color_override("font_pressed_color", GOLD)
+	b.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+	b.add_theme_constant_override("outline_size", 5)
+	b.add_theme_stylebox_override("normal", _bar_style(false))
+	for k in ["hover", "focus", "pressed"]:
+		b.add_theme_stylebox_override(k, _bar_style(true))
+	return b
+
+
 func _shadowed(l: Label, outline := 6) -> Label:
 	l.add_theme_constant_override("outline_size", outline)
 	l.add_theme_color_override("font_outline_color", Color(0.04, 0.03, 0.03, 0.85))
@@ -641,8 +684,7 @@ func _build_explore() -> void:
 
 func refresh_log() -> void:
 	if log_box:
-		log_box.text = "
-".join(battle.log_lines.slice(maxi(0, battle.log_lines.size() - 11)))
+		log_box.text = "\n".join(battle.log_lines.slice(maxi(0, battle.log_lines.size() - 11)))
 
 
 func show_explore(on: bool, title := "", sub := "", party := "") -> void:
@@ -889,8 +931,7 @@ func set_sheet(u: Unit) -> void:
 	# sections : titres dorés et espacés, noms de capacités en gras, notes en petit
 	var out: Array = []
 	var named := RegEx.create_from_string("^([^:]{2,34}) : (.*)$")
-	for line: String in txt.split("
-"):
+	for line: String in txt.split("\n"):
 		if line.begins_with("## "):
 			out.append("[font_size=6] [/font_size]")
 			out.append("[font_size=12][color=#e3b45c]%s[/color][/font_size]" % line.substr(3).to_upper())
@@ -903,8 +944,7 @@ func set_sheet(u: Unit) -> void:
 				out.append("[b][color=#ffe3a3]%s[/color][/b] : %s" % [m.get_string(1), m.get_string(2)])
 			else:
 				out.append(line)
-	sheet_body.text = "
-".join(out)
+	sheet_body.text = "\n".join(out)
 	sheet_plate.reset_size()
 
 
@@ -955,19 +995,8 @@ func toggle_menu() -> void:
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(t)
 	var first: Button
-	for e in [["Reprendre", func(): toggle_menu()], ["Bibliothèque", func(): library_screen()], ["Mode portable : %s" % ("oui" if big else "non"), func(): main.set_mobile(not big)], ["Vue tactique : %s" % ("oui" if main.tactic else "non"), func(): main.set_tactic(not main.tactic)], ["Vocation dès le départ : %s" % ("oui" if main.voc_start else "non"), func(): main.set_voc_start(not main.voc_start)], ["Langue : Français" if not Lang.on else "Language: English", func(): main.set_lang("fr" if Lang.on else "en")], ["Abandonner la run", func(): main.abandon()], ["Quitter le jeu", func(): get_tree().quit()]]:
-		var b := Button.new()
-		b.text = e[0]
-		b.add_theme_font_override("font", title_f)
-		b.add_theme_font_size_override("font_size", 22)
-		b.add_theme_color_override("font_color", INK)
-		b.add_theme_color_override("font_focus_color", Color("#2a1606"))
-		b.add_theme_color_override("font_hover_color", Color("#2a1606"))
-		b.add_theme_stylebox_override("normal", sb(Color(0.08, 0.07, 0.075, 0.92), GOLD.darkened(0.3), 12, 2, 6))
-		b.add_theme_stylebox_override("hover", sb(GOLD, Color("#fff0c8"), 12, 2, 8))
-		b.add_theme_stylebox_override("focus", sb(GOLD, Color("#fff0c8"), 12, 2, 8))
-		b.add_theme_stylebox_override("pressed", sb(GOLD.darkened(0.15), Color("#fff0c8"), 12, 2, 4))
-		b.custom_minimum_size = Vector2(340, 58)
+	for e in [["Reprendre", func(): toggle_menu(), "menu_reprendre"], ["Bibliothèque", func(): library_screen(), "menu_bibliotheque"], ["Mode portable : %s" % ("oui" if big else "non"), func(): main.set_mobile(not big), "menu_portable"], ["Vue tactique : %s" % ("oui" if main.tactic else "non"), func(): main.set_tactic(not main.tactic), "menu_tactique"], ["Vocation dès le départ : %s" % ("oui" if main.voc_start else "non"), func(): main.set_voc_start(not main.voc_start), "menu_vocation"], ["Langue : Français" if not Lang.on else "Language: English", func(): main.set_lang("fr" if Lang.on else "en"), "menu_langue"], ["Abandonner la run", func(): main.abandon(), "menu_abandonner"], ["Quitter le jeu", func(): get_tree().quit(), "menu_quitter"]]:
+		var b := _bar_button(e[0], e[2], 440.0, 54.0, 20)
 		b.pressed.connect(e[1])
 		var c := CenterContainer.new()
 		c.add_child(b)
@@ -2852,24 +2881,9 @@ func title_screen(resume := "") -> int:
 	var lib_btn: Button
 	var first: Button
 	for e in entries:
-		var b := Button.new()
-		b.text = "  " + e[1]
-		b.icon = load("res://assets/ui/menu_%s.png" % e[2])
-		b.expand_icon = true
-		b.flat = true
-		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		b.custom_minimum_size = Vector2(520, 64)
-		b.add_theme_constant_override("icon_max_width", 46)
+		var b := _bar_button(e[1], "menu_" + e[2], 470.0, 60.0, 26)
 		b.add_theme_font_override("font", Fx.goth("pirataone"))
-		b.add_theme_font_size_override("font_size", 42)
-		b.add_theme_color_override("font_color", INK)
-		b.add_theme_color_override("font_hover_color", GOLD.lightened(0.15))
-		b.add_theme_color_override("font_focus_color", GOLD.lightened(0.15))
-		b.add_theme_color_override("font_pressed_color", GOLD)
-		b.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
-		b.add_theme_constant_override("outline_size", 8)
-		b.add_theme_color_override("icon_hover_color", Color(1.2, 1.1, 0.8))
-		b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+		b.add_theme_font_size_override("font_size", 32)
 		var k: int = e[0]
 		var info: String = e[3]
 		b.pressed.connect(func(): picked.emit(k))
@@ -3263,14 +3277,18 @@ func library_screen() -> void:
 	var sl := _shadowed(_label("%d / %d cartes découvertes · clic sur une carte : ses trois niveaux" % [main.cards_known(), total], 16, GOLD), 6)
 	sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(sl)
-	var tabs := HBoxContainer.new()
-	tabs.alignment = BoxContainer.ALIGNMENT_CENTER
-	tabs.add_theme_constant_override("separation", 16)
-	box.add_child(tabs)
+	var body := HBoxContainer.new()
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_theme_constant_override("separation", 18)
+	box.add_child(body)
+	var tabs := VBoxContainer.new()  # onglets à la verticale, à gauche
+	tabs.add_theme_constant_override("separation", 10)
+	body.add_child(tabs)
 	var sc := ScrollContainer.new()
 	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	box.add_child(sc)
+	body.add_child(sc)
 	var list := VBoxContainer.new()
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list.add_theme_constant_override("separation", 18)
@@ -3348,13 +3366,7 @@ func library_screen() -> void:
 					holder.tooltip_text = "%s à découvrir" % Data.RARITY_NAME[rar]
 				flow.add_child(holder)
 	for t in [["Classes", "classes"], ["Guildes", "guildes"], ["Équipement", "equipement"], ["Reliques", "reliques"], ["Bestiaire", "bestiaire"]]:
-		var tb := Button.new()
-		tb.text = t[0]
-		tb.add_theme_font_override("font", title_f)
-		tb.add_theme_font_size_override("font_size", 18)
-		tb.custom_minimum_size = Vector2(160, 40)
-		tb.add_theme_stylebox_override("normal", sb(Color(0.08, 0.07, 0.075, 0.92), GOLD.darkened(0.2), 10, 2, 4))
-		tb.add_theme_stylebox_override("hover", sb(Color(0.16, 0.14, 0.12, 0.95), GOLD, 10, 2, 4))
+		var tb := _bar_button(t[0], "tab_" + t[1], 250.0, 52.0, 18)
 		var which: String = t[1]
 		tb.pressed.connect(func(): fill.call(which))
 		tabs.add_child(tb)
@@ -3364,6 +3376,7 @@ func library_screen() -> void:
 	close.add_theme_font_size_override("font_size", 16)
 	close.add_theme_color_override("font_color", DIM)
 	close.pressed.connect(func(): lib_closed.emit())
+	close.custom_minimum_size = Vector2(250, 40)
 	tabs.add_child(close)
 	fill.call("classes")
 	await lib_closed
@@ -3485,11 +3498,9 @@ func _fill_bestiary(list: VBoxContainer) -> void:
 		var txt: String = f.get("ligne", "")
 		for q in f.get("passives", []):
 			if Data.PASSIVES.has(q):
-				txt += ("
-" if txt != "" else "") + "%s : %s" % [Data.PASSIVES[q].name, Data.PASSIVES[q].text]
+				txt += ("\n" if txt != "" else "") + "%s : %s" % [Data.PASSIVES[q].name, Data.PASSIVES[q].text]
 		if Data.FOE_TIPS.has(k):
-			txt += ("
-" if txt != "" else "") + Data.FOE_TIPS[k]
+			txt += ("\n" if txt != "" else "") + Data.FOE_TIPS[k]
 		var tx := _label(txt, 13, INK)
 		tx.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		tx.custom_minimum_size = Vector2(270, 0)
@@ -4005,8 +4016,7 @@ func hero_sheet(h: Unit) -> void:
 		else:
 			var it: Dictionary = Data.ITEMS[id]
 			rv.add_child(_label("%s — %s" % [Data.SLOT_NAME[slot], it.name], 17, ITEM_COL[it.rarity].lightened(0.25), title_f))
-			var fx := _label(Data.item_text(id).split("
-")[1], 14, INK)
+			var fx := _label(Data.item_text(id).split("\n")[1], 14, INK)
 			fx.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			fx.custom_minimum_size = Vector2(480, 0)
 			rv.add_child(fx)

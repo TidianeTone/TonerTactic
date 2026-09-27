@@ -4577,8 +4577,7 @@ func sheet(u: Unit) -> String:
 		gear.append("🃏 %s : garde %s. %s%s" % [Data.CARD_CONDS[u.card_cond].name, Data.def(u.card_id).name, Data.CARD_CONDS[u.card_cond].text, left])
 	for sl in u.equip:
 		if u.equip[sl] != "":
-			gear.append("⚙ %s : %s" % [Data.ITEMS[u.equip[sl]].name, Data.item_text(u.equip[sl]).split("
-")[1]])
+			gear.append("⚙ %s : %s" % [Data.ITEMS[u.equip[sl]].name, Data.item_text(u.equip[sl]).split("\n")[1]])
 	if u.tool != "":
 		var td: Dictionary = Data.TOOLS[u.tool]
 		gear.append("%s %s : il %s. Vole-le, sa carte arrive dans ta main." % [td.glyph, td.name, td.get("foe_ai", "s'en servira")])
@@ -4589,8 +4588,7 @@ func sheet(u: Unit) -> String:
 		L.append("## Conseil")
 		L.append(Data.FOE_TIPS[u.key])
 	L.append("~ Zone orange : où il peut aller ce tour.")
-	return "
-".join(L)
+	return "\n".join(L)
 
 
 func _intent_text(f: Unit) -> String:

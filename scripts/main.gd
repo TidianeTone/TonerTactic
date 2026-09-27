@@ -2357,8 +2357,6 @@ func _merchant_shop() -> void:
 			{"title": "Épurer  ·  %d or" % _price(_purge_price()), "glyph": "✂", "text": "Retirer une carte du paquet. Le prix monte à chaque épuration de la run." if not relics.has("ciseaux_epure") else "Retirer une carte du paquet. Ciseaux d'épure : toujours 50 or."})
 		opts.append({"title": "Forge  ·  fait ✓", "glyph": "✓", "text": "Déjà forgé ici : %s." % done.forge, "color": grey} if done.has("forge") else
 			{"title": "Forge  ·  %d or" % _price(35), "glyph": "⚒", "text": "Une carte du paquet gagne un niveau."})
-		opts.append({"title": "Paquet", "glyph": "▤", "text": "Voir toutes les cartes de l'escouade (%d)." % deck.size()})
-		opts.append({"title": "Équipe", "glyph": "⚔", "text": "PV, équipement, sac : s'équiper avant de repartir."})
 		var i := await ui.choose("MARCHAND", "Vous avez %d or · une carte achetée rejoint le paquet de son héros" % gold, opts, true, "Partir")
 		if i < 0:
 			return
@@ -2406,7 +2404,7 @@ func _merchant_shop() -> void:
 			ui.set_gold(gold)
 			await _add_relic(ro.id)
 		else:
-			var k: String = ["heal", "purge", "forge", "deck", "team"][i - stock.size() - tstock.size() - 1]
+			var k: String = ["heal", "purge", "forge"][i - stock.size() - tstock.size() - 1]  # paquet et équipe : portraits (fiche + paquet), P, carte d'étage
 			if k == "deck":
 				await view_deck()
 				continue
