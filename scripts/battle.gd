@@ -1194,6 +1194,8 @@ func _advance() -> void:
 				changed.emit()
 				return
 			continue
+		if main.tuto:
+			continue  # initiation : les ennemis attendent, le plateau reste celui de la consigne
 		await _foe_turn(u)
 
 
@@ -1460,6 +1462,9 @@ func _hero_turn(h: Unit) -> void:
 		# Double fond : ses cartes-objets ne lui bouchent pas la main
 		while hand.filter(func(ci): return not Data.def(ci.id).has("tool")).size() < hand_size and hand.size() < 6 and not (draw_pile.is_empty() and discard.is_empty()):
 			draw(1)
+	var th: Array = main.tuto_hand(h)
+	if th.size() > 0:
+		hand = th  # initiation : la main de l'étape, pas celle de la pioche
 	_extra_move.erase(h)
 	_start_draw = false
 	if _alambic:
@@ -1476,7 +1481,6 @@ func _hero_turn(h: Unit) -> void:
 	select(h)
 	main.focus(h.position)
 	main.ui.banner(h.nm, "À toi · %d mana" % energy)
-	coach.emit("turn", h)
 	if powers.has("journal") and power_owner.get("journal") == h and played_ids.get(h, []).size() > 0:
 		_journal.call_deferred(h)
 
@@ -1516,11 +1520,11 @@ func end_turn() -> void:
 	if not player_turn or busy or over:
 		return
 	_lifesteal = false
-	var nope: String = main.tuto_hold(active) if main.tuto else ""
+	var nope: String = main.tuto_gate("face" if orienting else "end")
 	if nope != "":
 		main.ui.toast(nope)
 		return
-	if not orienting and active and active.alive and not main._testing():
+	if not orienting and active and active.alive and (not main._testing() or main.tuto):
 		# d'abord l'orientation : le dos exposé compte (coups de dos, pièges, Tenaille)
 		orienting = true
 		coach.emit("orient", active)
@@ -1533,6 +1537,7 @@ func end_turn() -> void:
 	orienting = false
 	player_turn = false
 	card_sel = -1
+	coach.emit("ended", active)
 	var keep: Array = []
 	for ci in hand:
 		var c := Data.card(ci)
@@ -1704,6 +1709,10 @@ func select_card(i: int) -> void:
 		return
 	var c := Data.card(hand[i])
 	var h := owner_of(c)
+	var nope: String = main.tuto_gate("card", c.id)
+	if nope != "":
+		main.ui.toast(nope)
+		return
 	if h == null or not h.alive:
 		main.ui.toast("%s est tombé : cette carte est morte." % Data.HEROES[c.owner].name)
 		return
@@ -1749,6 +1758,10 @@ func click(c: Vector2i) -> void:
 		var card := Data.card(hand[card_sel])
 		var h := owner_of(card)
 		if card_targets(card, h).has(c):
+			var nope: String = main.tuto_gate("target", c)
+			if nope != "":
+				main.ui.toast(nope)
+				return
 			play_card(card_sel, c)
 		else:
 			card_sel = -1
@@ -1763,6 +1776,10 @@ func click(c: Vector2i) -> void:
 		return
 	var pk: String = board.props.get(c, "")
 	if pk in USABLE and selected:
+		var nope: String = main.tuto_gate("prop", c)
+		if nope != "":
+			main.ui.toast(nope)
+			return
 		var near := dist(selected.cell, c) == 1 and absi(board.h[selected.cell] - board.h[c]) <= 2
 		if near and (pk == "coffre" or not selected.moved):
 			interact(selected, c)
@@ -1792,6 +1809,10 @@ func click(c: Vector2i) -> void:
 	if selected and (not selected.moved or sprint):
 		var R := reach(selected)
 		if R.cells.has(c) and c != selected.cell:
+			var nope: String = main.tuto_gate("move", c)
+			if nope != "":
+				main.ui.toast(nope)
+				return
 			busy = true
 			changed.emit()
 			var mover := selected  # la sélection peut changer pendant la marche
@@ -2034,7 +2055,6 @@ func play_card(i: int, t: Vector2i) -> void:
 	if energy < cost or (c.has("xcost") and energy - cost < 1):
 		return
 	_lifesteal = c.get("lifesteal", false)
-	coach.emit("played", ci.id)
 	if int(c.get("pay_gold", 0)) > main.gold:
 		main.ui.toast("Pas assez d'or.")
 		return
@@ -2173,6 +2193,7 @@ func play_card(i: int, t: Vector2i) -> void:
 		discard.append(ci)
 	busy = false
 	changed.emit()
+	coach.emit("done", ci.id)
 	_after_action()
 
 
@@ -2932,8 +2953,6 @@ func calc(att: Unit, tgt: Unit, base: int, c := {}) -> Dictionary:
 	if att.side == "foe" and att.data.get("aura", "") != "ordre" and _in_aura(att, "ordre", 2):
 		flat += 2
 		notes.append("ordre du capitaine +2")
-	if att.side == "hero":
-		coach.emit("hit", notes)
 	return {"dmg": maxi(0, int(round(base * mult)) + flat), "notes": notes}
 
 
@@ -5890,6 +5909,8 @@ func _place_tiles() -> void:
 	tile_nodes.clear()
 	tiles.clear()
 	twins.clear()
+	if main.tuto:
+		return  # initiation : les runes du chapitre, posées par main._tuto_setup
 	var free: Array = board.walkable_cells().filter(func(c): return unit_at(c) == null and _hero_dist(c) >= 2)
 	for i in range(free.size() - 1, 0, -1):
 		var j := rng.randi_range(0, i)

@@ -711,8 +711,9 @@ var tuto_arrow: Label
 var arrow_to: Callable = Callable()   # initiation : renvoie la cible de la flèche (Vector3 du monde, Control, ou null)
 var coach_kick: Label
 var coach_txt: RichTextLabel
-func coach(kicker: String, text: String) -> void:
-	## Initiation : une consigne à la fois, en haut à droite, qui reste jusqu'à la suivante.
+var coach_next: Button
+func coach(kicker: String, text: String, next := false) -> void:
+	## Initiation : une consigne à la fois, qui reste jusqu'à la suivante ; « Suite » quand il n'y a qu'à lire.
 	if coach_plate == null:
 		coach_plate = PanelContainer.new()
 		# la voix de l'initiation : la boîte de dialogue neutre (pierre claire des ruines, lierre d'automne)
@@ -728,6 +729,7 @@ func coach(kicker: String, text: String) -> void:
 		st.content_margin_bottom = 38
 		coach_plate.add_theme_stylebox_override("panel", st)
 		coach_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		coach_plate.z_index = 101  # lisible aussi par-dessus les écrans (butin, équipement)
 		# en bas à gauche, au-dessus de l'orbe de mana : il ne cache ni les PV des unités ni leurs fiches
 		coach_plate.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 		coach_plate.grow_vertical = Control.GROW_DIRECTION_BEGIN
@@ -745,7 +747,18 @@ func coach(kicker: String, text: String) -> void:
 		coach_txt = _rich("", 16 + (3 if big else 0), INK)
 		coach_txt.custom_minimum_size.x = 380 if not big else 470
 		v.add_child(coach_txt)
+		coach_next = Button.new()
+		coach_next.text = "Suite ▸"
+		coach_next.add_theme_font_override("font", title_f)
+		coach_next.add_theme_font_size_override("font_size", 18)
+		coach_next.add_theme_color_override("font_color", Color("#2a1606"))
+		coach_next.add_theme_stylebox_override("normal", sb(GOLD, Color("#fff0c8"), 10, 2, 6))
+		coach_next.add_theme_stylebox_override("hover", sb(GOLD.lightened(0.15), Color("#fff0c8"), 10, 2, 6))
+		coach_next.size_flags_horizontal = Control.SIZE_SHRINK_END
+		coach_next.pressed.connect(func(): main._tuto_ok())
+		v.add_child(coach_next)
 	coach_plate.visible = text != ""
+	coach_next.visible = next
 	if text == "":
 		return
 	coach_kick.text = kicker.to_upper()
@@ -780,8 +793,20 @@ func point(to: Callable) -> void:
 		tuto_arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		tuto_arrow.size = Vector2(60, 70)
 		tuto_arrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		tuto_arrow.z_index = 102
 		root.add_child(tuto_arrow)
 	tuto_arrow.visible = false
+
+
+func tuto_node(key: String) -> Control:
+	## Initiation : le nœud d'un écran marqué pour la flèche (bouton, objet du sac).
+	var q: Array = [overlay] if overlay else []
+	while q.size() > 0:
+		var n: Node = q.pop_back()
+		if n.get_meta("tuto", "") == key:
+			return n
+		q.append_array(n.get_children())
+	return null
 
 
 var turn_arrow: Label
@@ -817,14 +842,17 @@ func _place_arrow() -> void:
 		return
 	var t = arrow_to.call() if arrow_to.is_valid() else null
 	var p = null
+	var up := false  # sous la cible, pointe vers le haut : ce qui est collé au haut de l'écran (la frise)
 	if t is Vector3 and not main.cam.is_position_behind(t):
 		p = main.cam.unproject_position(t)
 	elif t is Control and is_instance_valid(t) and t.is_visible_in_tree():
-		p = t.global_position + Vector2(t.size.x * t.scale.x * 0.5, 0)
-	tuto_arrow.visible = p != null and overlay == null
+		up = t.global_position.y < 150
+		p = t.global_position + Vector2(t.size.x * t.scale.x * 0.5, t.size.y * t.scale.y + 74 if up else 0)
+	tuto_arrow.visible = p != null and (overlay == null or t is Control)
 	if p != null:
 		var bob := absf(sin(Time.get_ticks_msec() * 0.006)) * 16.0
-		tuto_arrow.position = p - Vector2(30, 74 + bob)
+		tuto_arrow.text = "▲" if up else "▼"
+		tuto_arrow.position = p - Vector2(30, 74 - bob if up else 74 + bob)
 
 
 func announce(c: Dictionary) -> void:
@@ -2725,6 +2753,7 @@ func fight_summary(title: String, rows: Array, loot: Array, can_equip: bool) -> 
 		b.add_theme_stylebox_override("normal", sb(Color(0.1, 0.09, 0.1, 0.94), GOLD.darkened(0.2), 10, 2, 8))
 		b.add_theme_stylebox_override("hover", sb(Color(0.2, 0.16, 0.1, 0.96), GOLD, 10, 2, 8))
 		var k: int = e[1]
+		b.set_meta("tuto", "btn%d" % k)
 		b.pressed.connect(func(): picked.emit(k))
 		br.add_child(b)
 	last_n = 1  # pilote de test : « Continuer » (0), sinon il bouclerait sur l'équipement
@@ -3724,6 +3753,7 @@ func equipment_screen(heroes: Array, bag: Array) -> Dictionary:
 					return
 				sel[0] = -1 if sel[0] == bi else bi
 				refresh_sel.call())
+		t.set_meta("tuto", "bag%d" % bi)
 		bag_tiles.append(t)
 		brow.add_child(t)
 	var cc := CenterContainer.new()
@@ -3738,6 +3768,7 @@ func equipment_screen(heroes: Array, bag: Array) -> Dictionary:
 	done.add_theme_stylebox_override("normal", sb(Color(0.1, 0.09, 0.1, 0.94), GOLD.darkened(0.2), 10, 2, 8))
 	done.add_theme_stylebox_override("hover", sb(Color(0.2, 0.16, 0.1, 0.96), GOLD, 10, 2, 8))
 	done.custom_minimum_size = Vector2(260, 50)
+	done.set_meta("tuto", "done")
 	done.pressed.connect(func(): act.call({}))
 	var dc := CenterContainer.new()
 	dc.add_child(done)

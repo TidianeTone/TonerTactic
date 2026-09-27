@@ -130,6 +130,18 @@ func _init() -> void:
 	if m._relic_ok("remous") or m._relic_ok("cle_ecluse"):
 		print("exclusions de reliques fausses")
 		fails += 1
+	# initiation : chaque étape jouable telle qu'écrite (carte en main, case dans l'arène, un ennemi par place)
+	for ch in m.TUTO:
+		var hand: Array = []
+		for st in ch.get("steps", []):
+			hand = st.get("hand", hand)
+			if not st.do in ["move", "play", "prop", "ok", "orient", "face", "end"] or (st.do == "play" and not (Data.CARDS.has(st.card) and hand.has(st.card))) \
+				or (st.get("at") is Vector2i and (st.at.x < 0 or st.at.y < 0 or st.at.x > 9 or st.at.y > 9)) or st.say.length() > 110:
+				print("initiation : étape fausse ", ch.name, " ", st)
+				fails += 1
+		if ch.has("foes") and ch.heroes.size() != ch.party.size():
+			print("initiation : héros sans case ", ch.name)
+			fails += 1
 	m.free()
 	# anglais : correspondance exacte, recollage de phrases voisines, chemins d'image intacts
 	var L := Lang.new()

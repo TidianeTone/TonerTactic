@@ -655,7 +655,10 @@ func _title() -> void:
 	dist = 34.0
 	pitch = 30.0
 	_snap_cam()
-	var k: int = await ui.title_screen(_save_info())
+	var k := 1  # « Lancer une descente » depuis la fin de l'initiation : droit aux écrans de départ
+	if not go_run:
+		k = await ui.title_screen(_save_info())
+	go_run = false
 	orbit = false
 	if k == 2 and _load_run():
 		return
@@ -795,80 +798,408 @@ func _start_run() -> void:
 	_make_party()
 
 
-const TUTO_CARD := "cendres"  # la carte rare du coffre de la leçon 2
-var tuto_lesson := 0
-var tuto_seen: Dictionary = {}
+# Initiation : des chapitres scénarisés. Chacun : escouade, arène 10×10 à plat (eau, objets, runes posés à la main),
+# ennemis [id, case, regard, PV], puis les étapes. Une étape : le geste attendu (do), où (at), la carte, la main donnée
+# au début du tour (hand), et la consigne. do : move (une case), play (une carte sur une case), prop (le coffre),
+# ok (lire, puis « Suite »), orient (« Fin »), face (aucun ennemi dans le dos, puis valider), end (fin du tour libre).
+# Les ennemis ne jouent pas : le plateau reste celui que décrit la consigne.
+const TUTO := [
+	{"name": "Le pas et le coup", "art": "res://assets/ui/tuto_1.png", "glyph": "⚔", "text": "La Lame contre deux Moussus : avancer, frapper, prendre de dos, se tourner.",
+		"party": ["lame"], "heroes": [Vector2i(4, 8)],
+		"foes": [["husk", Vector2i(4, 4), Vector2i(0, 1)], ["husk", Vector2i(7, 3), Vector2i(0, -1)]],
+		"steps": [
+			{"do": "move", "at": Vector2i(4, 5), "hand": ["estoc", "double", "fente"], "say": "Au tour de la Lame. Les cases éclairées : jusqu'où elle va. Cliquez la case marquée."},
+			{"do": "play", "card": "estoc", "at": Vector2i(4, 4), "say": "Une carte : l'Estoc, en bas, puis cliquez le Moussu. Chaque carte coûte du mana : 3 par tour."},
+			{"do": "orient", "say": "C'est fini pour ce tour : cliquez « Fin · Lame », en bas à droite."},
+			{"do": "face", "say": "Où regarde la Lame ? Les Moussus aussi frappent de dos : cliquez une case vers eux."},
+			{"do": "move", "at": Vector2i(7, 4), "hand": ["double", "estoc", "fente"], "say": "Ce Moussu vous tourne le dos. Passez derrière lui : la case marquée."},
+			{"do": "play", "card": "double", "at": Vector2i(7, 3), "say": "Double lame, dans son dos : ×1,5 sur chaque coup."},
+			{"do": "orient", "say": "Fin du tour : « Fin · Lame »."},
+			{"do": "face", "say": "Aucun Moussu dans son dos : cliquez une case vers eux."}]},
+	{"name": "Le terrain", "glyph": "✹", "text": "Un brasero, l'eau, une rune de force et un coffre : le décor frappe aussi.",
+		"party": ["lame"], "heroes": [Vector2i(4, 8)],
+		"water": [Vector2i(7, 4), Vector2i(8, 4), Vector2i(9, 4), Vector2i(7, 5), Vector2i(8, 5), Vector2i(9, 5), Vector2i(7, 6), Vector2i(8, 6), Vector2i(9, 6)],
+		"props": {Vector2i(2, 4): "brasero", Vector2i(4, 4): "coffre"}, "tiles": {Vector2i(4, 5): "force"},
+		"foes": [["husk", Vector2i(6, 5), Vector2i(-1, 0)], ["husk", Vector2i(2, 3), Vector2i(0, 1)]],
+		"steps": [
+			{"do": "move", "at": Vector2i(4, 5), "hand": ["c_aiguille", "c_lam2_kunai_leste", "estoc"], "say": "Une rune de force ✦ : +3 aux attaques lancées depuis sa case. Allez dessus."},
+			{"do": "play", "card": "c_aiguille", "at": Vector2i(2, 4), "say": "Un brasero ✹ explose quand on le frappe : 7 dégâts autour. Visez-le avec l'Aiguille."},
+			{"do": "play", "card": "c_lam2_kunai_leste", "at": Vector2i(6, 5), "say": "Le Kunaï lesté repousse d'une case. Poussez ce Moussu à l'eau : la noyade fait 8."},
+			{"do": "prop", "at": Vector2i(4, 4), "say": "Un coffre ◆ au contact : cliquez-le. L'ouvrir ne coûte rien."},
+			{"do": "end", "say": "Fin du tour : « Fin · Lame », puis où elle regarde."}]},
+	{"name": "L'escouade", "art": "res://assets/ui/tuto_2.png", "glyph": "◆", "text": "Garde, Lame, Oracle : l'ordre du round, un paquet chacun, la provocation, le soin.",
+		"party": ["garde", "lame", "oracle"], "heroes": [Vector2i(3, 8), Vector2i(4, 8), Vector2i(5, 8)], "hurt": {"garde": 14},
+		"foes": [["husk", Vector2i(4, 4), Vector2i(0, 1)], ["husk", Vector2i(6, 4), Vector2i(0, 1)]],
+		"steps": [
+			{"do": "ok", "at": "frieze", "hand": ["estoc", "double", "fente"], "say": "La frise, en haut : l'ordre du round, du plus rapide au plus lent. La Lame ouvre."},
+			{"do": "ok", "at": "orb", "say": "Chaque héros a son paquet, sa main, et 3 de mana à son tour."},
+			{"do": "move", "at": Vector2i(4, 5), "say": "Avancez la Lame au contact du Moussu."},
+			{"do": "play", "card": "estoc", "at": Vector2i(4, 4), "say": "Estoc, sur lui."},
+			{"do": "end", "say": "Fin du tour : la main passe au suivant de la frise."},
+			{"do": "play", "card": "seve", "at": Vector2i(3, 8), "hand": ["seve", "braise", "c_ondee"], "say": "L'Oracle soigne de loin : Sève, puis cliquez le Garde blessé."},
+			{"do": "play", "card": "braise", "at": Vector2i(6, 4), "say": "Et frappe de loin : Braise sur le Moussu, jusqu'à 5 cases."},
+			{"do": "end", "say": "Fin du tour de l'Oracle."},
+			{"do": "play", "card": "defi", "at": Vector2i(3, 8), "hand": ["defi", "pavois", "frappe"], "say": "Au Garde. Défi : +4 armure et Provocation, les ennemis le visent lui."},
+			{"do": "ok", "at": "garde", "say": "L'armure absorbe les coups avant les PV. Le Garde encaisse, les autres frappent."},
+			{"do": "end", "say": "Fin du tour, et du chapitre."}]},
+	{"name": "Butin et équipement", "glyph": "⚒", "text": "Une carte au butin, une pièce d'équipement à porter, une relique.",
+		"party": ["garde", "lame", "oracle"], "heroes": [Vector2i(3, 8), Vector2i(4, 5), Vector2i(5, 8)],
+		"foes": [["husk", Vector2i(4, 4), Vector2i(0, 1), 4]],
+		"steps": [
+			{"do": "play", "card": "estoc", "at": Vector2i(4, 4), "hand": ["estoc", "double", "fente"], "say": "Un dernier Moussu, à bout de souffle : achevez-le à l'Estoc."}]},
+	{"name": "La vocation", "art": "res://assets/ui/tuto_3.png", "glyph": "⚭", "text": "Les points de job, une deuxième classe, et sa guilde au butin.",
+		"party": ["garde", "lame", "oracle"]},
+	{"name": "Version rapide", "glyph": "»", "text": "Un combat, puis l'essentiel en un écran.",
+		"party": ["lame"], "heroes": [Vector2i(4, 8)],
+		"water": [Vector2i(8, 4), Vector2i(9, 4), Vector2i(8, 5), Vector2i(9, 5), Vector2i(8, 6), Vector2i(9, 6)],
+		"foes": [["husk", Vector2i(5, 4), Vector2i(0, -1)], ["husk", Vector2i(7, 5), Vector2i(-1, 0)]],
+		"steps": [
+			{"do": "move", "at": Vector2i(5, 5), "hand": ["double", "c_lam2_kunai_leste", "estoc"], "say": "Cliquez la case marquée : la Lame y va, dans le dos du Moussu."},
+			{"do": "play", "card": "double", "at": Vector2i(5, 4), "say": "Une carte en bas, puis la cible. De dos, c'est ×1,5 : Double lame !"},
+			{"do": "play", "card": "c_lam2_kunai_leste", "at": Vector2i(7, 5), "say": "Le Kunaï lesté repousse : poussez l'autre Moussu à l'eau. Noyade : 8."},
+			{"do": "orient", "say": "Fin du tour : « Fin · Lame », en bas à droite."},
+			{"do": "face", "say": "Eux aussi frappent de dos : cliquez une case vers eux."}]},
+]
+const TUTO_TRAITS := {"garde": "costaud", "lame": "gaucher", "oracle": "lynx"}
+const TUTO_ITEM := "epee_ecluse"
+const TUTO_RELIC := "ecaille"
+var tuto_k := 0              # chapitre en cours (index dans TUTO ; 5 : la version rapide)
+var tuto_steps: Array = []
+var tuto_i := 0
+var bot_pick = 0             # --tutotest : la réponse du pilote au prochain écran (index, ou geste d'équipement)
+static var go_run := false   # « Lancer une descente » : la scène repart sur une descente
 var next_size := 0  # taille d'arène imposée (initiation) ; 0 = tirée au sort
 
 
 func _tutorial() -> void:
-	## Initiation scénarisée, trois leçons courtes. Un coach commente ce que fait le joueur, une notion à la fois :
-	## 1. la Lame seule : se déplacer, jouer une carte, le dos ×1,5, l'orientation ;
-	## 2. l'escouade : hauteur, flanc, soutien, et un coffre qui cache une carte rare à jouer tout de suite ;
-	## 3. une élite, avec la vocation gagnée entre-temps (points de job ×3) : la maîtrise.
-	tuto = true
-	tuto_seen = {}
-	run_seed = randi()
-	rng.seed = run_seed
-	mode = "descente"
-	difficulty = 0
-	pacts = []
-	party = ["lame"]
-	rolled_traits = ["gaucher"]
-	_start_run()
-	battle.coach.connect(_coach)
-	await ui.choose("INITIATION", "Trois leçons courtes, une notion à la fois", [
-		{"title": "Le pas et le coup", "art": "res://assets/ui/tuto_1.png", "w": 320, "glyph": "⚔", "text": "La Lame, seule contre deux Moussus. Avancer, frapper, prendre de dos.", "color": Color("#8fd0a0")},
-		{"title": "L'escouade", "art": "res://assets/ui/tuto_2.png", "w": 320, "glyph": "◆", "text": "Trois héros, le terrain qui compte, et un coffre qui cache une carte rare.", "color": UI.GOLD},
-		{"title": "La maîtrise", "art": "res://assets/ui/tuto_3.png", "w": 320, "glyph": "⚭", "text": "Une élite, et un héros qui apprend une deuxième classe.", "color": Color("#d08aff")},
-	], true, "Commencer")
-	for type in ["combat", "combat", "elite"]:
-		tuto_lesson += 1
-		next_arch = Board.ARCHETYPES[[0, 2, 1][tuto_lesson - 1] % Board.ARCHETYPES.size()]
-		next_obj = "kill"
-		next_mods = []
-		next_size = 16 if tuto_lesson == 1 else 18
-		if tuto_lesson == 2:
-			var lame_pj: int = heroes[0].pj
-			party = ["garde", "lame", "oracle"]
-			rolled_traits = ["costaud", "gaucher", "lynx"]
-			_make_party(party)
-			heroes[1].pj = lame_pj
-			deck.append_array(Data.starter(["garde", "oracle"]))
-			for ci in deck:
-				library_see(ci.id)
-		var ids: Array = [["husk", "husk"], ["guetteur", "husk", "husk"], ["carapace", "husk", "guetteur"]][tuto_lesson - 1]
-		if tuto_lesson == 3:
-			await _tuto_mastery()
-		_tuto_setup.call_deferred()
-		var won := await _fight(type, ids)
-		next_size = 0
-		ui.coach("", "")
-		if not won:
-			await ui.game_over(false, "L'initiation s'arrête ici. Rien n'est perdu : la vraie descente vous attend.")
-			if args.has("tutotest"):
-				print("initiation perdue")
-				get_tree().quit()
-				return
-			get_tree().reload_current_scene()
-			return
-		await _post_fight(type)
-		step += 1
-	battle.coach.disconnect(_coach)
-	await ui.choose("INITIATION TERMINÉE", "Le reste, la descente vous l'apprendra",
-		[{"title": "L'angle", "glyph": "⚔", "text": "Dos ×1,5, flanc ×1,2, hauteur ±10 % par niveau, soutien +2. L'orientation compte des deux côtés.", "color": Color("#8fd0a0")},
-		{"title": "Le butin", "glyph": "◆", "text": "Coffres, porteurs de carte, butins : le paquet grossit, à vous de le garder affûté.", "color": UI.GOLD},
-		{"title": "La maîtrise", "glyph": "⚭", "text": "1 point de job par combat, 2 par élite. Assez de points : une vocation, puis sa guilde se dévoile.", "color": Color("#d08aff")}],
-		true, "Retour au titre")
-	if args.has("tutotest"):
-		print("initiation : ", heroes.map(func(h): return "%s pj %d voc %s maîtrise %d" % [h.nm, h.pj, h.voc, mastery(h)]), " · paquet ", deck.size())
-		get_tree().quit()
+	## Entrée « Initiation » du titre : la première fois, une question ; ensuite, le menu des chapitres.
+	var done := _tuto_done()
+	var i := -1
+	if done.is_empty():
+		i = await ui.choose("INITIATION", "Tu connais les roguelikes, les tacticals ou les TCG ?", [
+			{"title": "Oui, fais-moi la version rapide", "art": "res://assets/ui/tuto_1.png", "w": 320, "glyph": "»", "text": TUTO[5].text, "color": UI.GOLD},
+			{"title": "Non, fais voir", "art": "res://assets/ui/tuto_2.png", "w": 320, "glyph": "◆", "text": "Cinq chapitres courts, une notion à la fois.", "color": Color("#8fd0a0")}], true, "← Retour")
+		i = [5, 0][i] if i >= 0 else -1
+	else:
+		var opts: Array = []
+		for k in TUTO.size():
+			var o := {"title": ("✓ " if done.has(k) else "") + (TUTO[k].name if k == 5 else "%d · %s" % [k + 1, TUTO[k].name]),
+				"glyph": TUTO[k].glyph, "text": TUTO[k].text, "color": UI.GOLD if k == 5 else Color("#8fd0a0")}
+			if TUTO[k].has("art"):
+				o["art"] = TUTO[k].art
+			opts.append(o)
+		i = await ui.choose("INITIATION", "Rejouer un chapitre", opts, true, "← Retour")
+	if i < 0:
+		get_tree().reload_current_scene()
+	elif i == 5:
+		await _tuto_play(5)
+		await _tuto_end()
+	else:
+		await _tuto_from(i)
+
+
+func _tuto_done() -> Array:
+	## Chapitres déjà faits (user://initiation.cfg) : l'entrée du titre ouvre alors le menu des chapitres.
+	var cf := ConfigFile.new()
+	if cf.load("user://initiation.cfg") != OK or not cf.has_section("chapitres"):
+		return []
+	return Array(cf.get_section_keys("chapitres")).map(func(k): return int(k))
+
+
+func _tuto_mark(k: int) -> void:
+	if _testing():
 		return
+	var cf := ConfigFile.new()
+	cf.load("user://initiation.cfg")
+	cf.set_value("chapitres", str(k), true)
+	cf.save("user://initiation.cfg")
+
+
+func _tuto_from(n: int) -> void:
+	## La version complète, du chapitre n au dernier ; un petit écran entre deux chapitres.
+	for k in range(n, 5):
+		await _tuto_play(k)
+		if k == 4:
+			break
+		var j := await ui.choose("CHAPITRE %d TERMINÉ" % (k + 1), TUTO[k].name, [
+			{"title": "Chapitre suivant", "glyph": "▸", "text": "%d · %s" % [k + 2, TUTO[k + 1].name], "color": UI.GOLD},
+			{"title": "Retour au titre", "glyph": "⌂", "text": "L'Initiation garde vos chapitres : ils se rejouent depuis son menu.", "color": Color("#8f86a8")}])
+		if j != 0:
+			_tuto_leave(false)
+			return
+	await _tuto_end()
+
+
+func _tuto_end() -> void:
+	var i := await ui.choose("INITIATION TERMINÉE", "Le reste, la descente vous l'apprendra", [
+		{"title": "Retour au titre", "glyph": "⌂", "text": "Les chapitres se rejouent depuis l'Initiation.", "color": Color("#8f86a8")},
+		{"title": "Lancer une descente", "glyph": "⚔", "text": "Mode, difficulté, escouade : la vraie descente commence.", "color": UI.GOLD}])
+	_tuto_leave(i == 1)
+
+
+func _tuto_leave(run: bool) -> void:
+	tuto = false
+	if args.has("tutotest"):
+		return
+	go_run = run
 	get_tree().reload_current_scene()
 
 
+func _tuto_title() -> String:
+	return TUTO[5].name if tuto_k == 5 else "Chapitre %d · %s" % [tuto_k + 1, TUTO[tuto_k].name]
+
+
+func _tuto_play(k: int) -> void:
+	## Un chapitre : escouade et paquet neufs, graine fixe, son combat scénarisé puis ses écrans.
+	var ch: Dictionary = TUTO[k]
+	tuto = true
+	tuto_k = k
+	mode = "descente"
+	difficulty = 0
+	pacts = []
+	run_seed = 4200 + k
+	rng.seed = run_seed
+	party = ch.party.duplicate()
+	rolled_traits = party.map(func(p): return TUTO_TRAITS[p])
+	_start_run()
+	if not battle.coach.is_connected(_coach):
+		battle.coach.connect(_coach)
+	tuto_steps = ch.get("steps", [])
+	tuto_i = 0
+	if ch.has("foes"):
+		next_arch = "damier"
+		next_obj = "kill"
+		next_mods = []
+		next_size = 10
+		await _fight("combat", ch.foes.map(func(f): return f[0]))
+		next_size = 0
+		ui.coach("", "")
+		ui.point(Callable())
+	else:
+		_build_room(run_seed, 0, 10, "damier")
+		ui.set_header("Initiation", _tuto_title())
+	match k:
+		3:
+			await _tuto_gear()
+		4:
+			await _tuto_voc()
+		5:
+			await _tuto_recap()
+	_tuto_mark(k)
+
+
+func _tuto_arena() -> void:
+	## L'arène du chapitre : un parvis 10×10 à plat, l'eau et les objets posés à la main (le hasard n'y met rien).
+	var ch: Dictionary = TUTO[tuto_k]
+	board.props.clear()
+	board.blocked.clear()
+	for x in board.dim:
+		for z in board.dim:
+			var c := Vector2i(x, z)
+			var wet: bool = ch.get("water", []).has(c)
+			board.kind[c] = "water" if wet else "land"
+			board.h[c] = 0 if wet else 2
+	board.props.merge(ch.get("props", {}))
+	board.build_visuals()
+	ui.set_header("Initiation", _tuto_title())
+
+
+func _tuto_setup() -> void:
+	## Appelé par battle.start avant le premier round : chaque unité à sa case, les runes du chapitre, la première consigne.
+	var ch: Dictionary = TUTO[tuto_k]
+	for i in heroes.size():
+		heroes[i].place(ch.heroes[i], board)
+		heroes[i].facing = Vector2i(0, -1)
+		heroes[i].hp -= int(ch.get("hurt", {}).get(heroes[i].key, 0))
+	for i in battle.foes.size():
+		var d: Array = ch.foes[i]
+		battle.foes[i].place(d[1], board)
+		battle.foes[i].facing = d[2]
+		if d.size() > 3:
+			battle.foes[i].hp = d[3]
+	for c in ch.get("tiles", {}):
+		battle.tiles[c] = ch.tiles[c]
+		battle._make_tile(c, ch.tiles[c])
+	_tuto_show()
+
+
+func _tuto_show() -> void:
+	var s: Dictionary = tuto_steps[tuto_i]
+	ui.coach("%s · %d/%d" % [_tuto_title(), tuto_i + 1, tuto_steps.size()], s.say, s.do == "ok")
+	ui.point(_tuto_arrow(s))
+
+
+func _tuto_near() -> Unit:
+	var h: Unit = battle.active
+	var best: Unit = null
+	for f in battle.alive_foes():
+		if h and (best == null or Battle.dist(f.cell, h.cell) < Battle.dist(best.cell, h.cell)):
+			best = f
+	return best
+
+
+func _tuto_arrow(s: Dictionary) -> Callable:
+	## Ce que montre la flèche : la case, la carte puis sa cible, le bouton de fin, ou ce que la consigne explique.
+	var over := func(c: Vector2i):
+		var u := battle.unit_at(c)
+		return u.position + Vector3(0, u.head + 0.9, 0) if u else board.world(c) + Vector3(0, 1.0, 0)
+	match s.do:
+		"move":
+			return func(): return board.world(s.at) + Vector3(0, 0.3, 0)
+		"prop":
+			return over.bind(s.at)
+		"play":
+			return func():
+				if battle.card_sel < 0:
+					var i: int = battle.hand.map(func(ci): return ci.id).find(s.card)
+					return ui._cards[i] if i >= 0 and i < ui._cards.size() else null
+				return over.call(s.at)
+		"face":
+			return func():
+				var f := _tuto_near()
+				return over.call(battle.active.cell + battle._dir(battle.active.cell, f.cell)) if f and battle.active else null
+		"ok":
+			return func():
+				if s.at == "frieze":
+					return ui.frieze
+				if s.at == "orb":
+					return ui.energy_lbl
+				var h: Array = heroes.filter(func(u): return u.key == s.at)
+				return h[0].position + Vector3(0, h[0].head + 0.9, 0) if h.size() > 0 else null
+	return func(): return ui.end_btn
+
+
+func _tuto_face_ok() -> bool:
+	## Aucun ennemi dans le dos du héros actif (même règle que calc).
+	var h: Unit = battle.active
+	return battle.alive_foes().all(func(f): return h.facing.x * signi(f.cell.x - h.cell.x) + h.facing.y * signi(f.cell.y - h.cell.y) >= 0)
+
+
+func tuto_gate(kind: String, arg = null) -> String:
+	## L'étape en cours n'accepte que son geste ; le reste est refusé d'un mot. "" : permis.
+	if not tuto or tuto_i >= tuto_steps.size():
+		return ""
+	var s: Dictionary = tuto_steps[tuto_i]
+	var ok: bool
+	match kind:
+		"card":
+			ok = s.do == "play" and arg == s.card
+		"target":
+			ok = s.do == "play" and arg == s.at
+		"end":
+			ok = s.do in ["orient", "face", "end"]
+		"face":
+			ok = s.do == "end" or (s.do == "face" and _tuto_face_ok())
+		_:
+			ok = s.do == kind and arg == s.at
+	if ok:
+		return ""
+	match s.do:
+		"play":
+			return "Suivez la flèche : %s." % Data.def(s.card).name
+		"ok":
+			return "Lisez, puis « Suite »."
+		"face":
+			return "Un ennemi voit son dos : tournez-la vers eux."
+		"orient", "end":
+			return "Terminez le tour : « Fin », en bas à droite."
+	return "Pas là : suivez la flèche."
+
+
+func tuto_hand(h: Unit) -> Array:
+	## La main donnée au début du tour : celle de l'étape en cours ([] : la pioche normale).
+	var ids: Array = tuto_steps[tuto_i].get("hand", []) if tuto and tuto_i < tuto_steps.size() else []
+	return ids.map(func(id): return {"id": id, "lvl": 1, "h": h.key})
+
+
+func _coach(evt: String, _info) -> void:
+	## Ce que fait le joueur : le geste attendu fait passer à l'étape suivante.
+	if tuto and tuto_i < tuto_steps.size() and evt == {"move": "moved", "play": "done", "prop": "coffre", "orient": "orient", "face": "ended", "end": "ended"}.get(tuto_steps[tuto_i].do, ""):
+		_tuto_next()
+
+
+func _tuto_ok() -> void:
+	## Bouton « Suite » de la boîte du coach.
+	if tuto_i < tuto_steps.size() and tuto_steps[tuto_i].do == "ok":
+		_tuto_next()
+
+
+func _tuto_next() -> void:
+	tuto_i += 1
+	if tuto_i < tuto_steps.size():
+		_tuto_show()
+		return
+	ui.coach("", "")
+	ui.point(Callable())
+	if not battle.over:  # la dernière consigne suivie : le chapitre est gagné
+		battle.over = true
+		battle.player_turn = false
+		battle._finish(true)
+
+
+func _tuto_gear() -> void:
+	## Chapitre 4, après le combat : une carte au butin, une pièce d'équipement à porter, une relique.
+	var ids := ["defi", "venin", "c_tison"]
+	var i := await ui.choose("BUTIN", "Après chaque combat : une carte parmi trois pour le paquet, ou aucune", ids.map(func(id): return {"card": {"id": id, "lvl": 1}, "tag": "Pour " + Data.HEROES[Data.def(id).owner].name}), true)
+	if i >= 0:
+		deck.append({"id": ids[i], "lvl": 1})
+		fight_loot.append(Data.def(ids[i]).name)
+	await ui.choose("ÉQUIPEMENT", "Une pièce d'équipement : elle rejoint le sac", [_item_opt(TUTO_ITEM).merged({"w": 300})], true, "Au sac")
+	bag.append(TUTO_ITEM)
+	fight_loot.append(Data.ITEMS[TUTO_ITEM].name)
+	var rows: Array = heroes.map(func(h): return {"nm": h.nm, "key": h.key, "pj0": h.pj, "pj1": h.pj, "m": 1, "lo": 0, "hi": Data.MASTERY[2]})
+	var say := func(t: String, at: String) -> void:
+		ui.coach(_tuto_title(), t)
+		ui.point(func(): return ui.tuto_node(at))
+	while bag.has(TUTO_ITEM):
+		say.call("On s'équipe hors combat : cliquez « S'équiper ».", "btn1")
+		bot_pick = 1
+		if await ui.fight_summary("VICTOIRE", rows, fight_loot, true) != 1:
+			ui.toast("D'abord « S'équiper » : l'épée attend au sac.")
+			continue
+		say.call("L'épée ne va qu'au Garde : cliquez-la dans le sac.", "bag0")
+		bot_pick = {"equip": 0, "hero": 0}
+		_equip_act(await ui.equipment_screen(heroes, bag))
+	say.call("La fiche du Garde a changé : l'épée, et l'attaque +1. Cliquez « Terminer ».", "done")
+	bot_pick = {}
+	while _equip_act(await ui.equipment_screen(heroes, bag)):
+		pass
+	ui.coach("", "")
+	ui.point(Callable())
+	await ui.choose("RELIQUE", "Un pouvoir gardé toute la descente, pour toute l'escouade", [_relic_opt(TUTO_RELIC).merged({"w": 300})], true, "La prendre")
+	await _add_relic(TUTO_RELIC)
+
+
+func _tuto_voc() -> void:
+	## Chapitre 5 : les points de job, la vocation, puis une carte de guilde au butin.
+	var h: Unit = heroes[1]  # la Lame
+	await ui.choose("POINTS DE JOB", "Chaque combat en rapporte : 1, et 2 contre une élite", [
+		{"title": "La maîtrise", "art": "res://assets/ui/tuto_3.png", "w": 320, "glyph": "⚭", "color": Color("#d08aff"),
+		"text": "Au palier II, le héros choisit une vocation : une deuxième classe. L'initiation triple les points : la Lame y est."}], true, "Compris")
+	await _gain_pj(h, 1)
+	if h.voc == "":
+		return
+	var g := Guildes.index(h.key, h.voc)
+	var opts: Array = [{"card": {"id": Guildes.cards_of(g, [1])[0], "lvl": 1, "h": h.key}, "tag": "⚭ " + Guildes.LIST[g][2]},
+		{"card": {"id": "venin", "lvl": 1}, "tag": "Pour Lame"}, {"card": {"id": "c_tison", "lvl": 1}, "tag": "Pour Oracle"}]
+	var i := await ui.choose("BUTIN", "Sa guilde entre au butin : la carte ⚭ mêle ses deux classes", opts, true)
+	if i >= 0:
+		deck.append(opts[i].card)
+	await _tuto_mastery()
+
+
+func _tuto_recap() -> void:
+	## Version rapide : le reste de l'initiation en un écran.
+	await ui.choose("L'ESSENTIEL", "Le reste se découvre en descendant", [
+		{"title": "Le butin", "art": "res://assets/ui/tuto_2.png", "w": 300, "glyph": "◆", "color": UI.GOLD,
+		"text": "Après chaque combat, une carte parmi trois. Coffres et élites donnent objets et reliques."},
+		_item_opt(TUTO_ITEM).merged({"title": "L'équipement", "w": 300, "text": "Hors combat, « S'équiper » : un objet du sac, puis un héros. Sa fiche montre ce qui change."}, true),
+		{"title": "La vocation", "art": "res://assets/ui/tuto_3.png", "w": 300, "glyph": "⚭", "color": Color("#d08aff"),
+		"text": "1 point de job par combat, 2 par élite. Au palier II : une deuxième classe, et sa guilde au butin."}], true, "Compris")
+
+
 func _tuto_mastery() -> void:
-	## Leçon 3 : la vocation expliquée sur le héros qui vient de la prendre, avec trois cartes de sa guilde
+	## Chapitre 5 : la vocation expliquée sur le héros qui vient de la prendre, avec trois cartes de sa guilde
 	## (commune, rare, légendaire) pour montrer ce que la maîtrise fait monter.
 	var hs: Array = heroes.filter(func(h): return h.voc != "")
 	if hs.is_empty():
@@ -880,143 +1211,8 @@ func _tuto_mastery() -> void:
 		var ids := Guildes.cards_of(g, [r[0]])
 		if ids.size() > 0:
 			opts.append({"card": {"id": ids[0], "lvl": 1, "h": h.key}, "tag": r[1]})
-	await ui.choose("LA MAÎTRISE", "%s a pris une deuxième classe : %s. Sa guilde, c'est %s + %s : « %s ».
-Ses butins proposent des cartes de ces deux classes. Plus il combat, meilleures seront les cartes : la légendaire peut tomber tôt, mais c'est rare." % [
+	await ui.choose("LA MAÎTRISE", "Vocation de %s : %s. Sa guilde, %s + %s, s'appelle « %s ». Plus il combat, meilleures sont ses cartes de guilde." % [
 		h.nm, Data.HEROES[h.voc].name, Data.HEROES[h.key].name, Data.HEROES[h.voc].name, Guildes.LIST[g][2]], opts, true, "Compris")
-
-
-var tuto_chest := Vector2i(-99, -99)
-func _tuto_setup() -> void:
-	## Appelé par battle.start juste avant le premier round : la mise en scène de chaque leçon.
-	for c in board.props.keys():
-		if board.props[c] == "coffre":
-			battle._remove_prop(c)  # un seul coffre dans l'initiation : celui de la leçon
-	if tuto_lesson == 1 and battle.foes.size() > 1:
-		var f: Unit = battle.foes[1]
-		f.face(f.cell - heroes[0].cell)  # celui-là tourne le dos : la leçon du coup de dos
-	if tuto_lesson == 2:
-		var o: Unit = heroes[2]
-		var free: Array = board.walkable_cells()
-		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(-1, -1), Vector2i(1, -1), Vector2i(-1, 1)]:
-			var c: Vector2i = o.cell + d
-			if free.has(c) and battle.unit_at(c) == null and not board.props.has(c) and absi(board.h[c] - board.h[o.cell]) <= 1:
-				tuto_chest = c
-				board.props[c] = "coffre"
-				battle._make_prop(c)
-				break
-
-
-func _coach(evt: String, info) -> void:
-	## Le coach de l'initiation : une consigne par notion, jamais deux fois la même.
-	var names := ["", "Le pas et le coup", "L'escouade", "La maîtrise"]
-	var say := func(k: String, t: String) -> bool:
-		if tuto_seen.has(k):
-			return false
-		tuto_seen[k] = true
-		ui.coach("Leçon %d · %s" % [tuto_lesson, names[tuto_lesson]], t)
-		ui.point(_tuto_target(k))
-		var dir := str(args.get("tutotest", ""))
-		if dir.length() > 4:  # -- --tutotest=DIR : une capture par consigne
-			get_tree().create_timer(0.5 * Engine.time_scale).timeout.connect(func(): _shot(dir, "coach_%d_%s" % [tuto_lesson, k]))
-		return true
-	if evt in ["moved", "played"] or (evt == "turn" and info != null and info.side == "hero" and info != battle.active):
-		ui.point(Callable())  # l'action attendue est faite : la flèche s'efface
-	var notes: Array = info if evt == "hit" else []
-	var has_note := func(p: String) -> bool:
-		return notes.any(func(n): return str(n).begins_with(p))
-	match tuto_lesson:
-		1:
-			if evt == "turn":
-				if not say.call("move", "C'est au tour de la [color=#e3b45c]Lame[/color]. Les cases éclairées montrent jusqu'où elle peut aller : cliquez-en une pour avancer."):
-					if battle.turn >= 2:
-						say.call("frise", "La frise du haut donne l'ordre du round : les plus rapides jouent d'abord. Cliquez un ennemi pour épingler sa fiche et lire ce qu'il prépare.")
-			elif evt == "moved":
-				say.call("card", "Une carte, maintenant : choisissez une attaque en bas de l'écran, puis cliquez l'ennemi. Chaque carte coûte du [color=#e3b45c]mana[/color] (l'orbe) : 3 par tour.")
-			elif evt == "hit" and has_note.call("dos"):
-				say.call("dos", "[color=#e3b45c]Dans le dos : ×1,5.[/color] Un ennemi qui vous tourne le dos est une fenêtre à saisir. La Lame, gauchère, y ajoute +2.")
-			elif evt == "hit" and tuto_seen.has("card"):
-				say.call("hint", "L'aperçu détaille les dégâts avant de frapper. Le second Moussu vous tourne le dos : contournez-le, le coup de dos fait [color=#e3b45c]×1,5[/color].")
-			elif evt == "orient":
-				say.call("orient", "Fin du tour : cliquez la direction où regarde la Lame. [color=#e3b45c]Eux aussi frappent de dos[/color] : ne leur offrez pas le vôtre.")
-		2:
-			if evt == "turn":
-				if not say.call("intro", "Trois héros, trois paquets : chacun a sa main et ses 3 de mana à son tour. Un [color=#e3b45c]coffre ◆[/color] brille à côté de l'Oracle."):
-					if info == heroes[2] and board.props.get(tuto_chest, "") == "coffre":
-						say.call("chest", "C'est l'Oracle : cliquez le coffre ◆ à côté d'elle. L'ouvrir ne coûte ni mana ni déplacement.")
-					elif battle.turn >= 2:
-						say.call("apercu", "Choisissez une attaque puis survolez une cible : l'aperçu montre chaque bonus. Le terrain compte : hauteur, flanc, alliés au contact.")
-			elif evt == "played" and str(info) == TUTO_CARD:
-				say.call("pouvoir", "Un [color=#e3b45c]Pouvoir[/color] : il reste actif tout le combat. Chaque tour, 4 dégâts à l'ennemi le plus proche de l'Oracle.")
-			elif evt == "hit":
-				if has_note.call("hauteur +"):
-					say.call("haut", "[color=#e3b45c]Hauteur[/color] : +10 % par niveau au-dessus de la cible, jusqu'à +30 %. Le Guetteur le sait, il tire d'en haut.")
-				elif has_note.call("hauteur -"):
-					say.call("bas", "Frapper d'en bas coûte [color=#e3b45c]−10 % par niveau[/color]. Montez, ou allez chercher le Guetteur.")
-				elif has_note.call("flanc"):
-					say.call("flanc", "[color=#e3b45c]De flanc : ×1,2.[/color] Moins qu'un coup de dos, mieux que de face.")
-				elif has_note.call("soutien +"):
-					say.call("soutien", "[color=#e3b45c]Soutien[/color] : un allié au contact donne +2 aux coups, et −2 aux coups qu'on reçoit.")
-		3:
-			if evt == "turn":
-				if not say.call("elite", "Une élite. La [color=#e3b45c]Carapace[/color] se couvre de 8 d'armure par tour, et l'armure absorbe les coups. La pousser à l'eau, frapper de dos, ou laisser la Pluie de cendres l'user."):
-					var v: Array = heroes.filter(func(h): return h.voc != "")
-					if v.size() > 0:
-						say.call("voc", "%s a pris %s comme [color=#e3b45c]deuxième classe[/color] : sa guilde, c'est %s + %s. Ses butins mêlent maintenant les deux. [color=#e3b45c]Plus il combat, meilleures seront les cartes.[/color]" % [v[0].nm, Data.HEROES[v[0].voc].name, Data.HEROES[v[0].key].name, Data.HEROES[v[0].voc].name])
-
-
-func _tuto_target(k: String) -> Callable:
-	## Ce que montre la flèche de chaque consigne (évaluée à chaque image : les cibles bougent).
-	var foe_near := func():
-		var h: Unit = battle.active
-		var best: Unit = null
-		for f in battle.alive_foes():
-			if h and (best == null or Battle.dist(f.cell, h.cell) < Battle.dist(best.cell, h.cell)):
-				best = f
-		return best
-	match k:
-		"move":
-			return func():
-				var h: Unit = battle.active
-				var f: Unit = foe_near.call()
-				if h == null or f == null or h.moved:
-					return null
-				var best: Vector2i = h.cell
-				for c in battle.reach(h).cells:
-					if battle.unit_at(c) == null and Battle.dist(c, f.cell) < Battle.dist(best, f.cell):
-						best = c
-				return board.world(best) + Vector3(0, 0.3, 0)
-		"card", "apercu":
-			return func():
-				for i in ui._cards.size():
-					if i < battle.hand.size() and Data.card(battle.hand[i]).kind == "atk":
-						return ui._cards[i]
-				return null
-		"hint", "elite":
-			return func():
-				var f: Unit = foe_near.call() if k == "hint" else battle.alive_foes().filter(func(o): return o.key == "carapace").front()
-				return f.position + Vector3(0, f.head + 0.9, 0) if f else null
-		"chest", "intro":
-			return func(): return board.world(tuto_chest) + Vector3(0, 1.0, 0) if board.props.get(tuto_chest, "") == "coffre" else null
-		"orient":
-			return func(): return battle.active.position + Vector3(0, battle.active.head + 0.9, 0) if battle.active else null
-		"rare":
-			return func():
-				for i in ui._cards.size():
-					if i < battle.hand.size() and battle.hand[i].id == TUTO_CARD:
-						return ui._cards[i]
-				return null
-	return Callable()
-
-
-func tuto_hold(h: Unit) -> String:
-	## Leçon 2 : l'Oracle ne passe pas son tour sans avoir ouvert le coffre et joué la carte rare.
-	if tuto_lesson != 2 or h == null or h.key != "oracle" or _testing():
-		return ""
-	if board.props.get(tuto_chest, "") == "coffre" and (not h.moved or Battle.dist(h.cell, tuto_chest) == 1):
-		return "Ouvrez d'abord le coffre ◆ : cliquez-le."
-	if battle.hand.any(func(ci): return ci.id == TUTO_CARD):
-		return "Jouez d'abord la Pluie de cendres : elle est gratuite."
-	return ""
 
 
 func _pick_difficulty() -> int:
@@ -1150,8 +1346,6 @@ func _post_fight(type: String) -> void:
 
 func _summary(pj0: Dictionary) -> void:
 	## Fin de combat : jauge d'expérience, tout le butin, et s'équiper avant de repartir (on ne s'équipe pas en combat).
-	if tuto and tuto_lesson < 3:
-		return
 	var rows: Array = []
 	for h in heroes:
 		var m := mastery(h)
@@ -1332,6 +1526,8 @@ func _fight(type: String, ids_override: Array = []) -> bool:
 	if tactic and not tuto:  # vue tactique : même combat, sur un damier plat plus lisible
 		arch = "damier"
 	_build_room(run_seed + floor_i * 1009 + step * 37 + fights * 131, _biome(), size, arch, true)
+	if tuto:
+		_tuto_arena()
 	ids = compose(ids, type)
 	pitch = 40.0
 	battle.objective = next_obj if type == "combat" else "kill"
@@ -1453,22 +1649,10 @@ func _gain_item(id: String, h: Unit = null) -> void:
 
 
 func open_chest(h: Unit) -> void:
-	if tuto and tuto_lesson == 2 and not tuto_seen.has("rare"):
-		tuto_seen["rare"] = true
-		# l'initiation : le coffre cache la carte rare, qui file dans la main de l'Oracle, gratuite
-		var o: Unit = heroes[2]
-		var ci := {"id": TUTO_CARD, "lvl": 1, "h": "oracle", "free": true}
-		if battle.active == o:
-			battle.hand.append(ci)
-		else:
-			battle.piles[o].keep.append(ci)
-		deck.append({"id": TUTO_CARD, "lvl": 1})
-		library_see(TUTO_CARD)
-		Fx.number(self, h.position + Vector3(0, 1.0, 0), "Carte rare !", Color(1.0, 0.85, 0.4), true)
-		ui.coach("Leçon 2 · L'escouade", "Une carte [color=#ffcf5a]rare[/color] : [color=#e3b45c]Pluie de cendres[/color]. " +
-			("Elle est dans la main de l'Oracle, gratuite : jouez-la." if battle.active == o else "Elle attend l'Oracle, gratuite : jouez-la à son tour."))
-		ui.point(_tuto_target("rare"))
-		battle.changed.emit()
+	if tuto:  # l'initiation : un coffre sans surprise
+		gold += 30
+		ui.set_gold(gold)
+		await ui.choose("COFFRE", "Ouvert par %s · coffres et élites remplissent la bourse et le sac" % h.nm, [{"title": "+30 or", "glyph": "◆", "text": "La bourse de l'escouade", "color": UI.GOLD, "w": 210}], true, "Continuer")
 		return
 	# on tire tout, puis une petite fenêtre dit clairement ce que contenait le coffre
 	var g := 0
@@ -1617,7 +1801,7 @@ func _choose_vocation(h: Unit, second := false) -> void:
 		others[i] = others[j]
 		others[j] = t
 	var picks: Array = others.slice(0, 3)
-	var i: int = await ui.vocation_screen(h, picks) if not _testing() or args.has("voctest") else 0
+	var i: int = await ui.vocation_screen(h, picks) if not _testing() or args.has("voctest") or tuto else 0
 	var k: String = picks[maxi(i, 0)]
 	if second:
 		h.voc2 = k
@@ -1923,24 +2107,29 @@ func _item_opt(id: String, price := 0) -> Dictionary:
 
 func _equipment() -> void:
 	## Écran dédié : survol = effet de l'objet ; un objet du sac puis un héros pour équiper, un emplacement pour retirer.
-	while true:
-		var a: Dictionary = await ui.equipment_screen(heroes, bag)
-		if a.has("equip"):
-			var id: String = bag[a.equip]
-			var u: Unit = heroes[a.hero]
-			var slot: String = Data.ITEMS[id].slot
-			bag.remove_at(a.equip)
-			if u.equip[slot] != "":
-				bag.append(u.equip[slot])
-			u.equip[slot] = id
-			u.apply_gear()
-		elif a.has("unequip"):
-			var u: Unit = heroes[a.hero]
-			bag.append(u.equip[a.unequip])
-			u.equip[a.unequip] = ""
-			u.apply_gear()
-		else:
-			return
+	while _equip_act(await ui.equipment_screen(heroes, bag)):
+		pass
+
+
+func _equip_act(a: Dictionary) -> bool:
+	## Un geste de l'écran d'équipement ; faux quand on le ferme.
+	if a.has("equip"):
+		var id: String = bag[a.equip]
+		var u: Unit = heroes[a.hero]
+		var slot: String = Data.ITEMS[id].slot
+		bag.remove_at(a.equip)
+		if u.equip[slot] != "":
+			bag.append(u.equip[slot])
+		u.equip[slot] = id
+		u.apply_gear()
+	elif a.has("unequip"):
+		var u: Unit = heroes[a.hero]
+		bag.append(u.equip[a.unequip])
+		u.equip[a.unequip] = ""
+		u.apply_gear()
+	else:
+		return false
+	return true
 
 
 # ------------------------------------------------------------------ lieux de repos
@@ -3005,10 +3194,61 @@ func _maptest() -> void:
 
 
 func _tutotest() -> void:
-	## L'initiation jouée par le bot : trois combats, vocations et paliers, puis bilan.
-	Engine.time_scale = 8.0
-	_test_driver()
-	await _tutorial()
+	## -- --tutotest=DIR : les cinq chapitres puis la version rapide, joués par le pilote ; une capture par étape et par écran.
+	DirAccess.make_dir_recursive_absolute(args.tutotest)
+	Engine.time_scale = 4.0
+	_tuto_bot()
+	await _tuto_from(0)
+	await _tuto_play(5)
+	await _tuto_end()
+	print("initiation : ", heroes.map(func(h): return "%s pj %d voc %s" % [h.nm, h.pj, h.voc]), " · paquet ", deck.size(), " · reliques ", relics)
+	get_tree().quit()
+
+
+func _tuto_bot() -> void:
+	## Pilote de --tutotest : il fait le geste attendu (par les mêmes portes que le joueur) et capture avant chaque geste.
+	var dir: String = args.tutotest
+	var n := 0
+	while is_inside_tree():
+		await _frames(24)
+		if ui.overlay != null:
+			n += 1
+			_shot(dir, "%03d_ecran" % n)
+			var p = bot_pick
+			bot_pick = 0  # avant l'emit : l'écran suivant peut poser sa propre réponse tout de suite
+			if p is Dictionary:
+				ui._eq_act = p
+			ui.picked.emit(0 if p is Dictionary else p)
+			continue
+		if not tuto or tuto_i >= tuto_steps.size() or not battle.player_turn or battle.busy or battle.over or not ui.hud.visible:
+			continue
+		var s: Dictionary = tuto_steps[tuto_i]
+		var tag := "%s_%02d" % ["rapide" if tuto_k == 5 else "ch%d" % (tuto_k + 1), tuto_i + 1]
+		n += 1
+		_shot(dir, "%03d_%s_%s" % [n, tag, s.do])
+		if tuto_gate("move", Vector2i(-1, -1)) == "":
+			print("ERREUR initiation : un geste hors consigne passe (", tag, ")")
+		match s.do:
+			"move", "prop":
+				battle.click(s.at)
+			"play":
+				var i: int = battle.hand.map(func(ci): return ci.id).find(s.card)
+				if i < 0:
+					print("ERREUR initiation : ", s.card, " absente de la main (", tag, ")")
+					continue
+				battle.select_card(i)
+				if battle.card_sel >= 0:
+					await _frames(24)
+					n += 1
+					_shot(dir, "%03d_%s_cible" % [n, tag])
+					battle.click(s.at)
+			"face":
+				var f := _tuto_near()
+				battle.click(battle.active.cell + battle._dir(battle.active.cell, f.cell))
+			"ok":
+				_tuto_ok()
+			_:
+				battle.end_turn()
 
 
 func _savetest() -> void:
