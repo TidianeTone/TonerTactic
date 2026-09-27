@@ -1,0 +1,18 @@
+{
+" · route ": " · route ",
+"(?i)(?<![A-Za-zÀ-ÿ])(": "(?i)(?<![A-Za-zÀ-ÿ])(",
+")(?![A-Za-zÀ-ÿ])": ")(?![A-Za-zÀ-ÿ])",
+"Fiche et paquet de": "Sheet and deck of",
+"Fiche et paquet de %s": "Sheet and deck of %s",
+"Jouable par": "Playable by",
+"Jouable par %s, qui a la vocation %s.": "Playable by %s, who has the %s calling.",
+"Paquet · %d cartes": "Deck · %d cards",
+"Pour": "For",
+"Pour ": "For ",
+"[color=#ffcf6e]$1[/color]": "[color=#ffcf6e]$1[/color]",
+"fin du tour": "end of turn",
+"qui a la vocation": "who has the calling",
+"route": "route",
+"zone orange": "orange zone",
+"épingler": "pin"
+}

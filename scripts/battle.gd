@@ -16,6 +16,7 @@ var danger := false         # zone de danger : tout ce que les ennemis menacent
 var _extra_move := {}       # héros qui ont déjà payé leur course (3 mana) ce tour
 var glyph_t := {}           # glyphe instable -> tours avant l'explosion
 var glyph_lbl := {}
+var bombs := {}              # bombe à retardement : case -> {n: rounds avant l'explosion, dmg, lbl}
 var orienting := false      # fin du tour à la FFT : le héros choisit où il regarde
 var _orient_from := Vector2i.ZERO
 var _orient_mark: Label3D    # flèche dorée sur la case regardée, visible à travers le décor
@@ -213,6 +214,7 @@ func start(hs: Array, foe_ids: Array, deck_ref: Array, relics_ref: Array) -> voi
 	brasero_aura.clear()
 	sim.clear()
 	turrets.clear()
+	bombs.clear()
 	echo = false
 	bonus_energy = 0
 	_elan_used.clear()
@@ -603,7 +605,7 @@ func _check_portal(h: Unit) -> void:
 
 func _make_prop(c: Vector2i) -> void:
 	var node := Node3D.new()
-	var md := Board.mesh_of("prop_" + board.props[c])
+	var md := Board.mesh_of("prop_" + ("baril" if board.props[c] == "bombe_retard" else board.props[c]))
 	for part in ["mesh", "glow"]:
 		if md[part] == null:
 			continue
@@ -634,6 +636,28 @@ func _make_prop(c: Vector2i) -> void:
 		var tw := l3.create_tween().set_loops()
 		tw.tween_property(l3, "position:y", 1.65, 0.9).set_trans(Tween.TRANS_SINE)
 		tw.tween_property(l3, "position:y", 1.45, 0.9).set_trans(Tween.TRANS_SINE)
+	if board.props[c] == "bombe_retard":
+		node.scale = Vector3.ONE * 0.6  # un petit baril cerclé de rouge, son compte à rebours au-dessus
+		var cd := Label3D.new()
+		cd.text = "2"
+		cd.font = Fx.title_font()
+		cd.font_size = 110
+		cd.pixel_size = 0.009
+		cd.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		cd.no_depth_test = true
+		cd.render_priority = 10
+		cd.modulate = Color(1.0, 0.3, 0.2)
+		cd.outline_size = 18
+		cd.outline_modulate = Color(0.05, 0.02, 0.02, 0.9)
+		cd.position.y = 1.9
+		node.add_child(cd)
+		node.set_meta("count", cd)
+		var bl := OmniLight3D.new()
+		bl.light_color = Color(1.0, 0.25, 0.15)
+		bl.light_energy = 1.2
+		bl.omni_range = 1.6
+		bl.position.y = 0.8
+		node.add_child(bl)
 	if board.props[c] == "brasero":
 		var l := OmniLight3D.new()
 		l.light_color = Color(1.0, 0.55, 0.25)
@@ -860,6 +884,7 @@ func _next_round() -> void:
 		_reinforce()
 	if turn > 1:
 		await _glyphs()
+		await _bombs()
 		await _resolve_omens()
 		if over:
 			return
@@ -2086,6 +2111,8 @@ func play_card(i: int, t: Vector2i) -> void:
 	_pre = pre
 	_resolving = true
 	await resolve(c, h, t)
+	if c.has("gives"):
+		_gives(c.gives, h)
 	if c.kind == "atk" and c.get("draw", 0) > 0:
 		draw(c.draw)
 	for vk in ["voix", "voix2"]:
@@ -4457,6 +4484,8 @@ func preview(hover) -> String:
 		return "Picots — l'ennemi qui y marche s'arrête et subit 5" if trap_kind.get(hover, "") == "picots" else "Piège à mâchoires — 8 dégâts et entrave"
 	if board.props.has(hover):
 		var pk: String = board.props[hover]
+		if pk == "bombe_retard" and bombs.has(hover):
+			return "%s — %s" % [Data.PROPS[pk].name, Data.PROPS[pk].text % [int(bombs[hover].n), int(bombs[hover].dmg)]]
 		if Data.PROPS.has(pk):
 			return "%s — %s" % [Data.PROPS[pk].name, Data.PROPS[pk].text]
 		return "Levier actionné"
@@ -4687,6 +4716,8 @@ func _place(c: Dictionary, t: Vector2i, h: Unit) -> void:
 	else:
 		board.props[t] = k
 		_make_prop(t)
+		if k == "bombe_retard":
+			bombs[t] = {"n": 2, "dmg": int(c.get("tdmg", 6))}
 		if k == "tourelle":
 			var tt := int(c.get("turns", 3))
 			if c.get("turns_items", false):
@@ -5385,8 +5416,25 @@ func _base(c: Dictionary, h: Unit, t) -> int:
 		+ int(c.get("per_missing", 0)) * ((h.max_hp - h.hp) / 5) + int(c.get("per_tele", 0)) * h.teles \
 		+ int(c.get("per_used", 0)) * used_turn + int(c.get("_dropv", 0)) + int(c.get("_chg", 0)) \
 		+ int(c.get("per_drawn", 0)) * drawn_turn + int(c.get("per_exhaust", 0)) * int(exhaust_n.get(h, 0)) \
-		+ int(c.get("per_marked", 0)) * alive_foes().filter(func(o): return o.mark > 0).size() \
+		+ int(c.get("per_eph", 0)) * played_turn.filter(func(p): return p.get("eph", false)).size() 		+ int(c.get("per_marked", 0)) * alive_foes().filter(func(o): return o.mark > 0).size() \
 		+ (int(c.get("consume_root", 0)) * (unit_at(t).root if t is Vector2i and unit_at(t) else 0))
+
+
+func _gives(g: Dictionary, h: Unit) -> void:
+	## Carte qui en crée une autre : {id, to: "self" | "allies", free, n}. Copies Éphémères ; celles des alliés
+	## arrivent dans leur main à leur tour (piles.keep), le survol de la carte d'origine montre la carte créée.
+	var to: Array = [h] if g.get("to", "self") == "self" else alive_heroes().filter(func(a): return a != h)
+	for u in to:
+		for i in int(g.get("n", 1)):
+			var ci := {"id": g.id, "lvl": 1, "h": u.key, "eph": true}
+			if g.get("free", false):
+				ci["free"] = true
+			if u == h:
+				if hand.size() < 10:
+					hand.append(ci)
+			elif piles.has(u):
+				piles[u].keep.append(ci)
+		Fx.number(main, u.position + Vector3(0, 1.3, 0), "+ %s" % Data.def(g.id).name, Color(1.0, 0.85, 0.5))
 
 
 func _berserk(u: Unit) -> void:
@@ -6041,6 +6089,36 @@ func _glyphs() -> void:
 			glyph_lbl[c].text = str(glyph_t[c])
 	if over:
 		return
+
+
+func _bombs() -> void:
+	## Bombes à retardement : un round de moins à chaque début de round ; à zéro, une croix de tdmg
+	## aux ennemis seulement. Ni les coups ni les explosions ne la déclenchent (hors de BOOM).
+	for c in bombs.keys():
+		if board.props.get(c, "") != "bombe_retard":
+			bombs.erase(c)  # noyée, emportée
+			continue
+		bombs[c].n -= 1
+		if bombs[c].n > 0:
+			var node: Node3D = prop_nodes.get(c)
+			if node and node.has_meta("count"):
+				(node.get_meta("count") as Label3D).text = str(bombs[c].n)
+			continue
+		var dmg: int = bombs[c].dmg
+		bombs.erase(c)
+		_remove_prop(c)
+		Fx.burst(main, board.world(c) + Vector3(0, 0.6, 0), EMBER, 90, 6.0)
+		Fx.number(main, board.world(c) + Vector3(0, 1.0, 0), "Boum", EMBER, true)
+		main.shake(0.5)
+		for d in [Vector2i.ZERO] + Board.DIRS:
+			var u := unit_at(c + d)
+			if u and u.side == "foe" and u.alive:
+				_blast = true
+				damage(u, dmg)
+				_blast = false
+		await wait(0.3)
+		if over:
+			return
 
 
 func _tile_turn(u: Unit) -> void:

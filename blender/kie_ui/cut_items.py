@@ -110,10 +110,15 @@ pl = os.path.join(HERE, "dos_classes.png")
 if os.path.exists(pl):
 	a = np.asarray(Image.open(pl).convert("RGB"))
 	H, W = a.shape[:2]
+	import cv2
+	# la grille peinte n'est pas régulière : chaque dos = une des 9 plus grandes pièces opaques, rangées ligne par ligne
+	full = key(a)
+	nb, lb, stb, _ = cv2.connectedComponentsWithStats((full[..., 3] > 60).astype(np.uint8), connectivity=8)
+	big9 = sorted(range(1, nb), key=lambda q: -stb[q, 4])[:9]
+	big9.sort(key=lambda q: (int((stb[q, 1] + stb[q, 3] / 2) // (H / 3)), stb[q, 0]))
 	for i, k in enumerate(DOS):
-		c = key(a[(i // 3) * H // 3:(i // 3 + 1) * H // 3, (i % 3) * W // 3:(i % 3 + 1) * W // 3])
-		ys, xs = np.nonzero(c[..., 3] > 60)
-		c = c[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+		x, y, bw, bh = stb[big9[i], :4]
+		c = full[y:y + bh, x:x + bw]
 		# l'intérieur peint en vert devient un fond sombre à la couleur de la classe, avec un halo derrière l'emblème
 		h, w = c.shape[:2]
 		yy, xx = np.mgrid[0:h, 0:w]

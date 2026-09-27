@@ -1531,7 +1531,7 @@ func _rewards(type: String) -> void:
 		opts.append({"card": {"id": id, "lvl": 2 if up else 1}})
 	for o in opts:
 		var ar: String = Data.def(o.card.id).get("arch", "")
-		o["tag"] = Data.HEROES[Data.holder(o.card)].name + (" · " + ar if ar != "" else "")
+		o["tag"] = "Pour " + Data.HEROES[Data.holder(o.card)].name + (" · route " + ar if ar != "" else "")  # qui la reçoit, et la route de sa classe
 	var extra := _bonus_opts()
 	opts.append_array(extra)
 	var oid := ""
@@ -2694,6 +2694,20 @@ func _capture() -> void:
 	battle.card_sel = -1
 	battle.changed.emit()
 	await _frames(10)
+	if args.has("hover"):  # --hover=i : survol de la i-e carte de la main (encarts, carte créée)
+		if args.has("hand"):  # le début du tour a remplacé la main : on la remet, au héros actif
+			battle.hand = Array(args.hand.split(",")).map(func(id): return {"id": id, "lvl": 1, "h": battle.active.key})
+			battle.changed.emit()
+			await _frames(10)
+		var cs: Array = ui.root.find_children("*", "Control", true, false).filter(func(n): return n.has_meta("kwcard") and n.is_visible_in_tree())
+		cs.sort_custom(func(a, b): return a.global_position.x < b.global_position.x)
+		var mv := InputEventMouseMotion.new()
+		mv.position = cs[int(args.hover)].get_global_rect().get_center()
+		mv.global_position = mv.position
+		pad = true
+		get_viewport().push_input(mv)
+		await _frames(25)
+		_shot(dir, "09_survol")
 	battle.play_card(0, foe.cell)
 	await get_tree().create_timer(0.32).timeout
 	_shot(dir, "08_action")

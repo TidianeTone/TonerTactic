@@ -31,12 +31,29 @@ func _init() -> void:
 		if id.contains("2_") and not ResourceLoader.exists("res://assets/art/card_%s.png" % id):
 			print("illustration manquante : ", id)
 			fails += 1
+	# jetons : jamais tirés comme cartes normales, texte résolu ; toute carte créée (gives) existe
+	for id in Data.TOKENS:
+		if Data.all_ids().has(id) or Data.card({"id": id}).owner == "":
+			print("jeton mal rangé : ", id)
+			fails += 1
+	for id in Data.all_ids() + Data.TOKENS.keys():
+		for lv in [1, 2, 3]:
+			var c := Data.card({"id": id, "lvl": lv})
+			if Data.card_text(c).contains("{"):
+				print("texte non résolu : ", id, " niveau ", lv)
+				fails += 1
+			if c.has("gives") and not (Data.CARDS.has(c.gives.id) or Data.TOKENS.has(c.gives.id) or Guildes.CARDS.has(c.gives.id)):
+				print("carte créée inconnue : ", id, " -> ", c.gives.id)
+				fails += 1
+			if c.has("place") and not (c.place in ["piege", "mine", "epieu", "ombre", "collet"] or Data.PROPS.has(c.place)):
+				print("pose inconnue : ", id, " ", c.place)
+				fails += 1
 	# multiclasse : 28 guildes de 14 cartes
 	for g in Guildes.LIST.size():
 		var n := [0, 0, 0, 0, 0]
 		for id in Guildes.cards_of(g):
 			n[Guildes.CARDS[id].rar] += 1
-		if n != [0, 3, 4, 6, 1]:  # 6 d'origine + 5 du 25/09 + 3 du 27/09 (une de chaque rareté)
+		if n != [0, 4, 5, 7, 1]:  # 6 d'origine + 5 du 25/09 + 3 du 27/09 + 3 du 27/09 bis (une de chaque rareté)
 			print("guilde incomplète : ", Guildes.LIST[g][2], " ", n)
 			fails += 1
 	if Guildes.index("lame", "garde") != 0 or Guildes.index("receleur", "tidiane") != 27:

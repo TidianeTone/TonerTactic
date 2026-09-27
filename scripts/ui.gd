@@ -218,12 +218,13 @@ func _bar_frame(bar: Control, path: String, iy0: float, iy1: float, capl: int, c
 	bar.add_child(fr)
 
 
-func _speech(text: String) -> Control:
-	## La réplique dans la boîte de celui qui parle : chaque locuteur a son cadre (neutre, marchand, chaque Ancien).
-	var tex: Texture2D = load("res://assets/ui/boite_%s.png" % speaker)
-	var inr: Array = BOITES.get(speaker, [0.06, 0.15, 0.94, 0.88])
+func _speech(text: String, who := "neutre") -> Control:
+	## La réplique dans la boîte de celui qui parle : chaque locuteur a son cadre (neutre = information du jeu, marchand, chaque Ancien).
+	var tex: Texture2D = load("res://assets/ui/boite_%s.png" % who)
+	var inr: Array = BOITES.get(who, [0.06, 0.15, 0.94, 0.88])
 	var asp := float(tex.get_width()) / tex.get_height()
-	var h := minf(210.0 if not big else 190.0, minf(700.0, root.size.x * 0.46) / asp)
+	var tall := 140.0 if text.length() < 90 else 200.0  # une ligne : une boîte plus basse
+	var h := minf(tall if not big else tall * 0.9, minf(700.0, root.size.x * 0.46) / asp)
 	var w := h * asp
 	var holder := Control.new()
 	holder.custom_minimum_size = Vector2(w, h)
@@ -693,18 +694,24 @@ func coach(kicker: String, text: String) -> void:
 	## Initiation : une consigne à la fois, en haut à droite, qui reste jusqu'à la suivante.
 	if coach_plate == null:
 		coach_plate = PanelContainer.new()
-		var st := sb(Color(0.06, 0.05, 0.06, 0.92), GOLD, 10, 2, 12)
-		st.content_margin_left = 16
-		st.content_margin_right = 16
-		st.content_margin_top = 10
-		st.content_margin_bottom = 12
+		# la voix de l'initiation : la boîte de dialogue neutre, en haut au centre, loin des fiches d'unité (à droite)
+		var st := StyleBoxTexture.new()
+		st.texture = load("res://assets/ui/boite_neutre.png")
+		st.texture_margin_left = 60
+		st.texture_margin_right = 60
+		st.texture_margin_top = 62
+		st.texture_margin_bottom = 50
+		st.content_margin_left = 50
+		st.content_margin_right = 50
+		st.content_margin_top = 48
+		st.content_margin_bottom = 36
 		coach_plate.add_theme_stylebox_override("panel", st)
 		coach_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		coach_plate.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-		coach_plate.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-		coach_plate.offset_right = -18
-		coach_plate.offset_left = -18 - (460 if not big else 560)
-		coach_plate.offset_top = 150
+		coach_plate.set_anchors_preset(Control.PRESET_CENTER_TOP)
+		coach_plate.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		coach_plate.offset_left = -(290 if not big else 340)
+		coach_plate.offset_right = 290 if not big else 340
+		coach_plate.offset_top = 88
 		root.add_child(coach_plate)
 		var v := VBoxContainer.new()
 		v.add_theme_constant_override("separation", 4)
@@ -713,17 +720,31 @@ func coach(kicker: String, text: String) -> void:
 		coach_kick = _label("", 14 + (3 if big else 0), GOLD, title_f)
 		v.add_child(coach_kick)
 		coach_txt = _rich("", 16 + (3 if big else 0), INK)
-		coach_txt.custom_minimum_size.x = 428 if not big else 528
+		coach_txt.custom_minimum_size.x = 500 if not big else 600
 		v.add_child(coach_txt)
 	coach_plate.visible = text != ""
 	if text == "":
 		return
 	coach_kick.text = kicker.to_upper()
-	coach_txt.text = text
+	coach_txt.text = _hl(text)
 	coach_plate.modulate.a = 0.0
 	coach_plate.scale = Vector2.ONE
 	var tw := create_tween()
 	tw.tween_property(coach_plate, "modulate:a", 1.0, 0.3)
+
+
+const HL_WORDS := ["ennemi", "ennemis", "frise", "fiche", "épingler", "déplacement", "de dos", "dos", "carte", "cartes", "mana", "énergie",
+	"coffre", "fin du tour", "orientation", "vocation", "guilde", "maîtrise", "points de job", "armure", "PV", "portée", "zone orange", "clic", "cliquez"]
+static var _hl_rx: RegEx
+
+
+func _hl(text: String) -> String:
+	## Conseil de l'initiation : les mots qui comptent en couleur (mots-clés du jeu et gestes à faire).
+	if _hl_rx == null:
+		var words: Array = HL_WORDS + Data.KEYWORDS.keys()
+		words.sort_custom(func(a, b): return a.length() > b.length())
+		_hl_rx = RegEx.create_from_string("(?i)(?<![A-Za-zÀ-ÿ])(" + "|".join(words.map(func(w): return w.replace("(", "\\(").replace(")", "\\)"))) + ")(?![A-Za-zÀ-ÿ])")
+	return _hl_rx.sub(text, "[color=#ffcf6e]$1[/color]", true)
 
 
 func point(to: Callable) -> void:
@@ -1656,8 +1677,10 @@ func _kw_update() -> void:
 	kw_panel.visible = false
 	if tgt == null:
 		return
-	var list := Data.keyword_list(Data.card(tgt.get_meta("kwcard")))
-	if list.is_empty():
+	var kc := Data.card(tgt.get_meta("kwcard"))
+	var list := Data.keyword_list(kc)
+	var made: String = kc.gives.id if kc.has("gives") else str(kc.get("shows", ""))  # carte créée : montrée en entier
+	if list.is_empty() and made == "":
 		return
 	for e in list:
 		var p := PanelContainer.new()
@@ -1692,6 +1715,19 @@ func _kw_update() -> void:
 		t.custom_minimum_size = Vector2(230, 0)
 		v.add_child(t)
 		kw_panel.add_child(p)
+	if made != "":
+		var mk := _label("Crée :", 15, Color("#ffe3a3"), title_f)
+		kw_panel.add_child(mk)
+		var k := 0.62
+		var hold := Control.new()
+		hold.custom_minimum_size = CARD * k
+		hold.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var mc := make_card({"id": made, "lvl": 1})
+		mc.scale = Vector2.ONE * k
+		mc.pivot_offset = Vector2.ZERO
+		_passthrough(mc)
+		hold.add_child(mc)
+		kw_panel.add_child(hold)
 	kw_panel.visible = true
 	kw_panel.reset_size()
 	_kw_place(tgt)
@@ -1961,8 +1997,8 @@ func choose(title: String, subtitle: String, options: Array, allow_skip := false
 	var tl := _title(title, 44)
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(tl)
-	if speaker != "" and ResourceLoader.exists("res://assets/ui/boite_%s.png" % speaker) and subtitle != "":
-		box.add_child(_speech(subtitle))
+	if subtitle != "":
+		box.add_child(_speech(subtitle, speaker if ResourceLoader.exists("res://assets/ui/boite_%s.png" % speaker) else "neutre"))
 	else:
 		var sl := _shadowed(_label(subtitle, 16, GOLD), 6)
 		sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -2068,7 +2104,7 @@ func choose(title: String, subtitle: String, options: Array, allow_skip := false
 		(row2 if split and not o.has("card") else row).add_child(w)
 		if i == 0 and Input.get_connected_joypads().size() > 0:
 			w.grab_focus.call_deferred()
-	if team_on and main.heroes.size() > 0:
+	if (team_on or options.any(func(o): return o.has("card"))) and main.heroes.size() > 0:  # voir l'équipe et ses paquets avant de choisir
 		var team := HBoxContainer.new()
 		team.position = Vector2(28, 24)
 		team.add_theme_constant_override("separation", 8)
@@ -2082,7 +2118,7 @@ func choose(title: String, subtitle: String, options: Array, allow_skip := false
 			tb.ignore_texture_size = true
 			tb.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 			tb.custom_minimum_size = Vector2(56, 56)
-			tb.tooltip_text = "Fiche de %s" % h.nm
+			tb.tooltip_text = "Fiche et paquet de %s" % h.nm
 			tb.pressed.connect(hero_sheet.bind(h))
 			team.add_child(tb)
 	if allow_skip:
@@ -3826,10 +3862,40 @@ func hero_sheet(h: Unit) -> void:
 	cc.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	sheet_layer.add_child(cc)
 	cc.add_child(p)
+	var both := HBoxContainer.new()
+	both.add_theme_constant_override("separation", 22)
+	both.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_child(both)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 12)
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	p.add_child(v)
+	both.add_child(v)
+	# son paquet, en petit, à droite : ce qu'on ajoute se juge face à ce qu'on a
+	var mine: Array = main.deck.filter(func(ci): return Data.holder(ci) == h.key)
+	var dv := VBoxContainer.new()
+	dv.add_theme_constant_override("separation", 6)
+	dv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	both.add_child(dv)
+	dv.add_child(_label("Paquet · %d cartes" % mine.size(), 17, col.lightened(0.35), title_f))
+	var dsc := ScrollContainer.new()
+	dsc.custom_minimum_size = Vector2(CARD.x * 0.42 * 4 + 24, minf(560.0, root.size.y - 180.0))
+	dsc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	dv.add_child(dsc)
+	var dg := GridContainer.new()
+	dg.columns = 4
+	dg.add_theme_constant_override("h_separation", 6)
+	dg.add_theme_constant_override("v_separation", 6)
+	dsc.add_child(dg)
+	for ci in mine:
+		var hold := Control.new()
+		hold.custom_minimum_size = CARD * 0.42
+		var mc := make_card(ci)
+		mc.scale = Vector2.ONE * 0.42
+		mc.pivot_offset = Vector2.ZERO
+		_passthrough(mc)
+		hold.add_child(mc)
+		hold.set_meta("kwcard", ci)
+		dg.add_child(hold)
 	var top := HBoxContainer.new()
 	top.add_theme_constant_override("separation", 18)
 	v.add_child(top)
