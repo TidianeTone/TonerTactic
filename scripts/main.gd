@@ -627,15 +627,11 @@ func _unhandled_input(e: InputEvent) -> void:
 					battle.danger = not battle.danger
 					ui.toast("Zone de danger : tout ce que les ennemis peuvent frapper ce tour" if battle.danger else "Zone de danger masquée")
 					refresh_hover()
-			KEY_F:
-				adv_menu("fuse")
 			KEY_H:
 				ui.show_keys = 0 if ui.keys_plate.visible else 1
 				ui.refresh()
 			KEY_M:
-				_mute = not _mute
-				(_music[1] as AudioStreamPlayer).volume_db = _music_vol()
-				ui.toast("Musique coupée" if _mute else "Musique")
+				toggle_mute()
 			KEY_TAB:
 				if battle.active:
 					battle.select(battle.active)
@@ -1182,9 +1178,6 @@ func _door() -> String:
 		if i == -2:
 			await _equipment()
 			continue
-		if i == -3:
-			await _fuse()
-			continue
 		if i == -4:
 			await view_deck()
 			continue
@@ -1279,6 +1272,20 @@ func _build_room(seed: int, bi: int, size := 14, arch := "", with_props := false
 	ui.set_header(b.name, ("Étage %d · donjon" % floor_i) if mode == "aventure" else ("Étage %d · salle %d / %d" % [floor_i, step + 1, ROOMS_PER_FLOOR]))
 	target = c3
 	dist = 14.0 + board.dim * 1.05
+
+
+func toggle_mute() -> void:
+	_mute = not _mute
+	(_music[1] as AudioStreamPlayer).volume_db = _music_vol()
+	ui.toast("Musique coupée" if _mute else "Musique")
+
+
+func reset_camera() -> void:
+	## Vue par défaut du combat : l'angle de départ, tout le plateau, centrée sur l'escouade.
+	yaw = 45.0
+	pitch = 40.0
+	dist = 14.0 + board.dim * 1.05
+	target = _units_center()
 
 
 func _fight(type: String, ids_override: Array = []) -> bool:
@@ -2453,8 +2460,7 @@ func _sanctuary_menu() -> void:
 func _sanctuary_loop() -> void:
 	## Un choix ; Braise de veille : deux choix différents. Couronne de plomb : plus de repos.
 	var all := {"rest": {"title": "Se reposer", "glyph": "✚", "text": "Chaque héros récupère 35 % de ses PV max."},
-		"forge": {"title": "Forger", "glyph": "⚒", "text": "Une carte du paquet gagne un niveau (5 au maximum)."},
-		"fuse": {"title": "Fusionner", "glyph": "⧉", "text": "Deux exemplaires de même niveau n'en font plus qu'un, d'un niveau au-dessus."}}
+		"forge": {"title": "Forger", "glyph": "⚒", "text": "Une carte du paquet gagne un niveau (5 au maximum)."}}
 	var keys: Array = all.keys().filter(func(k): return k != "rest" or not relics.has("couronne_plomb"))
 	var left := 2 if relics.has("braise_veille") else 1
 	while left > 0 and keys.size() > 0:
@@ -2467,7 +2473,7 @@ func _sanctuary_loop() -> void:
 			for h in heroes:
 				h.hp = mini(h.max_hp, h.hp + int(h.max_hp * 0.35))
 			ui.toast("Le groupe reprend son souffle.")
-		elif (k == "forge" and not await _forge("FORGE", "Quelle carte forger ? (+1 niveau)")) or (k == "fuse" and not await _fuse()):
+		elif (k == "forge" and not await _forge("FORGE", "Quelle carte forger ? (+1 niveau)")):
 			continue
 		keys.erase(k)
 		left -= 1
@@ -2502,14 +2508,6 @@ func _next_lvl(ci: Dictionary) -> Dictionary:
 	return nc
 
 
-func _fused(pr: Array) -> Dictionary:
-	## Deux exemplaires fondus : le niveau suivant, et l'enchantement de l'un ou de l'autre survit.
-	var nc := _next_lvl(deck[pr[0]])
-	if not nc.has("ench") and deck[pr[1]].has("ench"):
-		nc["ench"] = deck[pr[1]].ench
-	return nc
-
-
 func _confirm_upgrade(before: Dictionary, after: Dictionary) -> bool:
 	## Aperçu avant / après : on voit ce que la carte gagne avant de valider.
 	var gain := Data.upgrade_diff(before, after)
@@ -2535,37 +2533,6 @@ func _level_up(k: int) -> void:
 			shake(0.5)
 	deck[k] = nc
 
-
-func _fuse() -> bool:
-	## Deux doubles de même niveau -> un seul exemplaire au niveau suivant. Les cartes de départ ne fusionnent pas.
-	var seen := {}
-	var pairs: Array = []
-	for k in deck.size():
-		if deck[k].get("st", false) or Data.def(deck[k].id).has("tool"):
-			continue  # les cartes-objets ne fusionnent pas (leurs charges se perdraient)
-		var key := "%s|%d" % [deck[k].id, Data.level(deck[k])]
-		if seen.has(key) and Data.level(deck[k]) < Data.lvl_cap(deck[k]):
-			pairs.append([seen[key], k])
-			seen.erase(key)
-		else:
-			seen[key] = k
-	if pairs.is_empty():
-		ui.toast("Aucun double de même niveau à fusionner (les cartes de départ ne fusionnent pas).")
-		return false
-	var j := await ui.choose("FUSION", "Deux exemplaires deviennent un seul, au niveau suivant", pairs.map(func(pr): return {"card": _fused(pr)}), true, "← Retour")
-	if j < 0:
-		return false
-	var pr: Array = pairs[j]
-	var fused := _fused(pr)
-	if not await _confirm_upgrade(deck[pr[0]], fused):
-		return await _fuse()
-	deck.remove_at(pr[1])
-	deck[pr[0]] = fused
-	ui.toast("Fusion : %s niveau %d." % [Data.def(fused.id).name, fused.lvl])
-	return true
-
-
-# ------------------------------------------------------------------ capture pour le critique
 
 func _frames(n: int) -> void:
 	for i in n:
@@ -3717,7 +3684,7 @@ func _explore_hud() -> void:
 
 
 func adv_menu(k: String) -> void:
-	## Inventaire ouvert depuis le donjon : équipement, paquet, fusion.
+	## Inventaire ouvert depuis le donjon : équipement, paquet.
 	if not exploring or _adv_busy or ui.overlay != null:
 		return
 	_adv_busy = true
@@ -3727,8 +3694,6 @@ func adv_menu(k: String) -> void:
 			await _equipment()
 		"deck":
 			await view_deck()
-		"fuse":
-			await _fuse()
 	_adv_busy = false
 	_explore_hud()
 

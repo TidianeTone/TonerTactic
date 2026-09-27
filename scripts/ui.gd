@@ -189,7 +189,7 @@ func _label(text: String, size: int, col: Color, font: Font = null) -> Label:
 
 
 # Zone sombre de chaque boîte de dialogue (fractions de l'image : x0, y0, x1, y1), mesurée par blender/kie_ui/cut_boites.py
-const BOITES := {"neutre": [0.03, 0.12, 0.97, 0.96], "marchand": [0.03, 0.19, 0.93, 0.86], "anatheme": [0.07, 0.14, 0.97, 0.93],
+const BOITES := {"neutre": [0.06, 0.15, 0.94, 0.89], "marchand": [0.03, 0.19, 0.93, 0.86], "anatheme": [0.07, 0.14, 0.97, 0.93],
 	"chineuse": [0.1, 0.17, 0.95, 0.73], "dojo": [0.04, 0.13, 0.94, 0.89], "sourcier": [0.05, 0.18, 0.96, 0.94]}
 
 
@@ -466,6 +466,27 @@ func _build_hud() -> void:
 	end_btn.pressed.connect(func(): battle.end_turn())
 	end_btn.focus_mode = Control.FOCUS_NONE
 	hud.add_child(end_btn)
+	# raccourcis au-dessus de Fin du tour : caméra par défaut, musique
+	var quick := HBoxContainer.new()
+	quick.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	quick.position = Vector2(-230, -170)
+	quick.size = Vector2(190, 42)
+	quick.alignment = BoxContainer.ALIGNMENT_CENTER
+	quick.add_theme_constant_override("separation", 10)
+	hud.add_child(quick)
+	for q in [["⟲  Caméra", "Revenir à la vue par défaut (Tab : recentrer sur le héros)", func(): main.reset_camera()], ["♪", "Couper ou remettre la musique (M)", func(): main.toggle_mute()]]:
+		var qb := Button.new()
+		qb.text = q[0]
+		qb.tooltip_text = q[1]
+		qb.focus_mode = Control.FOCUS_NONE
+		qb.add_theme_font_override("font", title_f)
+		qb.add_theme_font_size_override("font_size", 16)
+		qb.add_theme_color_override("font_color", INK)
+		qb.add_theme_stylebox_override("normal", sb(Color(0.08, 0.07, 0.075, 0.9), GOLD.darkened(0.3), 10, 1, 6))
+		qb.add_theme_stylebox_override("hover", sb(Color(0.18, 0.15, 0.1, 0.95), GOLD, 10, 1, 6))
+		qb.custom_minimum_size = Vector2(0, 38)
+		qb.pressed.connect(q[2])
+		quick.add_child(qb)
 	var hint := _shadowed(_label("Espace", 12, DIM))
 	hint.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
 	hint.position = Vector2(-230, -54)
@@ -600,7 +621,7 @@ func _build_explore() -> void:
 	# l'inventaire reste à portée pendant l'exploration
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
-	for e in [["Équipement · I", "equip"], ["Paquet · P", "deck"], ["Fusion · F", "fuse"]]:
+	for e in [["Équipement · I", "equip"], ["Paquet · P", "deck"]]:
 		var b := Button.new()
 		b.text = e[0]
 		b.add_theme_font_override("font", title_f)
@@ -694,24 +715,26 @@ func coach(kicker: String, text: String) -> void:
 	## Initiation : une consigne à la fois, en haut à droite, qui reste jusqu'à la suivante.
 	if coach_plate == null:
 		coach_plate = PanelContainer.new()
-		# la voix de l'initiation : la boîte de dialogue neutre, en haut au centre, loin des fiches d'unité (à droite)
+		# la voix de l'initiation : la boîte de dialogue neutre (pierre claire des ruines, lierre d'automne)
 		var st := StyleBoxTexture.new()
-		st.texture = load("res://assets/ui/boite_neutre.png")
-		st.texture_margin_left = 60
-		st.texture_margin_right = 60
-		st.texture_margin_top = 62
-		st.texture_margin_bottom = 50
-		st.content_margin_left = 50
-		st.content_margin_right = 50
-		st.content_margin_top = 48
-		st.content_margin_bottom = 36
+		st.texture = load("res://assets/ui/boite_neutre_s.png")  # demi-taille : un liseré de pierre fin en 9 tranches
+		st.texture_margin_left = 40
+		st.texture_margin_right = 40
+		st.texture_margin_top = 40
+		st.texture_margin_bottom = 40
+		st.content_margin_left = 44
+		st.content_margin_right = 44
+		st.content_margin_top = 40
+		st.content_margin_bottom = 38
 		coach_plate.add_theme_stylebox_override("panel", st)
 		coach_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		coach_plate.set_anchors_preset(Control.PRESET_CENTER_TOP)
-		coach_plate.grow_horizontal = Control.GROW_DIRECTION_BOTH
-		coach_plate.offset_left = -(290 if not big else 340)
-		coach_plate.offset_right = 290 if not big else 340
-		coach_plate.offset_top = 88
+		# en bas à gauche, au-dessus de l'orbe de mana : il ne cache ni les PV des unités ni leurs fiches
+		coach_plate.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+		coach_plate.grow_vertical = Control.GROW_DIRECTION_BEGIN
+		coach_plate.offset_left = 16
+		coach_plate.offset_right = 16 + (470 if not big else 560)
+		coach_plate.offset_bottom = -(200 if not big else 230)
+		coach_plate.offset_top = coach_plate.offset_bottom - 10
 		root.add_child(coach_plate)
 		var v := VBoxContainer.new()
 		v.add_theme_constant_override("separation", 4)
@@ -720,7 +743,7 @@ func coach(kicker: String, text: String) -> void:
 		coach_kick = _label("", 14 + (3 if big else 0), GOLD, title_f)
 		v.add_child(coach_kick)
 		coach_txt = _rich("", 16 + (3 if big else 0), INK)
-		coach_txt.custom_minimum_size.x = 500 if not big else 600
+		coach_txt.custom_minimum_size.x = 380 if not big else 470
 		v.add_child(coach_txt)
 	coach_plate.visible = text != ""
 	if text == "":
@@ -1865,6 +1888,21 @@ func _sync_tags() -> void:
 		var bar: ProgressBar = t.get_meta("bar")
 		bar.max_value = u.max_hp
 		bar.value = u.hp
+		# poison : la part de la vie que le poison va manger, en vert au bout de la barre
+		if not bar.has_meta("psn"):
+			var pr_ := ColorRect.new()
+			pr_.color = Color(0.45, 0.95, 0.3)
+			pr_.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			bar.add_child(pr_)
+			bar.set_meta("psn", pr_)
+		var ps: ColorRect = bar.get_meta("psn")
+		var pz: int = mini(u.poison, maxi(u.hp, 0))
+		ps.visible = pz > 0 and u.max_hp > 0
+		if ps.visible:
+			var bw: float = bar.size.x if bar.size.x > 0 else bar.custom_minimum_size.x
+			var bh: float = bar.size.y if bar.size.y > 0 else 14.0
+			ps.position = Vector2(bw * float(u.hp - pz) / u.max_hp, 2)
+			ps.size = Vector2(bw * float(pz) / u.max_hp, bh - 4)
 		var lbl: Label = t.get_meta("hp")
 		lbl.text = str(u.hp) + ("  🛡%d" % u.block if u.block > 0 else "") + ("  ☠%d" % u.poison if u.poison > 0 else "") \
 			+ ("  ◎" if u.mark > 0 else "") + ("  ⛓" if u.root > 0 else "")
@@ -2415,9 +2453,6 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 	eq.add_theme_stylebox_override("focus", sb(Color(0.16, 0.18, 0.2, 0.95), Color.WHITE, 10, 2, 6))
 	eq.custom_minimum_size = Vector2(320, 46)
 	eq.pressed.connect(func(): picked.emit(-2))
-	var fu := eq.duplicate(0)
-	fu.text = "Fusionner des doubles"
-	fu.pressed.connect(func(): picked.emit(-3))
 	var dk := eq.duplicate(0)
 	dk.text = "Voir le paquet"
 	dk.pressed.connect(func(): picked.emit(-4))
@@ -2425,7 +2460,6 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 	ec.alignment = BoxContainer.ALIGNMENT_CENTER
 	ec.add_theme_constant_override("separation", 20)
 	ec.add_child(eq)
-	ec.add_child(fu)
 	ec.add_child(dk)
 	foot.add_child(ec)
 	if first and Input.get_connected_joypads().size() > 0:

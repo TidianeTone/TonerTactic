@@ -486,7 +486,7 @@ const KEYWORDS := {
 	"De dos": "Frapper une unité de dos : dégâts ×1,5 (ou plus selon la carte).",
 	"baril": "Explose quand on le frappe : 7 dégâts autour.",
 	"piège": "L'ennemi qui y marche s'arrête, subit 8 et reste entravé.",
-	"Niveau": "Forge ou fusion de deux doubles : +1 niveau (3 au maximum). Chaque niveau change la carte.",
+	"Niveau": "La forge fait monter une carte d'un niveau (3 au maximum). Chaque niveau change la carte.",
 	"perd": "Coût en PV : ne peut pas tuer le héros (il reste à 1).",
 	"Vole": "Prend l'objet que porte l'ennemi : sa carte arrive dans ta main.",
 	"Fabrique": "Crée des cartes-objets Éphémères dans ta main.",
@@ -1197,7 +1197,7 @@ static func lvl_cap(ci: Dictionary) -> int:
 const TOKENS := {
 	"murmure": {"name": "Murmure", "g": 7, "rar": 1, "cost": 0, "kind": "atk", "range": [1, 3], "dmg": 4, "pierce": true, "text": "Inflige {dmg}, armure ignorée.", "up": [{"dmg": 2}]},
 	"t_bou_sentence": {"name": "Sentence", "g": 0, "rar": 1, "cost": 0, "kind": "atk", "range": [1, 1], "dmg": 2, "exec": true, "text": "Inflige {dmg}. Exécution.", "up": [{"dmg": 2}]},
-	"t_sab_colis": {"name": "Colis piégé", "g": 8, "rar": 1, "cost": 0, "kind": "skill", "target": "tile", "range": [1, 2], "place": "bombe_retard", "tdmg": 6, "text": "Pose une bombe à retardement : dans 2 tours, {tdmg} en croix aux ennemis seulement.", "up": [{"tdmg": 3}]},
+	"t_sab_colis": {"name": "Colis piégé", "g": 8, "rar": 1, "cost": 0, "kind": "skill", "target": "tile", "range": [1, 2], "place": "bombe_retard", "tdmg": 6, "delay": 1, "text": "Pose une bombe à retardement : au prochain round, {tdmg} en croix aux ennemis seulement.", "up": [{"tdmg": 3}]},
 	"t_enl_note": {"name": "Note en marge", "g": 16, "voix": "N", "rar": 1, "cost": 0, "kind": "skill", "target": "self", "range": [0, 0], "draw": 1, "exhaust": true, "text": "Pioche {draw}. Épuise.", "up": [{"draw": 1}]},
 	"t_acr_balle": {"name": "Balle de jongle", "g": 24, "rar": 1, "cost": 0, "kind": "atk", "range": [1, 3], "dmg": 2, "combo": 1, "text": "Inflige {dmg}, +{combo} par coup déjà porté ce tour.", "up": [{"dmg": 1}]},
 	"t_tem_cierge": {"name": "Cierge", "g": 1, "rar": 1, "cost": 0, "kind": "skill", "target": "ally", "range": [0, 3], "heal": 3, "overheal": true, "text": "Soigne {heal} un allié ; le surplus devient armure doublée.", "up": [{"heal": 2}]},
@@ -1469,8 +1469,6 @@ static func keyword_tip(c: Dictionary) -> String:
 	elif c.cls[0] != c.owner:
 		out.append("Carte de %s, jouée par %s grâce à sa vocation." % [HEROES[c.cls[0]].name, HEROES[c.owner].name])
 	out.append("%s · niveau %d / %d : %s" % [RARITY_NAME[int(c.get("rar", 1))], c.lvl, MAX_LVL, KEYWORDS["Niveau"]])
-	if c.get("st", false):
-		out.append("Carte de départ : ne fusionne pas (la forge reste possible).")
 	return "\n".join(out)
 
 const KIND_WORD := {"power": "Pouvoir"}

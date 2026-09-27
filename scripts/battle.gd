@@ -4717,7 +4717,7 @@ func _place(c: Dictionary, t: Vector2i, h: Unit) -> void:
 		board.props[t] = k
 		_make_prop(t)
 		if k == "bombe_retard":
-			bombs[t] = {"n": 2, "dmg": int(c.get("tdmg", 6))}
+			bombs[t] = {"n": int(c.get("delay", 2)), "dmg": int(c.get("tdmg", 6))}  # delay : rounds avant l'explosion
 		if k == "tourelle":
 			var tt := int(c.get("turns", 3))
 			if c.get("turns_items", false):
