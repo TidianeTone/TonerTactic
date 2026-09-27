@@ -2349,8 +2349,80 @@ func _passthrough(n: Node) -> void:
 		_passthrough(ch)
 
 
+const ITEM_RAR := ["", "Commune", "Peu commune", "Rare", "Mythique"]
+const PARCH_INK := Color("#2b1a0e")
+
+
+func _vignette(title: String, icon: String, text: String, col: Color, tag: String, seen := true, w := 176.0) -> Control:
+	## Vignette façon étal (reliques, équipement) : nom au-dessus, cadre de cuir, rareté dans le bandeau,
+	## grande icône, gemme de rareté sur le séparateur, effet en dessous. Pas encore vue : silhouette et « ??? ».
+	var h := w * 609.0 / 360.0
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 4)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var nl := _shadowed(_label(title if seen else "???", 15 if w >= 160 else (13 if w >= 140 else 12), col.lightened(0.35) if seen else DIM, title_f), 5)
+	nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	nl.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	nl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	nl.custom_minimum_size = Vector2(w, 40)
+	v.add_child(nl)
+	var card := Control.new()
+	card.custom_minimum_size = Vector2(w, h)
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(card)
+	var put := func(c: Control, x0: float, y0: float, x1: float, y1: float) -> void:
+		c.position = Vector2(x0 * w, y0 * h)
+		c.size = Vector2((x1 - x0) * w, (y1 - y0) * h)
+		c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		card.add_child(c)
+	var fr := TextureRect.new()
+	fr.texture = load("res://assets/ui/vignette.png")
+	fr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	fr.stretch_mode = TextureRect.STRETCH_SCALE
+	put.call(fr, 0, 0, 1, 1)
+	var tg := _label(tag, 12, col.lightened(0.45) if seen else DIM, title_f)
+	tg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tg.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	tg.add_theme_color_override("font_outline_color", Color(0.1, 0.05, 0.02))
+	tg.add_theme_constant_override("outline_size", 5)
+	put.call(tg, 0.2, 0.015, 0.8, 0.11)
+	if ResourceLoader.exists(icon):
+		var ic := TextureRect.new()
+		ic.texture = load(icon)
+		ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		ic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		if not seen:
+			ic.modulate = Color(0.3, 0.17, 0.07, 0.22)  # à peine une empreinte dans le cuir
+		elif icon.contains("/relic_"):
+			ic.modulate = Color(0.42, 0.24, 0.11)  # icônes de relique claires : gravées en brun sur le cuir
+		put.call(ic, 0.14, 0.15, 0.86, 0.52)
+	var gem := Panel.new()
+	gem.add_theme_stylebox_override("panel", sb(col if seen else DIM.darkened(0.3), Color(0.12, 0.06, 0.02), 2, 2))
+	gem.size = Vector2(14, 14)
+	gem.pivot_offset = Vector2(7, 7)
+	gem.rotation = PI / 4
+	gem.position = Vector2(w * 0.5 - 7, h * 0.557 - 7)
+	gem.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(gem)
+	var tx := _label(text if seen else "", 12 if w >= 140 else 10, PARCH_INK)
+	tx.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tx.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	put.call(tx, 0.11, 0.6, 0.89, 0.95)
+	return v
+
+
 func _option(o: Dictionary, w := 250) -> Control:
 	var col: Color = o.get("color", GOLD)
+	if o.has("vignette"):
+		# équipement et reliques : la vignette de l'étal
+		var vg := _vignette(o.title, o.get("image", ""), o.get("text", ""), col, o.vignette, true, 118.0 if w < 170 else clampf(w * 0.8, 140.0, 190.0))
+		if o.get("dim", false):
+			vg.modulate = Color(0.55, 0.55, 0.6)
+		var pc := PanelContainer.new()
+		pc.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+		pc.add_child(vg)
+		return pc
 	var small := w < 170  # version compacte, sous l'étal du marchand
 	var p := PanelContainer.new()
 	p.custom_minimum_size = Vector2(w, o.get("h", 190 if small else 300))
@@ -2723,35 +2795,8 @@ func _fill_gear(list: VBoxContainer) -> void:
 		for id in ids:
 			var it: Dictionary = Data.ITEMS[id]
 			var seen: bool = main.library.has("item:" + id)
-			var col: Color = ITEM_COL[it.rarity]
-			var tile := PanelContainer.new()
-			var st := sb(Color(0.07, 0.06, 0.07, 0.95), col.darkened(0.15) if seen else DIM.darkened(0.5), 10, 2, 6)
-			st.set_content_margin_all(8)
-			tile.add_theme_stylebox_override("panel", st)
-			tile.custom_minimum_size = Vector2(150, 176)
-			var v := VBoxContainer.new()
-			v.alignment = BoxContainer.ALIGNMENT_CENTER
-			v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			tile.add_child(v)
-			var ic := TextureRect.new()
-			ic.texture = load(Data.item_icon(id))
-			ic.custom_minimum_size = Vector2(112, 112)
-			ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			ic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-			ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			if not seen:
-				ic.modulate = Color(0, 0, 0, 0.7)  # la silhouette : on devine la forme, pas la pièce
-			v.add_child(ic)
-			var nl := _label(it.name if seen else "???", 13, col.lightened(0.3) if seen else DIM, title_f)
-			nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			nl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			nl.custom_minimum_size.x = 134
-			v.add_child(nl)
-			var rk := _label(("Mythique" if it.rarity == 4 else Data.RARITY_NAME[it.rarity]) if seen else "à découvrir", 11, DIM)
-			rk.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			v.add_child(rk)
-			tile.tooltip_text = Data.item_text(id) if seen else "Pas encore trouvée."
+			var tile := _vignette(it.name, Data.item_icon(id), Data.item_text(id), ITEM_COL[it.rarity], ITEM_RAR[it.rarity], seen, 150.0)
+			tile.mouse_filter = Control.MOUSE_FILTER_PASS
 			flow.add_child(tile)
 
 
@@ -3052,6 +3097,21 @@ func library_screen() -> void:
 		if which == "equipement":
 			_fill_gear(list)
 			return
+		if which == "reliques":
+			var ids: Array = Data.RELICS.keys()
+			var known: int = ids.filter(func(r): return main.library.has("relic:" + r)).size()
+			var hd := _label("Reliques   %d / %d" % [known, ids.size()], 22, GOLD.lightened(0.2), title_f)
+			hd.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			list.add_child(hd)
+			var flow := HFlowContainer.new()
+			flow.alignment = FlowContainer.ALIGNMENT_CENTER
+			flow.add_theme_constant_override("h_separation", 10)
+			flow.add_theme_constant_override("v_separation", 10)
+			flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			list.add_child(flow)
+			for r in ids:
+				flow.add_child(_vignette(Data.RELICS[r].name, "res://assets/ui/relic_%s.png" % r, Data.RELICS[r].text, GOLD, "Relique", main.library.has("relic:" + r), 150.0))
+			return
 		if which == "classes":
 			for k in Data.HEROES:
 				var ids: Array = Data.CARDS.keys().filter(func(id): return Data.CARDS[id].owner == k)
@@ -3099,7 +3159,7 @@ func library_screen() -> void:
 					card_back(holder, rar, "objet" if dd.has("tool") else str(dd.get("owner", "")))
 					holder.tooltip_text = "%s à découvrir" % Data.RARITY_NAME[rar]
 				flow.add_child(holder)
-	for t in [["Classes", "classes"], ["Guildes", "guildes"], ["Équipement", "equipement"], ["Bestiaire", "bestiaire"]]:
+	for t in [["Classes", "classes"], ["Guildes", "guildes"], ["Équipement", "equipement"], ["Reliques", "reliques"], ["Bestiaire", "bestiaire"]]:
 		var tb := Button.new()
 		tb.text = t[0]
 		tb.add_theme_font_override("font", title_f)

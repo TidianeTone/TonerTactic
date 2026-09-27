@@ -766,6 +766,9 @@ func _start_run() -> void:
 	_no_save = false
 	fights = 0
 	purges = 0
+	rare_off = -0.05
+	obj_chance = 0.4
+	myst_fight = 0.1
 	companion = ""
 	seen_events = []
 	seen_mech = {}
@@ -1105,6 +1108,7 @@ func _loop() -> void:
 		if step >= ROOMS_PER_FLOOR:
 			floor_i += 1
 			step = 0
+			obj_chance = 0.4
 			fmap = []
 
 
@@ -1398,10 +1402,10 @@ func compose(ids: Array, type: String) -> Array:
 func _roll_item(min_rarity := 1) -> String:
 	## Rareté pondérée par l'étage : les objets rares arrivent plus tard.
 	## Rang 4 (mythique) : acte 2 (≈ 8 %), acte 3 (≈ 20 %) ; l'acte 1 reste modeste.
-	var roll := rng.randf() - 0.04 * pacts.size() + (floor_i - 1) * 0.15
+	var roll := rng.randf() + 0.04 * pacts.size() + (floor_i - 1) * 0.15  # chaque pacte : objets un peu meilleurs
 	var rar := 3 if roll > 0.92 else (2 if roll > 0.55 else 1)
 	rar = maxi(rar, min_rarity)
-	if floor_i >= 2 and rng.randf() < (0.08 if floor_i == 2 else 0.2) + (0.1 if min_rarity >= 3 else 0.0):
+	if floor_i >= 2 and rng.randf() < (0.05 if floor_i == 2 else 0.12) + (0.1 if min_rarity >= 3 else 0.0):
 		rar = 4
 	var ids: Array = []
 	while ids.is_empty() and rar > 0:
@@ -1474,7 +1478,7 @@ func open_chest(h: Unit) -> void:
 		gains.append({"title": Data.ITEMS[it].name, "image": Data.item_icon(it), "text": "%s · %s\n(au sac : s'équiper après le combat)" % [Data.SLOT_NAME[Data.ITEMS[it].slot], Data.item_text(it)], "color": UI.ITEM_COL[Data.ITEMS[it].rarity], "w": 250})
 		fight_loot.append(Data.ITEMS[it].name)
 	else:
-		g += rng.randi_range(30, 55)
+		g += rng.randi_range(20, 35)  # 2 à 3 coffres par combat
 	if g > 0:
 		gold += g
 		ui.set_gold(gold)
@@ -1505,7 +1509,7 @@ func open_chest(h: Unit) -> void:
 
 
 func _rewards(type: String) -> void:
-	var g := int((rng.randi_range(18, 28) + (30 if type == "elite" else 0)) * (1.0 + 0.25 * pacts.size()) * (1.15 if heroes.any(func(h): return h.trait_id == "radin") else 1.0) * (1.5 if next_mods.size() > 0 else 1.0) * (1.25 if relics.has("bourse") else 1.0))
+	var g := int((rng.randi_range(18, 28) + (20 if type == "elite" else 0)) * (1.0 + 0.25 * pacts.size()) * (1.15 if heroes.any(func(h): return h.trait_id == "radin") else 1.0) * (1.5 if next_mods.size() > 0 else 1.0) * (1.25 if relics.has("bourse") else 1.0))
 	gold += g
 	fight_loot.append("+%d or" % g)
 	ui.set_gold(gold)
@@ -1513,7 +1517,7 @@ func _rewards(type: String) -> void:
 	var n := 4 if relics.has("oeil") else 3
 	var tries := 0
 	while opts.size() < n:
-		var id := _card_roll(2 if (type == "elite" or next_mods.size() > 0) and opts.is_empty() else 1)
+		var id := _card_roll(2 if (type == "elite" or next_mods.size() > 0) and opts.is_empty() else 1, "elite" if (type == "elite" or next_mods.size() > 0) else "combat")
 		if opts.any(func(o): return o.card.id == id):
 			continue
 		# des archétypes différents à chaque butin : on sent vite qu'une classe a plusieurs routes
@@ -1521,14 +1525,18 @@ func _rewards(type: String) -> void:
 		tries += 1
 		if tries < 24 and ar != "" and opts.any(func(o): return Data.def(o.card.id).get("arch", "") == ar and Data.def(o.card.id).get("owner", "") == Data.def(id).get("owner", "")):
 			continue
-		opts.append({"card": {"id": id, "lvl": 2 if type == "elite" and opts.is_empty() else 1}})
+		var up: bool = (type == "elite" and opts.is_empty()) or rng.randf() < [0.0, 0.25, 0.5][clampi(floor_i, 1, 3) - 1]  # cartes déjà forgées : acte 2 et 3
+		opts.append({"card": {"id": id, "lvl": 2 if up else 1}})
 	for o in opts:
 		var ar: String = Data.def(o.card.id).get("arch", "")
 		o["tag"] = Data.HEROES[Data.holder(o.card)].name + (" · " + ar if ar != "" else "")
 	var extra := _bonus_opts()
 	opts.append_array(extra)
 	var oid := ""
-	if type == "elite" or rng.randf() < 0.4:
+	var obj_roll := rng.randf() < obj_chance
+	if type != "elite":
+		obj_chance = clampf(obj_chance + (-0.1 if obj_roll else 0.1), 0.1, 0.9)  # ±10 % : pas de longues séries
+	if type == "elite" or obj_roll:
 		# une carte-objet en option de plus (niveau 2 en élite) ; passée, elle ne rapporte rien
 		oid = _obj_roll(3 if type == "elite" else 2)
 		opts.append({"card": {"id": oid, "lvl": 2 if type == "elite" else 1, "h": party[0]}, "tag": "Objet · au héros de ton choix"})
@@ -1772,7 +1780,7 @@ func _save_run() -> void:
 	var d := {"v": 1, "mode": mode, "difficulty": difficulty, "pacts": pacts, "party": party, "floor_i": floor_i, "step": step,
 		"fights": fights, "gold": gold, "floor_biomes": floor_biomes, "bag": bag, "relics": relics, "deck": deck, "elites_seen": elites_seen,
 		"voc_intro_done": voc_intro_done, "run_seed": run_seed, "rng": rng.state, "minutes": _minutes(),
-		"fmap": fmap, "lane": lane, "visited": visited, "heroes": [], "purges": purges, "companion": companion, "seen_events": seen_events, "pending_mods": pending_mods}
+		"fmap": fmap, "lane": lane, "visited": visited, "heroes": [], "purges": purges, "rare_off": rare_off, "obj_chance": obj_chance, "myst_fight": myst_fight, "companion": companion, "seen_events": seen_events, "pending_mods": pending_mods}
 	for h in heroes:
 		var hd := {}
 		for k in HERO_KEEP:
@@ -1824,6 +1832,9 @@ func _load_run() -> bool:
 		if Data.TOOLS.has(tid):
 			gain_obj(Data.obj_of(tid), party[0])
 	purges = int(d.get("purges", 0))
+	rare_off = float(d.get("rare_off", -0.05))
+	obj_chance = float(d.get("obj_chance", 0.4))
+	myst_fight = float(d.get("myst_fight", 0.1))
 	elites_seen = d.get("elites_seen", [])
 	companion = str(d.get("companion", ""))
 	seen_events = d.get("seen_events", [])
@@ -1867,10 +1878,19 @@ func _save_library() -> void:
 	cf.save("user://bibliotheque.cfg")
 
 
-func _card_roll(min_rar := 1) -> String:
-	## Commune 60 %, peu commune 30 %, rare 10 % ; seulement les cartes de l'escouade.
+func _card_roll(min_rar := 1, loot := "") -> String:
+	## Hors butin : commune 60 %, peu commune 30 %, rare 10 %. Butin de combat (loot = "combat" / "elite", Slay the Spire) :
+	## rare 3 % (élite 10 %), peu commune 37 % (40 %), décalés par la malchance : +1 % par commune tirée, retour à −5 % à la rare.
 	var roll := rng.randf()
-	var rar := maxi(3 if roll < 0.1 else (2 if roll < 0.4 else 1), min_rar)
+	var rar := 3 if roll < 0.1 else (2 if roll < 0.4 else 1)
+	if loot != "":
+		var r3 := (0.10 if loot == "elite" else 0.03) + rare_off + 0.02 * pacts.size()  # chaque pacte : +2 % de rares
+		rar = 3 if roll < r3 else (2 if roll < (0.50 if loot == "elite" else 0.40) + rare_off else 1)
+		if rar == 3:
+			rare_off = -0.05
+		elif rar == 1:
+			rare_off = minf(rare_off + 0.01, 0.4)
+	rar = maxi(rar, min_rar)
 	var ids: Array = Data.CARDS.keys().filter(func(id): return party.has(Data.CARDS[id].owner) and Data.CARDS[id].get("rar", 1) == rar)
 	return ids[rng.randi_range(0, ids.size() - 1)]
 
@@ -1880,7 +1900,7 @@ func _item_opt(id: String, price := 0) -> Dictionary:
 	library_see("item:" + id)
 	var title: String = it.name + ("  ·  %d or" % price if price > 0 else "")
 	return {"title": title, "image": Data.item_icon(id), "text": Data.item_text(id),
-		"color": UI.ITEM_COL[it.rarity]}
+		"color": UI.ITEM_COL[it.rarity], "vignette": UI.ITEM_RAR[it.rarity]}
 
 
 func _equipment() -> void:
@@ -2080,10 +2100,14 @@ func _merchant() -> void:
 
 
 var purges := 0  # épurations payées pendant la run : le prix monte (Slay the Spire)
+# compteurs invisibles (Slay the Spire) : malchance des rares, chance d'objet ±10 %, embuscade des salles « ? »
+var rare_off := -0.05
+var obj_chance := 0.4
+var myst_fight := 0.1
 
 
 func _purge_price() -> int:
-	return 50 + 25 * purges
+	return 75 + 25 * purges
 
 
 func _merchant_shop() -> void:
@@ -2242,7 +2266,8 @@ func _relic_pick(title: String, subtitle: String, back := false) -> bool:
 		if ids.has(r):
 			continue
 		ids.append(r)
-		opts.append({"title": Data.RELICS[r].name, "image": "res://assets/ui/relic_%s.png" % r, "text": Data.RELICS[r].text})
+		library_see("relic:" + r)
+		opts.append({"title": Data.RELICS[r].name, "image": "res://assets/ui/relic_%s.png" % r, "text": Data.RELICS[r].text, "vignette": "Relique"})
 	if opts.is_empty():
 		return true
 	var i := await ui.choose(title.to_upper(), subtitle, opts, back, "← Retour")
@@ -2254,6 +2279,7 @@ func _relic_pick(title: String, subtitle: String, back := false) -> bool:
 
 func _add_relic(r: String) -> void:
 	relics.append(r)
+	library_see("relic:" + r)
 	if r == "heron":
 		for h in heroes:
 			h.base_move += 1
@@ -3108,6 +3134,28 @@ func _uitest() -> void:
 	_shot(dir, "equipement")
 	ui.picked.emit(0)
 	await _frames(10)
+	# étal du marchand et bibliothèque (vignettes d'équipement et de reliques)
+	gold = 400
+	ui.speaker = "marchand"
+	var shop := func(): await _merchant_shop()
+	shop.call()
+	await _frames(40)
+	_shot(dir, "marchand")
+	ui.picked.emit(-1)
+	await _frames(20)
+	ui.speaker = ""
+	for r in Data.RELICS.keys().slice(0, 5):
+		library_see("relic:" + r)
+	var lib := func(): await ui.library_screen()
+	lib.call()
+	await _frames(20)
+	for b in ui.lib_layer.find_children("*", "Button", true, false):
+		if b.text == "Reliques":
+			b.pressed.emit()
+	await _frames(20)
+	_shot(dir, "bibli_reliques")
+	ui.lib_closed.emit()
+	await _frames(10)
 	floor_i = 1
 	step = 0
 	_gen_map()
@@ -3198,6 +3246,7 @@ func _adventure(saved := {}) -> void:
 			new_run.call_deferred()
 			return
 		floor_i += 1
+		obj_chance = 0.4
 		ui.banner("Étage %d" % floor_i, Data.BIOMES[_biome()].name)
 
 
@@ -4233,6 +4282,14 @@ func _mystery(r: Dictionary) -> void:
 		for h in heroes:
 			h.hp = mini(h.max_hp, h.hp + int(h.max_hp * 0.1))
 		await _journal_reroll()
+	# embuscade : 10 %, +10 % à chaque « ? » paisible (au plus 50 %), retour à 10 % après une embuscade
+	if not tuto and rng.randf() < myst_fight:
+		myst_fight = 0.1
+		ui.banner("Embuscade !", "La salle n'était pas vide")
+		if await _event_fight(r, "combat", []) and mode != "aventure":
+			_haven_end()
+		return
+	myst_fight = minf(myst_fight + 0.1, 0.5)
 	var evs: Array = ["fontaine", "cadavre", "enclume", "puits", "cage", "autel", "atelier", "bibliotheque"] + EVENTS_NEW
 	evs = evs.filter(func(e): return not seen_events.has(e) and (e != "bete" or (companion == "" and rng.randf() < 0.4)))
 	if evs.is_empty():

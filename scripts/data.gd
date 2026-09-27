@@ -521,6 +521,11 @@ const TILES := {
 	"autel": {"name": "Autel des vœux", "glyph": "✧", "col": Color("#9fd8ff"), "text": "Un héros qui y commence son tour pioche 1 carte de plus."},
 	"glyphe": {"name": "Glyphe instable", "glyph": "✺", "col": Color("#e05aff"), "text": "Explose en croix (6 dégâts) quand son compte à rebours tombe à 0, puis se recharge."},
 }
+# Matières du sol, une par biome au plus (battle._place_ground) : elles changent ce que fait une poussée.
+const GROUND := {
+	"glace": {"name": "Glace", "col": Color(0.62, 0.9, 1.0, 0.85), "text": "Poussé sur la glace, on glisse jusqu'au prochain obstacle (et on s'y cogne)."},
+	"vase": {"name": "Vase", "col": Color(0.36, 0.25, 0.14, 0.97), "text": "Y entrer coûte 2 de déplacement. Poussé dedans, on s'enlise : entravé 1 tour."},
+}
 # Anciens (esprit Slay the Spire 2) : au seuil de chaque étage, un bienfait parmi trois.
 const ANCIENTS := {
 	"anatheme": {"name": "L'Anathème", "title": "Ancien de l'ambition", "glyph": "♆", "col": Color("#9b6dd6"),

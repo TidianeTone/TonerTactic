@@ -82,6 +82,9 @@ var smoke_nodes := {}
 var trap_kind := {}         # case -> "piege" | "picots"
 var picot_root := {}        # case -> tours d'entrave des picots (Ronces d'acier)
 var tiles := {}             # case -> rune au sol (Data.TILES)
+var ground_nodes: Array = []
+var _ground_mat := {}
+var ground := {}            # case -> matière du sol (Data.GROUND) : glace, vase, par biome
 var twins := {}             # portail -> portail jumeau
 var tile_nodes: Array = []
 var oaks := {}              # case -> arbre (décor ou planté) : nœud 3D
@@ -279,6 +282,7 @@ func start(hs: Array, foe_ids: Array, deck_ref: Array, relics_ref: Array) -> voi
 			f.tool = Data.FOE_TOOLS[rng.randi_range(0, Data.FOE_TOOLS.size() - 1)]
 	spawn_props()
 	_place_tiles()
+	_place_ground()
 	_alambic = has("alambic")
 	if mods.has("hate"):
 		for f in foes:
@@ -1748,7 +1752,10 @@ func reach(u: Unit) -> Dictionary:
 			var o := unit_at(n)
 			if o and o.side != u.side:
 				continue
-			d[n] = d[c] + 1
+			var step := 2 if ground.get(n, "") == "vase" and not u.fly else 1
+			if d[c] + step > mv:
+				continue
+			d[n] = d[c] + step
 			prev[n] = c
 			q.append(n)
 	var cells := {}
@@ -3128,7 +3135,10 @@ func _push_steps(u: Unit, d: Vector2i, n: int) -> void:
 		Fx.number(main, u.position, "Ancré", Color(0.7, 0.85, 0.95))
 		damage(u, 3 + crash_bonus)
 		return
-	for i in n:
+	var i := 0
+	var slid := 0
+	while i < n:
+		i += 1
 		if not u.alive:
 			return
 		var nx := u.cell + d
@@ -3163,6 +3173,14 @@ func _push_steps(u: Unit, d: Vector2i, n: int) -> void:
 		if drop >= 3:
 			Fx.number(main, u.position, "Chute", Color(1, 0.8, 0.5))
 			damage(u, drop)
+		if i == n and ground.get(nx, "") == "glace" and not u.fly and slid < 6:
+			slid += 1
+			n += 1  # sur la glace, la poussée ne s'arrête qu'au prochain obstacle
+			if slid == 1:
+				Fx.number(main, u.position + Vector3(0, 0.6, 0), "Glisse !", Color(0.75, 0.95, 1.0))
+		elif i == n and ground.get(nx, "") == "vase" and not u.fly:
+			u.root = maxi(u.root, 1)
+			Fx.number(main, u.position + Vector3(0, 0.6, 0), "Enlisé", Color(0.6, 0.45, 0.3))
 
 
 func _slide(u: Unit, to: Vector3) -> void:
@@ -4226,6 +4244,8 @@ func preview(hover) -> String:
 	if tiles.has(hover):
 		var tl: Dictionary = Data.TILES[tiles[hover]]
 		return "%s — %s" % [tl.name, tl.text]
+	if ground.has(hover):
+		return "%s — %s" % [Data.GROUND[ground[hover]].name, Data.GROUND[ground[hover]].text]
 	if oaks.has(hover):
 		var th: String = " — %d/%d PV" % [tree_hp.get(hover, 0), oak_max.get(hover, 10)]
 		if smolder.has(hover):
@@ -5522,6 +5542,65 @@ func _smoke_tick() -> void:
 
 
 # ------------------------------------------------------------------ runes au sol (Dofus Arena)
+
+func _place_ground() -> void:
+	## Matière du sol, selon le biome : glace (hauts plateaux, cristal, grotte), vase (marais, écluse, bassins, bosquet). 2 à 3 plaques de 3 à 5 cases.
+	for n in ground_nodes:
+		if is_instance_valid(n):
+			n.queue_free()
+	ground_nodes.clear()
+	ground.clear()
+	var bi: int = main._biome() if main.has_method("_biome") else 0
+	var k: String = "glace" if bi in [5, 6, 10] else ("vase" if bi in [0, 1, 4, 9] else "")
+	if main.args.has("ground"):
+		k = main.args.ground
+	if k == "" or main.tuto:
+		return
+	var free: Array = board.walkable_cells().filter(func(c): return board.kind.get(c, "") == "land" and unit_at(c) == null and not board.props.has(c) and _hero_dist(c) >= 2)
+	for p in rng.randi_range(2, 3):
+		if free.is_empty():
+			break
+		var seed_c: Vector2i = free[rng.randi_range(0, free.size() - 1)]
+		var patch: Array = [seed_c]
+		var want := rng.randi_range(3, 5)
+		var tries := 0
+		while patch.size() < want and tries < 30:
+			tries += 1
+			var nx: Vector2i = patch[rng.randi_range(0, patch.size() - 1)] + Board.DIRS[rng.randi_range(0, 3)]
+			if free.has(nx) and not patch.has(nx):
+				patch.append(nx)
+		for c in patch:
+			ground[c] = k
+			free.erase(c)
+			var mi := MeshInstance3D.new()
+			var bx := BoxMesh.new()
+			bx.size = Vector3(1.0, 0.07, 1.0)
+			mi.mesh = bx
+			if _ground_mat.get(k) == null:
+				var nt := NoiseTexture2D.new()
+				nt.width = 64
+				nt.height = 64
+				nt.noise = FastNoiseLite.new()
+				nt.noise.frequency = 0.09
+				nt.color_ramp = Gradient.new()
+				nt.color_ramp.colors = PackedColorArray([Color(0.72, 0.72, 0.72), Color(1, 1, 1)])
+				var m := StandardMaterial3D.new()
+				m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+				m.albedo_color = Data.GROUND[k].col
+				m.albedo_texture = nt
+				m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST  # grain de voxel
+				m.roughness = 0.1 if k == "glace" else 1.0
+				m.metallic_specular = 1.0 if k == "glace" else 0.05
+				if k == "glace":
+					m.emission_enabled = true
+					m.emission = Color(0.25, 0.4, 0.5)
+				_ground_mat[k] = m
+			mi.material_override = _ground_mat[k]
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			mi.position = board.world(c) + Vector3(0, 0.035, 0)
+			units_root.add_child(mi)
+			ground_nodes.append(mi)
+
 
 func _place_tiles() -> void:
 	for n in tile_nodes:

@@ -39,7 +39,10 @@ for f in sorted(os.listdir(os.path.join(D, "boites"))):
     e[..., 1] = np.where(spill, np.maximum(e[..., 0], e[..., 2]), e[..., 1])
     rgba[..., :3] = e.astype(np.uint8)
     h, w = rgba.shape[:2]
-    if k.startswith("barre"):
+    if k == "vignette":  # cadre de vignette : zones mesurées à l'œil (bandeau 1,5-11 %, séparateur à 55,7 %)
+        yy, xx = np.array([0, h - 1]), np.array([0, w - 1])
+        name = k
+    elif k.startswith("barre"):
         hole = ~keep[y0:y1, x0:x1]
         hl, hn = label(hole)
         border = set(np.unique(np.concatenate([hl[0], hl[-1], hl[:, 0], hl[:, -1]])))
@@ -57,7 +60,7 @@ for f in sorted(os.listdir(os.path.join(D, "boites"))):
         yy, xx = np.nonzero(dl == i)
         name = "boite_" + k
     out[name] = {"inner": [round(xx.min() / w, 4), round(yy.min() / h, 4), round((xx.max() + 1) / w, 4), round((yy.max() + 1) / h, 4)], "size": [w, h]}
-    s = min(1.0, 900 / w)
+    s = min(1.0, (360 if k == "vignette" else 900) / w)
     Image.fromarray(rgba).resize((int(w * s), int(h * s)), Image.LANCZOS).save(os.path.join(UI, name + ".png"))
     print(name, out[name])
 json.dump(out, open(os.path.join(D, "boites", "boites.json"), "w"), indent=1)  # zones recopiées dans UI.BOITES
