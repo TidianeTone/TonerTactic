@@ -11,7 +11,7 @@ const GOLD := Color("#e3b45c")
 const CARD_BASE := Vector2(196, 272)  # proportions des cadres KIE, telles que peintes
 const CARD_EXTRA := 48.0  # la bande du texte s'allonge d'autant : la carte respire
 const CARD := Vector2(196, 272 + 48)  # proportions des cadres KIE
-var hand_k := 0.84  # échelle de la main au repos (survol : ×1,33) ; --handk= pour essayer
+var hand_k := 1.0  # échelle de la main au repos (survol : ×1,33) ; --handk= pour essayer
 const KIND_NAME := {"atk": "Attaque", "skill": "Technique", "move": "Mouvement", "power": "Pouvoir"}
 const ICON := {
 	"frappe": "⚔", "pavois": "🛡", "charge": "➤", "defi": "⚑", "rempart": "✠", "marteau": "⚒", "bastion": "🛡",
@@ -2873,13 +2873,15 @@ func _vignette(title: String, icon: String, text: String, col: Color, tag: Strin
 
 
 # encarts de classe peints (KIE, tools/encarts.py) : marges 9-slice puis bord uni, en pixels de l'image réduite
-const ENCARTS := {"garde": [45, 51, 45, 47, 24, 33, 21, 22], "lame": [42, 54, 42, 42, 7, 23, 7, 9], "oracle": [28, 52, 28, 32, 10, 32, 10, 12], "artificier": [33, 49, 33, 42, 11, 29, 11, 10], "moine": [43, 63, 43, 42, 17, 36, 17, 16], "trappeur": [44, 63, 44, 44, 25, 44, 24, 26], "tidiane": [26, 42, 26, 28, 7, 27, 7, 8], "receleur": [32, 46, 32, 34, 14, 28, 13, 15]}
-func encart(k: String, pad := 10) -> StyleBox:
-	## L'encart peint de la classe (9-slice), ou null s'il n'est pas (encore) dans assets/ui.
-	var path := "res://assets/ui/encart_%s.png" % k
-	if not ENCARTS.has(k) or not ResourceLoader.exists(path) or main.args.has("sans_kie"):
+const ENCARTS := {"encart_garde": [45, 51, 45, 47, 24, 33, 21, 22], "encart_lame": [42, 54, 42, 42, 7, 23, 7, 9], "encart_oracle": [28, 52, 28, 32, 10, 32, 10, 12], "encart_artificier": [33, 49, 33, 42, 11, 29, 11, 10], "encart_moine": [43, 63, 43, 42, 17, 36, 17, 16], "encart_trappeur": [44, 63, 44, 44, 25, 44, 24, 26], "encart_tidiane": [26, 42, 26, 28, 7, 27, 7, 8], "encart_receleur": [32, 46, 32, 34, 14, 28, 13, 15]}
+func encart(k: String, pad := 10, fam := "encart") -> StyleBox:
+	## L'encart peint de la classe (9-slice), ou null s'il n'est pas (encore) dans assets/ui. fam : encart (portrait, escouade),
+	## encart_voc (colonne haute, écran de vocation), bandeau (rectangle large, voies de la vocation).
+	var name := "%s_%s" % [fam, k]
+	var path := "res://assets/ui/%s.png" % name
+	if not ENCARTS.has(name) or not ResourceLoader.exists(path) or main.args.has("sans_kie"):
 		return null
-	var m: Array = ENCARTS[k]
+	var m: Array = ENCARTS[name]
 	var st := StyleBoxTexture.new()
 	st.texture = load(path)
 	st.texture_margin_left = m[0]
@@ -3432,8 +3434,8 @@ func vocation_screen(h: Unit, picks: Array) -> int:
 	var hs := sb(Color(0.07, 0.06, 0.07, 0.95), col, 12, 3, 12)
 	hs.set_content_margin_all(16)
 	hp.add_theme_stylebox_override("panel", hs)
-	if encart(h.key):
-		hp.add_theme_stylebox_override("panel", encart(h.key))
+	if encart(h.key, 10, "encart_voc"):
+		hp.add_theme_stylebox_override("panel", encart(h.key, 10, "encart_voc"))
 	hp.custom_minimum_size = Vector2(250, 0)
 	row.add_child(hp)
 	var hv := VBoxContainer.new()
@@ -3528,7 +3530,7 @@ func vocation_screen(h: Unit, picks: Array) -> int:
 		cam3.look_at(Vector3(0, ht * 0.5, 0))
 		var g := Guildes.index(h.key, k)
 		var gl: Array = Guildes.LIST[g]
-		pv.add_theme_stylebox_override("panel", encart(k) if encart(k) else ps)  # l'encart de la voie survolée
+		pv.add_theme_stylebox_override("panel", encart(k, 10, "encart_voc") if encart(k, 10, "encart_voc") else ps)  # l'encart de la voie survolée
 		var kc: Color = Data.CLASS_COLOR[k]
 		info.text = "[center][font_size=22][color=#%s]%s + %s[/color][/font_size]\n[color=#e3b45c]Guilde : %s[/color] — %s[/center]\n%s\n\n[color=#%s]%s[/color]" % [
 			kc.lightened(0.3).to_html(false), Data.HEROES[h.key].name, Data.HEROES[k].name, gl[2], gl[3], Guildes.DESC[g],
@@ -3543,6 +3545,12 @@ func vocation_screen(h: Unit, picks: Array) -> int:
 		b.add_theme_stylebox_override("hover", sb(kc.darkened(0.55), kc.lightened(0.3), 12, 3, 14))
 		b.add_theme_stylebox_override("focus", sb(kc.darkened(0.55), Color.WHITE, 12, 3, 14))
 		b.add_theme_stylebox_override("pressed", sb(kc.darkened(0.4), Color.WHITE, 12, 3, 6))
+		var ban := encart(k, 6, "bandeau")  # le bandeau peint de la classe, s'il existe : plus clair au survol
+		if ban:
+			for st_name in ["normal", "hover", "focus", "pressed"]:
+				var bs: StyleBoxTexture = ban.duplicate()
+				bs.modulate_color = Color(1.3, 1.22, 1.1) if st_name in ["hover", "focus"] else (Color(0.85, 0.8, 0.75) if st_name == "pressed" else Color.WHITE)
+				b.add_theme_stylebox_override(st_name, bs)
 		var hb := HBoxContainer.new()
 		hb.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		hb.offset_left = 10
