@@ -1,6 +1,7 @@
 # Détoure les encarts de classe et les boutons (encarts/brut/*.png, fond vert, magenta pour le moine) -> encarts/*.png,
 # mesure les marges 9-slice de chaque encart -> encarts/encarts.json, et monte les planches de revue.
 # python cut_encarts.py [planche.png]
+# python cut_encarts.py voc [planche.png]   -> seulement encart_voc_* et bandeau_* (28/09), fusionnés dans encarts.json sans toucher aux encarts validés
 import os, sys, json
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -13,7 +14,8 @@ CLASSES = ["garde", "lame", "oracle", "artificier", "moine", "trappeur", "tidian
 MAGENTA = {"moine"}
 # marges relevées à l'œil (encarts/planche_guides) là où la mesure rate : volutes sombres sur fond sombre (lame),
 # perles fines sous les disques de jade (moine). À refaire si le brut change.
-MANUEL = {"lame": (130, 170, 130, 130), "moine": (134, 197, 134, 132)}
+MANUEL = {"lame": (130, 170, 130, 130), "moine": (134, 197, 134, 132),
+	"encart_voc_moine": (85, 142, 85, 100)}  # voc : la mesure prend la bande de bas de la moulure pour un ornement
 
 
 def key(a, magenta):
@@ -166,7 +168,51 @@ def sheet(items, out, guides=None):
 	S.save(out)
 
 
-if __name__ == "__main__":
+def planche_voc(meta, out, guides=False):
+	## deux classes par ligne ; par classe : l'encart validé, l'encart_voc (même hauteur), le bandeau (300 px de large)
+	ch, bw, pad, lab, fo, fs = 320, 300, 26, 26, font(24), font(17)
+	W, bh = 2 * (pad + 230 + 150 + bw + 3 * pad), ch + 2 * lab + pad
+	S = Image.new("RGB", (W, pad + 4 * bh), (14, 11, 18))
+	d = ImageDraw.Draw(S)
+	for i, c in enumerate(CLASSES):
+		x, y = pad + (i % 2) * (W // 2), pad + (i // 2) * bh
+		d.text((x, y), c, fill=(255, 214, 150), font=fo)
+		y += lab + 4
+		for n, tag in (("encart_%s" % c, "validé"), ("encart_voc_%s" % c, "voc"), ("bandeau_%s" % c, "bandeau")):
+			im = Image.open(os.path.join(D, n + ".png"))
+			s = bw / im.width if tag == "bandeau" else ch / im.height
+			t = im.resize((max(1, int(im.width * s)), max(1, int(im.height * s))), Image.LANCZOS)
+			oy = y + (ch - t.height) // 2
+			S.paste(t, (x, oy), t)
+			if guides and "marges" in meta.get(n, {}):
+				L, T, R, B = [v * s for v in meta[n]["marges"]]
+				for gx in (x + L, x + t.width - R):
+					d.line([(gx, oy), (gx, oy + t.height)], fill=(255, 190, 90))
+				for gy in (oy + T, oy + t.height - B):
+					d.line([(x, gy), (x + t.width, gy)], fill=(255, 190, 90))
+				x0, y0, x1, y1 = meta[n]["interieur"]
+				d.rectangle([x + x0 * t.width, oy + y0 * t.height, x + x1 * t.width, oy + y1 * t.height], outline=(230, 110, 170))
+			tw = d.textlength(tag, font=fs)
+			d.text((x + (t.width - tw) / 2, oy + t.height + 4), tag, fill=(236, 214, 190), font=fs)
+			x += t.width + pad
+	S.save(out)
+
+
+if __name__ == "__main__" and sys.argv[1:2] == ["voc"]:
+	meta = json.load(open(os.path.join(D, "encarts.json")))
+	for c in CLASSES:
+		for name in ("encart_voc_%s" % c, "bandeau_%s" % c):
+			a = np.asarray(Image.open(os.path.join(BRUT, name + ".png")).convert("RGB")).astype(float)
+			rgba = key(a, c in MAGENTA)
+			Image.fromarray(rgba).save(os.path.join(D, name + ".png"))
+			meta[name] = measure(rgba, name)
+			print(name, json.dumps(meta[name]))
+	json.dump(meta, open(os.path.join(D, "encarts.json"), "w"), indent=1)
+	out = sys.argv[2] if len(sys.argv) > 2 else os.path.join(D, "planche_voc.png")
+	planche_voc(meta, out)
+	planche_voc(meta, out.replace(".png", "_guides.png"), True)
+	print(out)
+elif __name__ == "__main__":
 	meta, items = {}, []
 	for k in CLASSES + ["equipement", "paquet"]:
 		enc = k in CLASSES

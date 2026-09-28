@@ -2,7 +2,10 @@
 # PRÉ-PROD : tout reste dans encarts/ (hors git), rien ne va dans assets/ tant que Tidiane n'a pas validé.
 # Un visuel par image (qualité basic, 7,5 crédits) : sur une planche, le modèle recopie une classe sur les autres.
 # Fond chroma vert #00FF00, sauf le moine (jade) sur magenta #FF00FF. Découpe : cut_encarts.py
-# python gen_encarts.py [clé...]   (clés : garde lame ... receleur, equipement, paquet ; un fichier déjà là n'est pas refait)
+# python gen_encarts.py [clé...]   (clés : garde lame ... receleur, equipement, paquet, voc_<classe>, bandeau_<classe> ;
+# un fichier déjà là n'est pas refait)
+# voc_ / bandeau_ (28/09) : colonne haute ~1:2,3 (écran de vocation) et rectangle large ~3:1 (bouton de voie), peints en image-to-image
+# avec l'encart validé de la classe en référence, pour rester de la même famille.
 import os, sys
 from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -53,12 +56,62 @@ BOUTONS = {
 }
 
 
+# ce que les encarts validés montrent vraiment (le prompt d'origine a dérivé), et les deux retouches demandées : lame moins sombre, oracle plus violet
+LOOK = {
+	"garde": "royal-blue enamelled iron border with grey stone; corner pieces are small grey stone tower battlements with round steel shield bosses; "
+		"crest: a small blue heater shield with a knight's helmet.",
+	# 2e essai du voc (le 1er restait aussi sombre que l'encart validé) : acier poli gris moyen, bande cramoisie franche
+	"lame": "polished mid-grey gunmetal steel border, clearly LIGHTER than the reference, with a bright crimson enamel band running along the whole "
+		"border and bright steel highlights, so the frame stays readable on a black screen; corner pieces are small polished steel crescent moons; "
+		"crest: two small crossed curved steel daggers with crimson hilts, bright enough to read on black.",
+	"oracle": "violet enamel border with thin dark bronze edges, the violet dominant everywhere (much more violet than bronze); corner pieces are small "
+		"bronze-and-violet brackets each holding a small orange ember flame inside; crest: a bold open eye with a violet iris wreathed in small orange ember flames.",
+	"artificier": "riveted bronze and copper border with teal-patina enamel; corner pieces are small bronze cogs with tiny gunpowder barrels; "
+		"crest: a small powder keg with a short lit fuse.",
+	"moine": "carved light sage-toned wood border inlaid with polished green jade; corner pieces are round green jade discs with a few prayer beads; "
+		"crest: a small green jade lotus flower.",
+	"trappeur": "smooth orange-ochre leather strip over a thin wooden rod; corner pieces are small rope knots with two crossed arrows; "
+		"crest: a small pair of antlers.",
+	"tidiane": "a very thin gilded gold moulding with fine magenta lacquer lines; corner pieces are small gold flourishes each set with a small magenta gem; "
+		"crest: a small white porcelain duelist mask with a paintbrush and a thin rapier crossed behind it.",
+	"receleur": "tarnished silver border with slate-grey enamel; corner pieces are small silver rivet plates with a crossed lockpick and key; "
+		"crest: a small silver padlock.",
+}
+
+VOC = ("Using the reference image as the style guide, paint a NEW panel of the same family: the same materials, colors, corner pieces and crest "
+	"as the reference, same hand-painted stylized game art with clean dark outlines. The new panel is a single blank TALL NARROW vertical column frame, "
+	"seen perfectly flat and front-on, centered, about 2.4 times taller than it is wide, filling about 92 percent of the image height, with wide areas "
+	"of the flat chroma background on its left and right. The border is thin, and the corner pieces and the crest stay SMALL, the same size relative "
+	"to the border as in the reference, not stretched. Along the long left and right sides and along the top and bottom edges between the corners "
+	"the border is a plain straight simple moulding with no ornament, no studs, no rivets, no repeated plates, so the panel can be stretched vertically. "
+	"All the decoration is in the four corner pieces and in one small crest on the top edge at the center; nothing at the middle of the sides, "
+	"nothing on the bottom edge. Nothing sticks out beyond the border: no splashes, no flames, no drips, no ribbons outside the frame. "
+	"The inside is one flat, plain, very dark near-black surface with a faint %s tint, no texture, no pattern, no picture, no divider. "
+	"The whole background around the panel is pure flat chroma %s. No text, no letters, no characters. %s")
+
+BANDEAU = ("Using the reference image as the style guide, paint a NEW game UI element of the same family: the same materials, colors and corner "
+	"motifs as the reference, same hand-painted stylized game art with clean dark outlines. The new element is a single blank WIDE HORIZONTAL "
+	"rectangular plate used as a clickable button, seen perfectly flat and front-on, centered, exactly three times as wide as it is tall (its height is one "
+	"third of its width), filling about 88 percent of the image width and about half of the image height. A slim border. The class motif appears ONLY at the two short ends: a small matching ornament at the left end and "
+	"the same ornament mirrored at the right end, kept small and inside the plate's height, the four corners identical and mirrored left-right and "
+	"top-bottom. The long top and bottom edges are a completely plain straight simple moulding: no ornament, no crest, no studs, no rivets, no plates, "
+	"no bosses, no repeated blocks, so the plate can be stretched horizontally. Nothing sticks out beyond the border. "
+	"The inside is one flat, plain, dark near-black surface with a faint %s tint, no texture, no pattern, no picture, no divider, left empty for "
+	"a portrait and a label. The whole background around the plate is pure flat chroma %s. No text, no letters, no numbers. %s")
+
+
 def job(k):
+	fam, _, c = k.partition("_")
+	if fam in ("voc", "bandeau") and c in CLASSES:
+		key = "magenta #FF00FF" if c in MAGENTA else "green #00FF00"
+		tpl, ar, name = (VOC, "9:16", "encart_voc_%s.png") if fam == "voc" else (BANDEAU, "16:9", "bandeau_%s.png")
+		return (tpl % (CLASSES[c][0], key, "Materials and motifs: " + LOOK[c]), os.path.join(D, name % c), ar,
+			[os.path.join(D, "encart_%s.png" % c)])
 	if k in CLASSES:
 		tint, look = CLASSES[k]
 		key = "magenta #FF00FF" if k in MAGENTA else "green #00FF00"
-		return ENCART % (tint, key, look), os.path.join(D, "encart_%s.png" % k), "3:4"
-	return BOUTON % BOUTONS[k], os.path.join(D, "bouton_%s.png" % k), "3:2"
+		return ENCART % (tint, key, look), os.path.join(D, "encart_%s.png" % k), "3:4", []
+	return BOUTON % BOUTONS[k], os.path.join(D, "bouton_%s.png" % k), "3:2", []
 
 
 if __name__ == "__main__":
@@ -66,5 +119,5 @@ if __name__ == "__main__":
 	only = sys.argv[1:] or list(CLASSES) + list(BOUTONS)
 	with ThreadPoolExecutor(4) as ex:
 		for k in only:
-			p, out, ar = job(k)
-			ex.submit(still, p, out, ar, (), ["--quality", "basic"])
+			p, out, ar, refs = job(k)
+			ex.submit(still, p, out, ar, refs, ["--quality", "basic"])
