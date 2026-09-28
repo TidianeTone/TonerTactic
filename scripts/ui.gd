@@ -510,6 +510,7 @@ func _build_hud() -> void:
 	end_btn.add_theme_stylebox_override("pressed", sb(GOLD.darkened(0.15), Color("#fff0c8"), 12, 2, 4))
 	end_btn.add_theme_stylebox_override("disabled", sb(Color(0.35, 0.3, 0.25, 0.8), Color(0.5, 0.45, 0.4), 12, 2, 0))
 	end_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	_action_style(end_btn, true)
 	end_btn.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
 	end_btn.position = Vector2(-230, -118)
 	end_btn.size = Vector2(190, 58)
@@ -535,6 +536,8 @@ func _build_hud() -> void:
 		qb.add_theme_stylebox_override("normal", sb(Color(0.08, 0.07, 0.075, 0.9), GOLD.darkened(0.3), 10, 1, 6))
 		qb.add_theme_stylebox_override("hover", sb(Color(0.18, 0.15, 0.1, 0.95), GOLD, 10, 1, 6))
 		qb.custom_minimum_size = Vector2(0, 38)
+		_action_style(qb)
+		qb.custom_minimum_size.y = 42
 		qb.pressed.connect(q[2])
 		quick.add_child(qb)
 	# juste sous la caméra : l'aide des commandes (au survol) et la vue tactique (son état reste visible)
@@ -699,6 +702,7 @@ func _build_explore() -> void:
 		b.add_theme_stylebox_override("hover", sb(Color(0.16, 0.18, 0.2, 0.95), Color.WHITE, 8, 1, 6))
 		b.focus_mode = Control.FOCUS_NONE
 		var k: String = e[1]
+		_painted_button(b, "equipement" if k == "equip" else "paquet")
 		b.pressed.connect(func(): main.adv_menu(k))
 		row.add_child(b)
 	explore_box.add_child(row)
@@ -828,6 +832,7 @@ func coach(kicker: String, text: String, next := false) -> void:
 		coach_next.add_theme_color_override("font_color", Color("#2a1606"))
 		coach_next.add_theme_stylebox_override("normal", sb(GOLD, Color("#fff0c8"), 10, 2, 6))
 		coach_next.add_theme_stylebox_override("hover", sb(GOLD.lightened(0.15), Color("#fff0c8"), 10, 2, 6))
+		_action_style(coach_next, true)
 		coach_next.size_flags_horizontal = Control.SIZE_SHRINK_END
 		coach_next.pressed.connect(func(): main._tuto_ok())
 		v.add_child(coach_next)
@@ -1376,7 +1381,11 @@ func refresh() -> void:
 	end_btn.text = "Fin du tour" if battle.active == null else "Fin · %s" % battle.active.nm
 	keys_plate.visible = (_keys_hover or show_keys == 1) and not big  # au survol de « Commandes » (ou H) ; au doigt, pas de clavier
 	tactic_btn.text = "◧  Tactique" if not main.tactic else "◧  Tactique ✓"
-	(tactic_btn.get_theme_stylebox("normal") as StyleBoxFlat).border_color = GOLD if main.tactic else GOLD.darkened(0.3)
+	var tsb := tactic_btn.get_theme_stylebox("normal")
+	if tsb is StyleBoxFlat:
+		tsb.border_color = GOLD if main.tactic else GOLD.darkened(0.3)
+	else:  # bouton peint : l'état se lit à la couleur du texte
+		tactic_btn.add_theme_color_override("font_color", Color("#ffd46a") if main.tactic else Color("#f4e6c4"))
 	var psig := "%s|%d|%d|%s" % [JSON.stringify(battle.powers), battle.discard.size(), battle.draw_pile.size(), log_box.visible]
 	if psig != _played_sig:
 		_played_sig = psig
@@ -1450,6 +1459,8 @@ func _quick_btn(text: String, tip: String, cb: Callable) -> Button:
 	qb.add_theme_stylebox_override("hover", sb(Color(0.18, 0.15, 0.1, 0.95), GOLD, 10, 1, 6))
 	qb.add_theme_stylebox_override("pressed", sb(Color(0.3, 0.22, 0.1, 0.95), GOLD, 10, 2, 6))
 	qb.custom_minimum_size = Vector2(0, 38)
+	_action_style(qb)
+	qb.custom_minimum_size.y = 42
 	qb.pressed.connect(cb)
 	return qb
 
@@ -1470,6 +1481,12 @@ func _small_btn(text: String, cb: Callable) -> Button:
 		st.content_margin_left = 12
 		st.content_margin_right = 12
 	b.custom_minimum_size = Vector2(0, 34)
+	_action_style(b)
+	b.custom_minimum_size.y = 40
+	for k in ["normal", "hover", "focus", "pressed"]:
+		var st := b.get_theme_stylebox(k)
+		st.content_margin_left = maxf(st.content_margin_left, 22)
+		st.content_margin_right = maxf(st.content_margin_right, 22)
 	b.pressed.connect(cb)
 	return b
 
@@ -2450,6 +2467,7 @@ func choose(title: String, subtitle: String, options: Array, allow_skip := false
 		sk.add_theme_stylebox_override("hover", sb(Color(0.2, 0.16, 0.1, 0.96), GOLD, 10, 2, 8))
 		sk.add_theme_stylebox_override("pressed", sb(Color(0.3, 0.22, 0.1, 0.96), GOLD, 10, 2, 8))
 		sk.custom_minimum_size = Vector2(260, 50)
+		_action_style(sk)
 		sk.pressed.connect(func():
 			if not fresh.call():
 				picked.emit(-1))
@@ -2528,21 +2546,21 @@ func _stakes_box(head: String, lines: Array, col: Color) -> Control:
 	var s := sb(Color(col.r, col.g, col.b, 0.1), col.darkened(0.2), 8, 2)
 	s.content_margin_left = 14
 	s.content_margin_right = 14
-	s.content_margin_top = 8
-	s.content_margin_bottom = 10
+	s.content_margin_top = 6
+	s.content_margin_bottom = 8
 	p.add_theme_stylebox_override("panel", s)
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 2)
+	v.add_theme_constant_override("separation", 1)
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	p.add_child(v)
-	var h := _label(head, 14, col, title_f)
+	var h := _label(head, 13, col, title_f)
 	h.add_theme_constant_override("outline_size", 0)
 	v.add_child(h)
 	for ln in lines:
-		v.add_child(_label(ln[0], 22, col.lightened(0.25), title_f))
+		v.add_child(_label(ln[0], 19, col.lightened(0.25), title_f))
 		if ln[1] != "":
-			var d := _label(ln[1], 15, INK)
+			var d := _label(ln[1], 14, INK)
 			d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			d.custom_minimum_size.x = 270
 			v.add_child(d)
@@ -2560,6 +2578,16 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 	var tex: Texture2D = load("res://assets/ui/map_%s.jpg" % m[0])
 	var ts := Vector2(tex.get_width(), tex.get_height())
 	var k_img: float = maxf(vp.x / ts.x, vp.y / ts.y)
+	# la carte à gauche, une colonne à droite pour l'annonce de salle et l'équipe : l'annonce ne cache jamais une salle
+	var colw := 400.0 if vp.x >= 1500.0 else 360.0
+	var backdrop := TextureRect.new()  # la même île, assombrie, sous tout l'écran : aucun bord visible si la carte rétrécit
+	backdrop.texture = tex
+	backdrop.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	backdrop.size = ts * k_img
+	backdrop.position = (vp - backdrop.size) / 2.0
+	backdrop.modulate = Color(0.42, 0.44, 0.52)
+	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(backdrop)
 	var stage := Control.new()
 	stage.size = ts * k_img
 	stage.position = (vp - stage.size) / 2.0
@@ -2593,6 +2621,7 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 	var head := VBoxContainer.new()
 	head.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	head.offset_top = 22
+	head.offset_right = -colw
 	head.add_theme_constant_override("separation", 2)
 	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(head)
@@ -2622,6 +2651,21 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 				col.append((m[1][k0][i] as Vector2).lerp(m[1][k1][mini(i, m[1][k1].size() - 1)], f))
 			cols.append(col)
 		cols.append(m[1][hand])
+	# l'île recadrée dans la zone de gauche (entre le titre et les boutons) : décalée d'abord, réduite seulement s'il le faut
+	var lo := Vector2(1, 1)
+	var hi := Vector2(0, 0)
+	for col in cols:
+		for pt: Vector2 in col:
+			lo = Vector2(minf(lo.x, pt.x), minf(lo.y, pt.y))
+			hi = Vector2(maxf(hi.x, pt.x), maxf(hi.y, pt.y))
+	var zone := Rect2(56, 150, vp.x - colw - 112, vp.y - 150 - 120)
+	var k_fit: float = minf(k_img, minf(zone.size.x / maxf((hi.x - lo.x) * ts.x, 1.0), zone.size.y / maxf((hi.y - lo.y) * ts.y, 1.0)))
+	stage.size = ts * k_fit
+	bg.size = stage.size
+	stage.position = zone.get_center() - (lo + hi) * 0.5 * stage.size
+	if k_fit >= k_img - 0.001:  # pleine taille : l'image couvre encore la gauche, sans bord visible
+		stage.position.x = clampf(stage.position.x, vp.x - colw - stage.size.x, 0.0)
+		stage.position.y = clampf(stage.position.y, vp.y - stage.size.y, 0.0)
 	var pos := func(k: int, i: int) -> Vector2:
 		var col: Array = cols[mini(k, cols.size() - 1)]
 		var p: Vector2 = col[0] if col.size() == 1 else col[clampi(i + (1 if fmap[k].size() == 1 else 0), 0, col.size() - 1)]
@@ -2696,13 +2740,14 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 	info_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var info := _label("Choisissez la prochaine salle.", 17, INK)
 	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	info.custom_minimum_size.x = colw - 76
 	# l'enjeu d'un combat en deux blocs qu'on lit d'un coup d'œil : ce qu'on risque, ce qu'on gagne
-	var room_title := _label("", 28, GOLD, title_f)
+	var room_title := _label("", 24, GOLD, title_f)
 	room_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	room_title.visible = false
-	var stakes := HBoxContainer.new()
-	stakes.alignment = BoxContainer.ALIGNMENT_CENTER
-	stakes.add_theme_constant_override("separation", 12)
+	var stakes := VBoxContainer.new()  # l'un sous l'autre : la colonne est étroite
+	stakes.add_theme_constant_override("separation", 10)
 	stakes.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	stakes.visible = false
 	# au survol d'une salle : son illustration au-dessus de la description
@@ -2759,7 +2804,7 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 			var st: Array = _room_stakes(n, k == fmap.size() - 1) if fight else []
 			var show_room := func():
 				room_title.visible = fight
-				room_art.custom_minimum_size = Vector2(160, 90) if fight else Vector2(240, 160)  # un combat : l'enjeu prime sur l'image
+				room_art.custom_minimum_size = Vector2(128, 72) if fight else Vector2(240, 160)  # un combat : l'enjeu prime sur l'image
 				stakes.visible = fight
 				info.text = desc
 				if fight:
@@ -2809,15 +2854,36 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 	foot.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	foot.offset_top = -130
 	foot.offset_bottom = -22
+	foot.offset_right = -colw
 	foot.alignment = BoxContainer.ALIGNMENT_END
 	foot.grow_vertical = Control.GROW_DIRECTION_BEGIN  # l'illustration de salle pousse vers le haut
 	foot.add_theme_constant_override("separation", 12)
 	foot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(foot)
-	var ic := CenterContainer.new()
-	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ic.add_child(info_plate)
-	foot.add_child(ic)
+	# la colonne de droite : l'annonce de la salle survolée en haut, l'équipe en bas
+	var side := PanelContainer.new()
+	side.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
+	side.offset_left = -colw
+	side.offset_right = 4
+	side.offset_top = -4
+	side.offset_bottom = 4
+	var sst := sb(Color(0.035, 0.03, 0.04, 0.9), GOLD.darkened(0.45), 0, 2, 12)
+	sst.content_margin_left = 16
+	sst.content_margin_right = 20
+	sst.content_margin_top = 22
+	sst.content_margin_bottom = 22
+	side.add_theme_stylebox_override("panel", sst)
+	side.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(side)
+	var side_box := VBoxContainer.new()
+	side_box.add_theme_constant_override("separation", 12)
+	side_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	side.add_child(side_box)
+	side_box.add_child(info_plate)
+	var gap := Control.new()
+	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	side_box.add_child(gap)
 	var eq := Button.new()
 	eq.text = equip_txt
 	eq.add_theme_font_override("font", title_f)
@@ -2841,12 +2907,9 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 	foot.add_child(ec)
 	# l'équipe, comme en combat : PV, stats ; le portrait ouvre la fiche (équipement, trait, paquet)
 	var team := VBoxContainer.new()
-	team.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
-	team.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	team.offset_left = 24
-	team.offset_bottom = -24
 	team.add_theme_constant_override("separation", 6)
-	overlay.add_child(team)
+	team.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	side_box.add_child(team)
 	var tp := {}
 	_rebuild_heroes(team, main.heroes, tp)
 	_refresh_heroes(tp)
@@ -2857,6 +2920,29 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 	var i: int = await picked
 	_close_overlay()
 	return i
+
+
+func _action_style(b: Button, primary := false) -> void:
+	## Bouton peint générique (KIE, assets/ui/bouton_action.png, famille des boutons Équipement / Paquet) : plaque de cuir
+	## étirable, pointes de métal aux bouts. primary : plus chaud et plus clair (fin du tour).
+	var base := encart("action", 0, "bouton")
+	if base == null:
+		return
+	var tint := Color(1.18, 1.05, 0.82) if primary else Color.WHITE
+	for state in ["normal", "hover", "focus", "pressed", "disabled"]:
+		var st: StyleBoxTexture = base.duplicate()
+		st.content_margin_top = 4
+		st.content_margin_bottom = 6
+		st.modulate_color = tint * (Color(1.3, 1.22, 1.08) if state in ["hover", "focus"] else (Color(0.82, 0.78, 0.74) if state == "pressed" else (Color(0.5, 0.48, 0.5) if state == "disabled" else Color.WHITE)))
+		b.add_theme_stylebox_override(state, st)
+	b.add_theme_color_override("font_color", Color("#f4e6c4"))
+	b.add_theme_color_override("font_hover_color", Color.WHITE)
+	b.add_theme_color_override("font_focus_color", Color.WHITE)
+	b.add_theme_color_override("font_pressed_color", GOLD)
+	b.add_theme_color_override("font_disabled_color", Color(0.55, 0.52, 0.5))
+	b.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.02, 0.85))
+	b.add_theme_constant_override("outline_size", 5)
+	b.custom_minimum_size.y = maxf(b.custom_minimum_size.y, 50.0)
 
 
 func _painted_button(b: Button, k: String) -> void:
@@ -2972,7 +3058,7 @@ func _vignette(title: String, icon: String, text: String, col: Color, tag: Strin
 
 
 # encarts de classe peints (KIE, tools/encarts.py) : marges 9-slice puis bord uni, en pixels de l'image réduite
-const ENCARTS := {"encart_garde": [45, 51, 45, 47, 24, 33, 21, 22], "encart_lame": [42, 54, 42, 42, 7, 23, 7, 9], "encart_oracle": [28, 52, 28, 32, 10, 32, 10, 12], "encart_artificier": [33, 49, 33, 42, 11, 29, 11, 10], "encart_moine": [43, 63, 43, 42, 17, 36, 17, 16], "encart_trappeur": [44, 63, 44, 44, 25, 44, 24, 26], "encart_tidiane": [26, 42, 26, 28, 7, 27, 7, 8], "encart_receleur": [32, 46, 32, 34, 14, 28, 13, 15], "encart_voc_garde": [52, 69, 52, 57, 28, 39, 24, 26], "bandeau_garde": [36, 29, 36, 22, 19, 13, 19, 7], "encart_voc_lame": [30, 66, 30, 42, 15, 33, 14, 14], "bandeau_lame": [38, 45, 38, 36, 28, 7, 29, 9], "encart_voc_oracle": [43, 76, 43, 64, 14, 46, 18, 18], "bandeau_oracle": [38, 24, 38, 24, 10, 9, 9, 9], "encart_voc_artificier": [68, 133, 68, 89, 22, 66, 21, 20], "bandeau_artificier": [39, 22, 39, 22, 10, 9, 10, 9], "encart_voc_moine": [54, 91, 54, 64, 22, 49, 23, 22], "bandeau_moine": [40, 31, 40, 32, 16, 14, 16, 11], "encart_voc_trappeur": [51, 71, 51, 50, 27, 49, 28, 29], "bandeau_trappeur": [37, 42, 37, 38, 33, 11, 34, 11], "encart_voc_tidiane": [39, 73, 39, 32, 10, 43, 11, 11], "bandeau_tidiane": [67, 45, 67, 46, 39, 8, 37, 8], "encart_voc_receleur": [41, 88, 41, 72, 17, 35, 17, 19], "bandeau_receleur": [24, 18, 24, 17, 12, 11, 12, 12], "encart_vocl_garde": [52, 69, 52, 57, 28, 39, 24, 26], "encart_vocl_lame": [30, 66, 30, 42, 15, 33, 14, 14], "encart_vocl_oracle": [43, 76, 43, 64, 14, 46, 18, 18], "encart_vocl_artificier": [68, 133, 68, 89, 22, 66, 21, 20], "encart_vocl_moine": [54, 91, 54, 64, 22, 49, 23, 22], "encart_vocl_trappeur": [51, 71, 51, 50, 27, 49, 28, 29], "encart_vocl_tidiane": [39, 73, 39, 32, 10, 43, 11, 11], "encart_vocl_receleur": [41, 88, 41, 72, 17, 35, 17, 19]}
+const ENCARTS := {"encart_garde": [45, 51, 45, 47, 24, 33, 21, 22], "encart_lame": [42, 54, 42, 42, 7, 23, 7, 9], "encart_oracle": [28, 52, 28, 32, 10, 32, 10, 12], "encart_artificier": [33, 49, 33, 42, 11, 29, 11, 10], "encart_moine": [43, 63, 43, 42, 17, 36, 17, 16], "encart_trappeur": [44, 63, 44, 44, 25, 44, 24, 26], "encart_tidiane": [26, 42, 26, 28, 7, 27, 7, 8], "encart_receleur": [32, 46, 32, 34, 14, 28, 13, 15], "encart_voc_garde": [52, 69, 52, 57, 28, 39, 24, 26], "bandeau_garde": [36, 29, 36, 22, 19, 13, 19, 7], "encart_voc_lame": [30, 66, 30, 42, 15, 33, 14, 14], "bandeau_lame": [38, 45, 38, 36, 28, 7, 29, 9], "encart_voc_oracle": [43, 76, 43, 64, 14, 46, 18, 18], "bandeau_oracle": [38, 24, 38, 24, 10, 9, 9, 9], "encart_voc_artificier": [68, 133, 68, 89, 22, 66, 21, 20], "bandeau_artificier": [39, 22, 39, 22, 10, 9, 10, 9], "encart_voc_moine": [54, 91, 54, 64, 22, 49, 23, 22], "bandeau_moine": [40, 31, 40, 32, 16, 14, 16, 11], "encart_voc_trappeur": [51, 71, 51, 50, 27, 49, 28, 29], "bandeau_trappeur": [37, 42, 37, 38, 33, 11, 34, 11], "encart_voc_tidiane": [39, 73, 39, 32, 10, 43, 11, 11], "bandeau_tidiane": [67, 45, 67, 46, 39, 8, 37, 8], "encart_voc_receleur": [41, 88, 41, 72, 17, 35, 17, 19], "bandeau_receleur": [24, 18, 24, 17, 12, 11, 12, 12], "bouton_action": [40, 19, 40, 19, 32, 13, 32, 13], "encart_option": [23, 19, 23, 24, 7, 5, 6, 6], "guilde_artificier_receleur": [40, 95, 40, 72, 18, 42, 17, 19], "guilde_artificier_trappeur": [47, 88, 47, 48, 22, 48, 22, 24], "guilde_lame_oracle": [40, 57, 40, 40, 15, 34, 15, 14], "guilde_garde_artificier": [64, 73, 64, 83, 32, 48, 33, 24], "guilde_garde_lame": [39, 70, 39, 33, 23, 48, 21, 25], "guilde_garde_moine": [49, 56, 49, 45, 24, 38, 22, 22], "guilde_garde_oracle": [55, 67, 55, 58, 29, 45, 24, 23], "guilde_garde_receleur": [49, 65, 49, 24, 21, 32, 20, 18], "guilde_garde_tidiane": [48, 62, 48, 30, 26, 42, 27, 23], "guilde_garde_trappeur": [49, 70, 49, 50, 29, 51, 28, 28], "guilde_lame_artificier": [38, 87, 38, 48, 21, 61, 21, 22], "guilde_artificier_moine": [56, 87, 56, 57, 19, 47, 20, 21], "guilde_artificier_tidiane": [49, 105, 49, 35, 16, 61, 17, 19], "guilde_lame_moine": [60, 64, 60, 60, 21, 43, 20, 22], "guilde_lame_receleur": [37, 83, 37, 65, 19, 36, 19, 18], "guilde_lame_tidiane": [32, 79, 32, 62, 9, 38, 11, 12], "guilde_lame_trappeur": [34, 67, 34, 62, 17, 45, 16, 15], "guilde_moine_receleur": [43, 87, 43, 24, 21, 49, 22, 19], "guilde_moine_tidiane": [35, 100, 35, 46, 13, 51, 13, 11], "guilde_moine_trappeur": [54, 74, 54, 50, 26, 45, 26, 29], "guilde_oracle_artificier": [41, 78, 41, 65, 22, 61, 22, 21], "guilde_oracle_moine": [58, 76, 58, 61, 22, 45, 23, 23], "guilde_oracle_receleur": [42, 59, 42, 25, 19, 35, 17, 19], "guilde_oracle_tidiane": [45, 82, 45, 63, 15, 54, 18, 18], "guilde_oracle_trappeur": [55, 90, 55, 60, 27, 51, 27, 27], "guilde_tidiane_receleur": [40, 65, 40, 72, 18, 42, 16, 19], "guilde_trappeur_receleur": [53, 78, 53, 25, 24, 54, 24, 19], "guilde_trappeur_tidiane": [45, 65, 45, 41, 24, 44, 23, 13], "encart_vocl_garde": [52, 69, 52, 57, 28, 39, 24, 26, 20, 4], "encart_vocl_lame": [30, 66, 30, 42, 15, 33, 14, 14, 20, 1], "encart_vocl_oracle": [43, 76, 43, 64, 14, 46, 18, 18, 35, 4], "encart_vocl_artificier": [68, 133, 68, 89, 22, 66, 21, 20, 45, 4], "encart_vocl_moine": [54, 91, 54, 64, 22, 49, 23, 22, 30, 4], "encart_vocl_trappeur": [51, 71, 51, 50, 27, 49, 28, 29, 35, 15], "encart_vocl_tidiane": [39, 73, 39, 32, 10, 43, 11, 11, 33, 1], "encart_vocl_receleur": [41, 88, 41, 72, 17, 35, 17, 19, 20, 2], "guildel_artificier_receleur": [40, 95, 40, 72, 18, 42, 17, 19, 26, 3], "guildel_artificier_trappeur": [47, 88, 47, 48, 22, 48, 22, 24, 34, 9], "guildel_lame_oracle": [40, 57, 40, 40, 15, 34, 15, 14, 21, 1], "guildel_garde_artificier": [64, 73, 64, 83, 32, 48, 33, 24, 25, 1], "guildel_garde_lame": [39, 70, 39, 33, 23, 48, 21, 25, 27, 0], "guildel_garde_moine": [49, 56, 49, 45, 24, 38, 22, 22, 19, 3], "guildel_garde_oracle": [55, 67, 55, 58, 29, 45, 24, 23, 26, 2], "guildel_garde_receleur": [49, 65, 49, 24, 21, 32, 20, 18, 16, 2], "guildel_garde_tidiane": [48, 62, 48, 30, 26, 42, 27, 23, 23, 0], "guildel_garde_trappeur": [49, 70, 49, 50, 29, 51, 28, 28, 35, 14], "guildel_lame_artificier": [38, 87, 38, 48, 21, 61, 21, 22, 43, 0], "guildel_artificier_moine": [56, 87, 56, 57, 19, 47, 20, 21, 31, 4], "guildel_artificier_tidiane": [49, 105, 49, 35, 16, 61, 17, 19, 42, 1], "guildel_lame_moine": [60, 64, 60, 60, 21, 43, 20, 22, 24, 2], "guildel_lame_receleur": [37, 83, 37, 65, 19, 36, 19, 18, 21, 1], "guildel_lame_tidiane": [32, 79, 32, 62, 9, 38, 11, 12, 27, 0], "guildel_lame_trappeur": [34, 67, 34, 62, 17, 45, 16, 15, 31, 1], "guildel_moine_receleur": [43, 87, 43, 24, 21, 49, 22, 19, 31, 2], "guildel_moine_tidiane": [35, 100, 35, 46, 13, 51, 13, 11, 41, 1], "guildel_moine_trappeur": [54, 74, 54, 50, 26, 45, 26, 29, 31, 15], "guildel_oracle_artificier": [41, 78, 41, 65, 22, 61, 22, 21, 40, 4], "guildel_oracle_moine": [58, 76, 58, 61, 22, 45, 23, 23, 27, 4], "guildel_oracle_receleur": [42, 59, 42, 25, 19, 35, 17, 19, 20, 3], "guildel_oracle_tidiane": [45, 82, 45, 63, 15, 54, 18, 18, 42, 4], "guildel_oracle_trappeur": [55, 90, 55, 60, 27, 51, 27, 27, 41, 14], "guildel_tidiane_receleur": [40, 65, 40, 72, 18, 42, 16, 19, 27, 2], "guildel_trappeur_receleur": [53, 78, 53, 25, 24, 54, 24, 19, 38, 2], "guildel_trappeur_tidiane": [45, 65, 45, 41, 24, 44, 23, 13, 31, 1]}
 func encart(k: String, pad := 10, fam := "encart") -> StyleBox:
 	## L'encart peint de la classe (9-slice), ou null s'il n'est pas (encore) dans assets/ui. fam : encart (portrait, escouade),
 	## encart_voc (colonne haute, écran de vocation), encart_vocl (la même, élargie : panneau d'aperçu), bandeau (rectangle large, voies de la vocation).
@@ -2991,6 +3077,13 @@ func encart(k: String, pad := 10, fam := "encart") -> StyleBox:
 	st.content_margin_top = m[5] + pad
 	st.content_margin_right = m[6] + pad
 	st.content_margin_bottom = m[7] + pad
+	if m.size() > 8 and m[8] > 0:
+		# le cimier déborde au-dessus du panneau : la ligne du cadre tombe sur le bord du panneau, comme chez ses voisins
+		st.expand_margin_top = m[8]
+		st.content_margin_top = maxf(pad, st.content_margin_top - m[8])
+	if m.size() > 9 and m[9] > 0:
+		st.expand_margin_bottom = m[9]
+		st.content_margin_bottom = maxf(pad, st.content_margin_bottom - m[9])
 	return st
 
 
@@ -3016,6 +3109,9 @@ func _option(o: Dictionary, w := 250) -> Control:
 	s.content_margin_bottom = 12 if small else 20
 	p.add_theme_stylebox_override("panel", s)
 	var enc := encart(o.get("encart", ""), 8)
+	var painted := enc == null and encart("option", 8) != null  # le panneau peint des choix (marchand, menus) ; sa couleur passe au titre
+	if painted:
+		enc = encart("option", 8 if small else 14)
 	if enc:
 		p.add_theme_stylebox_override("panel", enc)
 	var v := VBoxContainer.new()
@@ -3046,7 +3142,7 @@ func _option(o: Dictionary, w := 250) -> Control:
 		v.add_child(g)
 	if o.get("dim", false):
 		v.get_child(v.get_child_count() - 1).modulate = Color(0.55, 0.55, 0.6)
-	var t := _label(o.title, 15 if small else 24, INK, title_f)
+	var t := _label(o.title, 15 if small else 24, col.lightened(0.35) if painted and col != GOLD else INK, title_f)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(t)
@@ -3125,7 +3221,7 @@ func _fit_screen(layer: Control) -> void:
 	for c in layer.get_children():
 		if c is Container and c.anchor_top == 0.0 and c.anchor_bottom == 1.0:
 			var s := minf(1.0, vs.y / maxf(c.get_combined_minimum_size().y, 1.0))
-			c.pivot_offset = Vector2(vs.x / 2.0, 0)
+			c.pivot_offset = Vector2(c.size.x if c.anchor_left == 1.0 else vs.x / 2.0, 0)  # une colonne ancrée à droite garde son bord droit
 			c.scale = Vector2(s, s)
 
 
@@ -3245,6 +3341,7 @@ func fight_summary(title: String, rows: Array, loot: Array, can_equip: bool) -> 
 		b.add_theme_color_override("font_color", INK)
 		b.add_theme_stylebox_override("normal", sb(Color(0.1, 0.09, 0.1, 0.94), GOLD.darkened(0.2), 10, 2, 8))
 		b.add_theme_stylebox_override("hover", sb(Color(0.2, 0.16, 0.1, 0.96), GOLD, 10, 2, 8))
+		_action_style(b)
 		var k: int = e[1]
 		b.set_meta("tuto", "btn%d" % k)
 		b.pressed.connect(func(): picked.emit(k))
@@ -3280,7 +3377,7 @@ func multi_decks(rows: Array) -> void:
 	var tl := _title("PAQUETS MULTICLASSES", 44)
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(tl)
-	box.add_child(_speech("Chaque paquet de départ perd deux cartes et gagne sa guilde : une commune, une peu commune, et la graine de la classe apprise."))
+	box.add_child(_speech("Trois nouvelles cartes par héros : deux de sa guilde, une de sa nouvelle classe."))
 	var hb := HBoxContainer.new()
 	hb.alignment = BoxContainer.ALIGNMENT_CENTER
 	hb.add_theme_constant_override("separation", 22)
@@ -3291,8 +3388,12 @@ func multi_decks(rows: Array) -> void:
 		var st := sb(Color(0.07, 0.06, 0.07, 0.95), Data.CLASS_COLOR[r.key], 12, 2, 10)
 		st.set_content_margin_all(14)
 		p.add_theme_stylebox_override("panel", st)
-		if encart(r.voc, 8, "encart_vocl"):
-			p.add_theme_stylebox_override("panel", encart(r.voc, 8, "encart_vocl"))
+		var gl: Array = Guildes.LIST[Guildes.index(r.key, r.voc)]
+		var enc: StyleBox = encart("%s_%s" % [gl[0], gl[1]], 8, "guildel")  # l'encart de la guilde, sinon celui de la classe apprise
+		if enc == null:
+			enc = encart(r.voc, 8, "encart_vocl")
+		if enc:
+			p.add_theme_stylebox_override("panel", enc)
 		hb.add_child(p)
 		var v := VBoxContainer.new()
 		v.add_theme_constant_override("separation", 6)
@@ -3315,6 +3416,9 @@ func multi_decks(rows: Array) -> void:
 			l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			v.add_child(l)
 		v.add_child(mini_cards(r.cards, 0.62))
+		var foot_gap := Control.new()  # les pastilles des coins débordent sous les cartes
+		foot_gap.custom_minimum_size.y = 16
+		v.add_child(foot_gap)
 	var sk := Button.new()
 	sk.text = "En route"
 	sk.add_theme_font_override("font", title_f)
@@ -3323,6 +3427,7 @@ func multi_decks(rows: Array) -> void:
 	sk.add_theme_stylebox_override("normal", sb(Color(0.1, 0.09, 0.1, 0.94), GOLD.darkened(0.2), 10, 2, 8))
 	sk.add_theme_stylebox_override("hover", sb(Color(0.2, 0.16, 0.1, 0.96), GOLD, 10, 2, 8))
 	sk.custom_minimum_size = Vector2(260, 52)
+	_action_style(sk)
 	sk.pressed.connect(func():
 		if Time.get_ticks_msec() - opened > 300:
 			picked.emit(-1))
@@ -3473,6 +3578,7 @@ func replace_screen(new_ci: Dictionary, hk: String, cards: Array, removable: Arr
 	sk.add_theme_stylebox_override("normal", sb(Color(0.1, 0.09, 0.1, 0.94), GOLD.darkened(0.2), 10, 2, 8))
 	sk.add_theme_stylebox_override("hover", sb(Color(0.2, 0.16, 0.1, 0.96), GOLD, 10, 2, 8))
 	sk.custom_minimum_size = Vector2(260, 50)
+	_action_style(sk)
 	sk.pressed.connect(func():
 		if Time.get_ticks_msec() - opened > 300:
 			picked.emit(-1))
@@ -3747,6 +3853,7 @@ func vocation_intro(h: Unit) -> void:
 	b.add_theme_stylebox_override("hover", sb(GOLD.lightened(0.18), Color("#fff6dc"), 12, 2, 12))
 	b.add_theme_stylebox_override("pressed", sb(GOLD.darkened(0.15), Color("#fff0c8"), 12, 2, 4))
 	b.add_theme_stylebox_override("focus", sb(GOLD.lightened(0.18), Color.WHITE, 12, 2, 12))
+	_action_style(b, true)
 	b.custom_minimum_size = Vector2(300, 54)
 	b.pressed.connect(func():
 		if Time.get_ticks_msec() - opened > 300:
@@ -3891,7 +3998,10 @@ func vocation_screen(h: Unit, picks: Array) -> int:
 		cam3.look_at(Vector3(0, ht * 0.5, 0))
 		var g := Guildes.index(h.key, k)
 		var gl: Array = Guildes.LIST[g]
-		pv.add_theme_stylebox_override("panel", encart(k, 10, "encart_vocl") if encart(k, 10, "encart_vocl") else ps)  # l'encart de la voie survolée, élargi (tools/encarts_larges.py) : 9-slice sans étirer le cimier
+		var pve: StyleBox = encart("%s_%s" % [gl[0], gl[1]], 10, "guildel")  # l'encart de la guilde de la voie survolée (sinon de sa classe), élargi : 9-slice sans étirer le cimier
+		if pve == null:
+			pve = encart(k, 10, "encart_vocl")
+		pv.add_theme_stylebox_override("panel", pve if pve else ps)
 		var kc: Color = Data.CLASS_COLOR[k]
 		info.text = "[center][font_size=22][color=#%s]%s + %s[/color][/font_size]\n[color=#e3b45c]Guilde : %s[/color] — %s[/center]\n%s\n\n[color=#%s]%s[/color]" % [
 			kc.lightened(0.3).to_html(false), Data.HEROES[h.key].name, Data.HEROES[k].name, gl[2], gl[3], Guildes.DESC[g],
@@ -4089,6 +4199,9 @@ func library_screen() -> void:
 	close.flat = true
 	close.add_theme_font_size_override("font_size", 16)
 	close.add_theme_color_override("font_color", DIM)
+	close.flat = false
+	close.custom_minimum_size = Vector2(200, 46)
+	_action_style(close)
 	close.pressed.connect(func(): lib_closed.emit())
 	close.custom_minimum_size = Vector2(250, 40)
 	tabs.add_child(close)
@@ -4493,6 +4606,7 @@ func equipment_screen(heroes: Array, bag: Array) -> Dictionary:
 	done.add_theme_stylebox_override("normal", sb(Color(0.1, 0.09, 0.1, 0.94), GOLD.darkened(0.2), 10, 2, 8))
 	done.add_theme_stylebox_override("hover", sb(Color(0.2, 0.16, 0.1, 0.96), GOLD, 10, 2, 8))
 	done.custom_minimum_size = Vector2(260, 50)
+	_action_style(done)
 	done.set_meta("tuto", "done")
 	done.pressed.connect(func(): act.call({}))
 	var dc := CenterContainer.new()
@@ -4608,6 +4722,7 @@ func trait_roulette(keys: Array, traits: Array) -> void:
 	go.add_theme_stylebox_override("normal", sb(Color(0.1, 0.09, 0.1, 0.94), GOLD.darkened(0.2), 10, 2, 8))
 	go.add_theme_stylebox_override("hover", sb(Color(0.2, 0.16, 0.1, 0.96), GOLD, 10, 2, 8))
 	go.custom_minimum_size = Vector2(260, 50)
+	_action_style(go)
 	go.pressed.connect(func():
 		if done[0] >= keys.size():
 			picked.emit(0))

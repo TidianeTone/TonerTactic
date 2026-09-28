@@ -1963,7 +1963,8 @@ func _choose_vocation(h: Unit, second := false, gift := true) -> void:
 		h.wear_voc(k)
 	var g := Guildes.index(h.key, k)
 	var gl: Array = Guildes.LIST[g]
-	ui.banner("Vocation : %s" % Data.HEROES[k].name, h.nm)
+	if gift:  # départ multiclasse : l'écran des paquets le dit pour les trois
+		ui.banner("Vocation : %s" % Data.HEROES[k].name, h.nm)
 	if not second and gift:
 		# cadeau de vocation : une carte au choix, tout de suite dans le paquet (un vrai palier de puissance) :
 		# la commune de la guilde, sa peu commune, et une carte de la classe apprise

@@ -2,6 +2,8 @@
 # PRÉ-PROD : tout reste dans encarts/ (hors git), rien ne va dans assets/ tant que Tidiane n'a pas validé.
 # Un visuel par image (qualité basic, 7,5 crédits) : sur une planche, le modèle recopie une classe sur les autres.
 # Fond chroma vert #00FF00, sauf le moine (jade) sur magenta #FF00FF. Découpe : cut_encarts.py
+# guilde_<a>_<b> (28/09) : un encart par guilde, les deux encarts voc_ de ses classes en référence ; action : bouton générique ;
+# option : panneau des choix (marchand, menus).
 # python gen_encarts.py [clé...]   (clés : garde lame ... receleur, equipement, paquet, voc_<classe>, bandeau_<classe> ;
 # un fichier déjà là n'est pas refait)
 # voc_ / bandeau_ (28/09) : colonne haute ~1:2,3 (écran de vocation) et rectangle large ~3:1 (bouton de voie), peints en image-to-image
@@ -100,6 +102,39 @@ BANDEAU = ("Using the reference image as the style guide, paint a NEW game UI el
 	"a portrait and a label. The whole background around the plate is pure flat chroma %s. No text, no letters, no numbers. %s")
 
 
+GUILDE = ("The two reference images are two panels from the same game UI, one per class. Paint ONE NEW panel of the same family that "
+	"fuses both, as if the two classes had formed a guild together: the border weaves the materials and colors of the first reference with "
+	"those of the second (for example one colour on the outer edge, the other on the inner edge, joined cleanly); the two top corner pieces are "
+	"the corner pieces of the first reference, the two bottom corner pieces are those of the second, all kept small; one small crest on the "
+	"top edge at the center merges the two crests of the references into a single emblem, the same size as one reference crest. "
+	"Same hand-painted stylized game art with clean dark outlines. The panel is a single blank TALL NARROW vertical column frame, seen perfectly "
+	"flat and front-on, centered, about 2.4 times taller than it is wide, filling about 92 percent of the image height, with wide areas of the "
+	"flat chroma background on its left and right. Along the long left and right sides and along the top and bottom edges between the corners "
+	"the border is a plain straight simple moulding with no ornament, no studs, no rivets, no repeated plates, so the panel can be stretched. "
+	"Nothing at the middle of the sides, nothing on the bottom edge. Nothing sticks out beyond the border: no splashes, no flames, no drips, "
+	"no ribbons outside the frame. The inside is one flat, plain, very dark near-black surface, no texture, no pattern, no picture, no divider. "
+	"The whole background around the panel is pure flat chroma %s. No text, no letters, no characters.")
+
+ACTION = ("Using the reference image as the style guide, paint a NEW game UI button of the same family: the same dark brown stitched leather "
+	"face, the same sturdy worn metal rim and pointed metal end caps, the same hand-painted stylized game art with clean dark outlines and warm "
+	"amber and brass highlights. The new button is a single blank WIDE HORIZONTAL plate, about four and a half times as wide as it is tall, "
+	"centered, filling about 90 percent of the image width, with NO medallion and no icon: the whole face is one plain flat dark leather "
+	"plate with a stitched edge, left empty for a label. The long top and bottom edges of the rim are plain straight metal with no rivets and "
+	"no ornament, so the button can be stretched horizontally; all the decoration is in the two pointed metal end caps, mirrored left and right. "
+	"Nothing sticks out beyond the button. The whole background around the button is pure flat chroma green #00FF00. No text, no letters, no numbers.")
+
+OPTION = ("Using the reference image as the style guide, paint a NEW game UI panel of the same family: the same dark brown stitched leather, "
+	"the same worn metal rim with brass highlights, the same hand-painted stylized game art with clean dark outlines. The new panel is a single "
+	"blank vertical card-like panel for a merchant's or a menu's choices, seen perfectly flat and front-on, centered, portrait, about 1.3 times "
+	"taller than it is wide, filling about 86 percent of the image height. A slim metal rim; four small matching brass corner protectors with a "
+	"rivet; along the middle of each side the rim is plain straight metal with no ornament, no studs, no rivets, so the panel can be stretched. "
+	"No crest. The inside is one flat, plain dark leather surface with a faint stitched line just inside the rim, no texture, no pattern, "
+	"no picture, no divider, dark enough for light text. Nothing sticks out beyond the rim. The whole background around the panel is pure flat "
+	"chroma green #00FF00. No text, no letters, no numbers.")
+CHROMA = {"moine": "magenta #FF00FF"}  # le jade mangerait le vert du fond
+PAIRE_BLEUE = {("moine", "tidiane")}   # jade et laque magenta : ni vert ni magenta
+
+
 def job(k):
 	fam, _, c = k.partition("_")
 	if fam in ("voc", "bandeau") and c in CLASSES:
@@ -107,6 +142,15 @@ def job(k):
 		tpl, ar, name = (VOC, "9:16", "encart_voc_%s.png") if fam == "voc" else (BANDEAU, "16:9", "bandeau_%s.png")
 		return (tpl % (CLASSES[c][0], key, "Materials and motifs: " + LOOK[c]), os.path.join(D, name % c), ar,
 			[os.path.join(D, "encart_%s.png" % c)])
+	if fam == "guilde":
+		x, _, y = c.partition("_")
+		key = "blue #0000FF" if (x, y) in PAIRE_BLEUE else ("magenta #FF00FF" if "moine" in (x, y) else "green #00FF00")
+		return (GUILDE % key, os.path.join(D, "guilde_%s.png" % c), "9:16",
+			[os.path.join(D, "encart_voc_%s.png" % x), os.path.join(D, "encart_voc_%s.png" % y)])
+	if k == "action":
+		return ACTION, os.path.join(D, "bouton_action.png"), "21:9", [os.path.join(D, "bouton_equipement.png")]
+	if k == "option":
+		return OPTION, os.path.join(D, "encart_option.png"), "3:4", [os.path.join(D, "bouton_equipement.png")]
 	if k in CLASSES:
 		tint, look = CLASSES[k]
 		key = "magenta #FF00FF" if k in MAGENTA else "green #00FF00"

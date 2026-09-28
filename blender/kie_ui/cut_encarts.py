@@ -20,8 +20,9 @@ MANUEL = {"lame": (130, 170, 130, 130), "moine": (134, 197, 134, 132),
 
 def key(a, magenta):
 	## alpha par distance à la couleur de fond (comme cut_ui.key), dévert/démagenta sur un liseré de 3 px autour du détourage seulement
+	## magenta : True (fond magenta), False (vert), "bleu" (fond bleu, paire Moine + Tidiane)
 	r, g, b = a[..., 0], a[..., 1], a[..., 2]
-	k = np.minimum(r, b) - g if magenta else g - np.maximum(r, b)
+	k = b - np.maximum(r, g) if magenta == "bleu" else (np.minimum(r, b) - g if magenta else g - np.maximum(r, b))
 	alpha = np.clip(1.0 - (k - 40) / 90.0, 0, 1)
 	solid = alpha > 0.12
 	n, lab, st, _ = cv2.connectedComponentsWithStats(solid.astype(np.uint8), connectivity=8)
@@ -29,7 +30,9 @@ def key(a, magenta):
 	alpha = alpha * np.isin(lab, [i for i in range(1, n) if st[i, cv2.CC_STAT_AREA] > big * 0.002])  # poussières du fond
 	edge = cv2.dilate((alpha < 1).astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool) & (k > 0)
 	a = a.copy()
-	if magenta:
+	if magenta == "bleu":
+		a[..., 2] = np.where(edge, np.maximum(r, g), b)
+	elif magenta:
 		a[..., 0] = np.where(edge, r - k, r)
 		a[..., 2] = np.where(edge, b - k, b)
 	else:
@@ -212,6 +215,28 @@ if __name__ == "__main__" and sys.argv[1:2] == ["voc"]:
 	planche_voc(meta, out)
 	planche_voc(meta, out.replace(".png", "_guides.png"), True)
 	print(out)
+elif __name__ == "__main__" and sys.argv[1:2] == ["guildes"]:
+	# guilde_<a>_<b> (un encart par guilde), bouton_action, encart_option : fusionnés dans encarts.json
+	meta = json.load(open(os.path.join(D, "encarts.json")))
+	items = []
+	for f in sorted(os.listdir(BRUT)):
+		name = f[:-4]
+		if not (name.startswith("guilde_") or name in ("bouton_action", "encart_option")):
+			continue
+		pair = name[7:].split("_") if name.startswith("guilde_") else []
+		chroma = "bleu" if pair == ["moine", "tidiane"] else ("moine" in pair)
+		rgba = key(np.asarray(Image.open(os.path.join(BRUT, f)).convert("RGB")).astype(float), chroma)
+		im = Image.fromarray(rgba)
+		im.save(os.path.join(D, f))
+		items.append((name, im))
+		if name == "bouton_action":
+			# bouton étirable : les pointes aux deux bouts, le milieu uni ; marges = pointes + un peu
+			h, w = rgba.shape[:2]
+			meta[name] = {"size": [w, h], "marges": [int(h * 0.62), int(h * 0.3), int(h * 0.62), int(h * 0.3)], "bord": [int(h * 0.5), int(h * 0.2), int(h * 0.5), int(h * 0.2)]}
+		else:
+			meta[name] = measure(rgba, name)
+		print(name, json.dumps(meta[name]))
+	json.dump(meta, open(os.path.join(D, "encarts.json"), "w"), indent=1)
 elif __name__ == "__main__":
 	meta, items = {}, []
 	for k in CLASSES + ["equipement", "paquet"]:
