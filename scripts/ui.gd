@@ -2765,7 +2765,7 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 func _painted_button(b: Button, k: String) -> void:
 	## Bouton peint (KIE, assets/ui/bouton_<k>.png) : médaillon à gauche, plaque de cuir pour le texte à droite.
 	var path := "res://assets/ui/bouton_%s.png" % k
-	if not ResourceLoader.exists(path):
+	if not ResourceLoader.exists(path) or main.args.has("sans_kie"):  # --sans_kie : comparer avec l'ancien habillage
 		return
 	var tex: Texture2D = load(path)
 	var h := 64.0
@@ -2877,7 +2877,7 @@ const ENCARTS := {"garde": [45, 51, 45, 47, 24, 33, 21, 22], "lame": [42, 54, 42
 func encart(k: String, pad := 10) -> StyleBox:
 	## L'encart peint de la classe (9-slice), ou null s'il n'est pas (encore) dans assets/ui.
 	var path := "res://assets/ui/encart_%s.png" % k
-	if not ENCARTS.has(k) or not ResourceLoader.exists(path):
+	if not ENCARTS.has(k) or not ResourceLoader.exists(path) or main.args.has("sans_kie"):
 		return null
 	var m: Array = ENCARTS[k]
 	var st := StyleBoxTexture.new()
