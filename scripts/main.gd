@@ -3309,6 +3309,7 @@ func _maptest() -> void:
 	_make_party()
 	floor_i = 1
 	step = 0
+	rng.seed = 7
 	_gen_map()
 	visited = [Vector2i(0, 1), Vector2i(1, fmap[0][1].links[0])]
 	lane = fmap[0][1].links[0]
@@ -3318,6 +3319,16 @@ func _maptest() -> void:
 		f.call()
 		await _frames(30)
 		_shot(dir, "carte_%02d" % bi)
+		if bi == 0:
+			# l'annonce de salle au survol : une capture par type de salle (et une salle à modificateur)
+			var seen := {}
+			for b: Button in ui.find_children("*", "Button", true, false):
+				var key := b.text + ("+" if b.get_parent().get_children().any(func(o): return o is Label and o.position.distance_to(b.position) < 60) else "")
+				if b.text.length() == 1 and not seen.has(key):
+					seen[key] = true
+					b.mouse_entered.emit()
+					await _frames(6)
+					_shot(dir, "annonce_%02d" % seen.size())
 		ui.picked.emit(0)
 		await _frames(5)
 	get_tree().quit()

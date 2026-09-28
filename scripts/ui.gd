@@ -1280,7 +1280,7 @@ func _stats_row(row: HBoxContainer, h: Unit) -> void:
 		c.queue_free()
 	row.add_child(_chip("attaque", "+%d" % (h.gear_dmg() + h.dmg_bonus + h.rage), Color(1.0, 0.75, 0.6), 18))
 	row.add_child(_chip("deplacement", str(h.move), Color.WHITE, 18))
-	var l := _shadowed(_label("saut %d · vit. %d" % [h.jump, h.speed], 13, DIM), 4)
+	var l := _shadowed(_label(Lang.mark(Lang.t("saut %d · vit. %d") % [h.jump, h.speed]), 13, DIM), 4)
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(l)
 	row.tooltip_text = "Bonus de dégâts de l'équipement, déplacement, hauteur de saut, vitesse (ordre du tour)"
@@ -2476,6 +2476,59 @@ static func trail_tex() -> Texture2D:
 	return _trail
 
 
+func _room_stakes(n: Dictionary, last: bool) -> Array:
+	## [risques, récompenses] d'une salle de combat, chaque ligne [titre, détail] ; les chiffres suivent main._rewards.
+	var risk: Array = []
+	var gain: Array = []
+	var mods: Array = n.get("mods", [])
+	var boost := 1.5 if mods.size() > 0 else 1.0
+	var g := int((23 + (20 if n.type == "elite" else 0)) * (1.0 + 0.25 * main.pacts.size()) * boost)
+	if n.type == "boss":
+		risk.append(["♜  Le colosse", "Le gardien de l'Écluse, en plusieurs phases."])
+		gain.append(["La fin de la descente", ""])
+		return [risk, gain]
+	if n.type == "elite":
+		risk.append(["☠  Gardiens coriaces", "Plus de PV, des coups plus lourds."])
+	for m in mods:
+		risk.append(["%s  %s" % [Data.MODIFIERS[m].glyph, Data.MODIFIERS[m].name], Data.MODIFIERS[m].text])
+	if risk.is_empty():
+		risk.append(["Escouade ordinaire", "Aucun modificateur."])
+	gain.append(["+%d or" % g, "×1,5 grâce au modificateur" if mods.size() > 0 else ""])
+	if n.type == "elite":
+		gain.append(["Une carte par héros", "La première déjà forgée, peu commune ou mieux."])
+		gain.append(["Un équipement", ""])
+		gain.append(["Relique de gardien" if last and main.floor_i < 3 else "Une relique", ""])
+	else:
+		gain.append(["Une carte", "Peu commune ou mieux." if mods.size() > 0 else "Une parmi trois."])
+	return [risk, gain]
+
+
+func _stakes_box(head: String, lines: Array, col: Color) -> Control:
+	var p := PanelContainer.new()
+	var s := sb(Color(col.r, col.g, col.b, 0.1), col.darkened(0.2), 8, 2)
+	s.content_margin_left = 14
+	s.content_margin_right = 14
+	s.content_margin_top = 8
+	s.content_margin_bottom = 10
+	p.add_theme_stylebox_override("panel", s)
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 2)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_child(v)
+	var h := _label(head, 14, col, title_f)
+	h.add_theme_constant_override("outline_size", 0)
+	v.add_child(h)
+	for ln in lines:
+		v.add_child(_label(ln[0], 22, col.lightened(0.25), title_f))
+		if ln[1] != "":
+			var d := _label(ln[1], 15, INK)
+			d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			d.custom_minimum_size.x = 270
+			v.add_child(d)
+	return p
+
+
 func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: int, nexts: Array, visited: Array, equip_txt: String, bi := 0) -> int:
 	## Carte de l'étage : l'île du biome vue de haut, un sentier en pointillés de salle en salle jusqu'au gardien.
 	_close_overlay()
@@ -2623,6 +2676,15 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 	info_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var info := _label("Choisissez la prochaine salle.", 17, INK)
 	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# l'enjeu d'un combat en deux blocs qu'on lit d'un coup d'œil : ce qu'on risque, ce qu'on gagne
+	var room_title := _label("", 28, GOLD, title_f)
+	room_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	room_title.visible = false
+	var stakes := HBoxContainer.new()
+	stakes.alignment = BoxContainer.ALIGNMENT_CENTER
+	stakes.add_theme_constant_override("separation", 12)
+	stakes.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stakes.visible = false
 	# au survol d'une salle : son illustration au-dessus de la description
 	var info_box := VBoxContainer.new()
 	info_box.add_theme_constant_override("separation", 6)
@@ -2638,6 +2700,8 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 	art_c.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art_c.add_child(room_art)
 	info_box.add_child(art_c)
+	info_box.add_child(room_title)
+	info_box.add_child(stakes)
 	info_box.add_child(info)
 	var first: Button
 	for k in fmap.size():
@@ -2671,8 +2735,20 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 			b.disabled = not open
 			var desc: String = n.desc
 			var art_p := "res://assets/ui/salle_%s.png" % ("elite" if n.type == "boss" else n.type)
+			var fight: bool = n.type in ["combat", "elite", "boss"]
+			var st: Array = _room_stakes(n, k == fmap.size() - 1) if fight else []
 			var show_room := func():
+				room_title.visible = fight
+				stakes.visible = fight
 				info.text = desc
+				if fight:
+					room_title.text = Lang.mark("%s  %s" % [r.glyph, Lang.t(r.name).to_upper()])
+					room_title.add_theme_color_override("font_color", col if n.type != "combat" else GOLD)
+					for o in stakes.get_children():
+						o.free()
+					stakes.add_child(_stakes_box("RISQUES", st[0], Color("#ff6a4a")))
+					stakes.add_child(_stakes_box("RÉCOMPENSES", st[1], GOLD))
+					info.text = "Terrain : %s.%s" % [main.ARCH_NAMES[n.arch], "  Objectif : atteindre le portail." if n.obj == "portal" else ""]
 				room_art.visible = ResourceLoader.exists(art_p)
 				if room_art.visible:
 					room_art.texture = load(art_p)
@@ -4067,7 +4143,7 @@ func equipment_screen(heroes: Array, bag: Array) -> Dictionary:
 		st.add_child(_chip("pv", "%d/%d" % [h.hp, h.max_hp], Color.WHITE, 20))
 		st.add_child(_chip("deplacement", str(h.move), Color.WHITE, 20))
 		st.add_child(_chip("attaque", "+%d" % h.gear_dmg(), Color(1.0, 0.75, 0.6), 20))
-		var ex := _label("saut %d · vit. %d" % [h.jump, h.speed], 14, DIM)
+		var ex := _label(Lang.mark(Lang.t("saut %d · vit. %d") % [h.jump, h.speed]), 14, DIM)
 		ex.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		st.add_child(ex)
 		v.add_child(st)
