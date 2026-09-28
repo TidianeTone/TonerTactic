@@ -1320,6 +1320,11 @@ func _teleported(u: Unit) -> void:
 	## Toute téléportation ou tout bond d'un héros (pas la marche, ni la charge, ni les poussées).
 	u.tele = true
 	u.teles += 1
+	if u == active and u.side == "hero":
+		if u.has_p("ombre_portee"):
+			u.ambush = true  # Ombre portée : la prochaine attaque du tour frappe de dos
+		if u.has_p("envol"):
+			_count_hit(u)  # Envol : le bond compte comme un coup d'enchaînement
 	if u.side == "hero" and not u.companion:
 		for pst in alive_foes():
 			if int(pst.data.get("guet", 0)) > 0 and dist(pst.cell, u.cell) <= int(pst.data.guet) and pst.get_meta("guet_round", -1) != turn and can_hit(pst, pst.cell, u):
@@ -1357,7 +1362,7 @@ func _hero_turn(h: Unit) -> void:
 	_eco_used.clear()
 	var korin: bool = powers.has("korin") and power_owner.get("korin") == h
 	if _first_turn.has(h) and not powers.has("forteresse") and not h.keep_block and not korin:
-		h.block = 0
+		h.block = mini(8, h.block / 2) if h.has_p("digue") else 0  # Digue : la moitié reste (8 au plus)
 	h.keep_block = false
 	for k in ["bait", "parry", "dodge_next", "tele", "triple", "lvl_next"]:
 		h.set(k, false)
@@ -1386,6 +1391,9 @@ func _hero_turn(h: Unit) -> void:
 	for f in foes:
 		f.pushed = false
 	h.combo = 0
+	if h.has_meta("vague"):  # Contre-vague : les coups encaissés au contact lancent l'enchaînement
+		h.combo = int(h.get_meta("vague"))
+		h.remove_meta("vague")
 	h.ambush = false
 	h.moved = false
 	h.taunt = false
@@ -1567,13 +1575,13 @@ func end_turn() -> void:
 		active.keep_block = true
 	if active and active.alive and active.fuse > 0:
 		Fx.number(main, active.position + Vector3(0, 1.0, 0), "Burn-out", EMBER, true)
-		_explode(active.cell, active.fuse)
+		_explode(active.cell, active.fuse + (2 if active.has_p("meche") else 0))  # player_turn est déjà faux : Mèche courte comptée à la main
 		active.fuse = 0
 	for f in foes:
 		if f.alive and f.stick > 0:
 			var sd: int = f.stick
 			f.stick = 0
-			_explode(f.cell, sd)
+			_explode(f.cell, sd + (2 if active and active.has_p("meche") else 0))
 	if has("relais_poste") and energy > 0 and active:
 		# Relais de poste : 1 énergie non dépensée passe au héros suivant de l'ordre du round (bouclé)
 		for k in range(1, order.size() + 1):
@@ -2168,6 +2176,8 @@ func play_card(i: int, t: Vector2i) -> void:
 		if cost_hp > 0:
 			hurt_turn = true
 			_berserk(h)
+			if h.has_p("trait_sang"):
+				h.bpm = mini(12, h.bpm + 2)  # Trait de sang
 		Fx.number(main, h.position + Vector3(0, 0.3, 0), "-%d PV" % cost_hp, Color(0.8, 0.45, 1.0))
 		h.hurt()
 	_pre = pre
@@ -2180,6 +2190,11 @@ func play_card(i: int, t: Vector2i) -> void:
 	for vk in ["voix", "voix2"]:
 		if c.has(vk) and not voices.has(c[vk]):
 			voices.append(c[vk])
+	if voices.size() >= 3 and h.has_p("nuancier") and h.get_meta("nuancier_round", -1) != turn:
+		h.set_meta("nuancier_round", turn)  # Nuancier : les trois voix dans le tour
+		energy += 1
+		h.bpm = mini(12, h.bpm + 2)
+		Fx.number(main, h.position + Vector3(0, 1.5, 0), "Trois voix · +1 énergie", GOLD_FX)
 	var refund := false
 	if c.has("trig") and (pre or (c.trig.on == "grace" and _killed) or (c.trig.on == "butin" and stolen_turn > 0)) and h.alive:
 		refund = _trig_apply(c, h, t)
@@ -2231,6 +2246,8 @@ func play_card(i: int, t: Vector2i) -> void:
 			last_exhausted[h] = {"id": ci.id, "lvl": Data.level(ci)}
 		if c.kind != "power":
 			exhaust_n[h] = int(exhaust_n.get(h, 0)) + 1
+			if h.has_p("decrue"):
+				heal(h, 2, true)  # Décrue : chaque carte Épuisée soigne 2, le trop déborde
 	else:
 		discard.append(ci)
 	busy = false
@@ -3121,6 +3138,7 @@ func damage(u: Unit, amount: int, src: Unit = null, show := true, ranged := fals
 				damage(src, int(power_val.get("octroi", 5)))
 		if melee_hit and powers.has("enclume"):
 			_enclume_q.append([src, u])
+	var had_block := u.block > 0
 	var absorbed := mini(u.block, amount)
 	u.block -= absorbed
 	var rest := amount - absorbed
@@ -3194,6 +3212,10 @@ func damage(u: Unit, amount: int, src: Unit = null, show := true, ranged := fals
 				Fx.number(main, u.position + Vector3(0, 0.6, 0), "Retour", Color(1, 0.8, 0.5))
 				damage(src, maxi(1, rest / 2))
 			elif not ranged and dist(src.cell, u.cell) == 1:
+				if had_block and u.has_p("brisant") and src.alive:
+					push.call_deferred(src, _dir(u.cell, src.cell), 1)  # Brisant : l'armure renvoie l'attaquant
+				if u.side == "hero" and u.has_p("contre_vague"):
+					u.set_meta("vague", mini(2, int(u.get_meta("vague", 0)) + 1))
 				var riposte := 0
 				if u.has_p("casseur") and u.hp * 2 < u.max_hp:
 					riposte = 8
@@ -3364,7 +3386,7 @@ func heal(u: Unit, amt: int, spill := false) -> void:
 	if u.side == "hero" and u.hp < u.max_hp and a > 0:
 		heal_turn = true
 	u.hp = mini(u.max_hp, u.hp + a)
-	if u.side == "hero" and surplus > 0 and (spill or powers.has("maree_haute")) and u.alive:
+	if u.side == "hero" and surplus > 0 and (spill or powers.has("maree_haute") or u.has_p("trop_plein")) and u.alive:
 		# Débordement : le soin en trop frappe l'ennemi le plus proche
 		var nx: Unit = null
 		for o in alive_foes():
@@ -4853,7 +4875,7 @@ func _place(c: Dictionary, t: Vector2i, h: Unit) -> void:
 			var tt := int(c.get("turns", 3))
 			if c.get("turns_items", false):
 				tt = maxi(tt, stock())
-			turrets[t] = {"turns": tt, "dmg": int(c.get("tdmg", 4)), "push": int(c.get("tpush", 0)), "mark": c.get("tmark", false),
+			turrets[t] = {"turns": tt, "dmg": int(c.get("tdmg", 4)) + (2 if h.has_p("bordee") else 0), "push": int(c.get("tpush", 0)), "mark": c.get("tmark", false),
 				"pierce": c.get("tpierce", false), "far": c.get("tfar", false), "range": int(c.get("trange", 5)),
 				"grow": int(c.get("tgrow", 0)), "base": int(c.get("tdmg", 4))}
 	Fx.burst(main, board.world(t) + Vector3(0, 0.3, 0), Data.CLASS_COLOR[h.key].lightened(0.2), 26, 2.5, 5.0)
@@ -4916,6 +4938,11 @@ func _spring(f: Unit) -> void:
 	Fx.number(main, f.position + Vector3(0, 0.6, 0), "Piège !" if k == "piege" else "Picots !", Color(1.0, 0.8, 0.4), true)
 	Fx.burst(main, f.position + Vector3(0, 0.3, 0), Color(0.75, 0.7, 0.6), 30, 3.0)
 	traps_fired += 1
+	for a in alive_heroes():
+		if a.has_p("detente") and a.get_meta("detente_round", -1) != turn:
+			a.set_meta("detente_round", turn)  # Détente : une fois par round
+			_gain_energy(a, 1)
+			f.mark = maxi(f.mark, 2)
 	if has("collet_crin"):
 		f.mark = maxi(f.mark, 2)
 	var plus := (int(power_val.get("hallali", 4)) if powers.has("hallali") else 0) + (int(power_val.get("crane", 3)) if powers.has("crane") else 0) 		+ (4 if has("piquet_frene") else 0)
@@ -5206,6 +5233,9 @@ func _spend_obj(ci: Dictionary, played := false) -> bool:
 func _item_consumed(h: Unit) -> void:
 	## Chaque carte-objet jouée, démontée ou lancée : compteurs et pouvoirs qui s'en nourrissent.
 	used_turn += 1
+	if h.has_p("prestesse") and h == active and h.get_meta("prestesse_round", -1) != turn and hand.size() < 10:
+		h.set_meta("prestesse_round", turn)  # Prestesse : le premier objet du tour fait piocher
+		draw(1)
 	if powers.has("linfei") and power_owner.get("linfei") == h:
 		h.hits += 1
 		_count_hit(h)

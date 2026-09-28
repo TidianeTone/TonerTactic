@@ -1,0 +1,6 @@
+{
+"saut %d · vit. %d": "jump %d · spd %d",
+"saut %d · vitesse %d": "jump %d · speed %d",
+"vit.": "spd.",
+"Charge collée": "Sticky Charge"
+}

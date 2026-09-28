@@ -155,5 +155,18 @@ func _init() -> void:
 	if not mix.begins_with("Hover to read the effect · an item from the bag, then a hero"):
 		print("recollage : ", mix)
 		fails += 1
+	# équipement (concile du 28/09) : propriétaire, passifs, icône ; une pièce de métier seulement pour sa classe
+	for id in Data.ITEMS:
+		var it: Dictionary = Data.ITEMS[id]
+		if not (it.owner == "any" or Data.HEROES.has(it.owner)) or not Data.SLOTS.has(it.slot) or not ResourceLoader.exists(Data.item_icon(id)):
+			print("pièce fausse : ", id)
+			fails += 1
+		for k in ["passive", "passive2"]:
+			if it.get(k, "") != "" and not Data.PASSIVES.has(it[k]):
+				print("passif inconnu : ", id, " ", it[k])
+				fails += 1
+		if it.owner != "any" and (Data.item_fits(id, "garde" if it.owner != "garde" else "lame") or not Data.item_fits(id, it.owner)):
+			print("verrou de métier faux : ", id)
+			fails += 1
 	print("OK" if fails == 0 else "ÉCHECS : %d" % fails)
 	quit(1 if fails else 0)

@@ -724,6 +724,10 @@ func _make_party(keys: Array = party) -> void:
 		u.base_hp = int(round(u.base_hp * Data.DIFFICULTY[difficulty].hp * (0.85 if pacts.has("sang") else 1.0)))
 		u.max_hp = u.base_hp
 		u.hp = u.max_hp
+		if args.has("gear"):  # --gear=id,id : essais, chaque héros prend les pièces qui lui vont
+			for gid in args.gear.split(","):
+				if Data.ITEMS.has(gid) and Data.item_fits(gid, k) and u.equip[Data.ITEMS[gid].slot] == "":
+					u.equip[Data.ITEMS[gid].slot] = gid
 		u.apply_gear()
 		units_root.add_child(u)
 		heroes.append(u)
@@ -1668,9 +1672,17 @@ func _roll_item(min_rarity := 1) -> String:
 		rar = 4
 	var ids: Array = []
 	while ids.is_empty() and rar > 0:
-		ids = Data.ITEMS.keys().filter(func(id): return Data.ITEMS[id].rarity == rar)  # plus de verrou de classe : tout l'équipement pour tout le monde
+		ids = Data.ITEMS.keys().filter(func(id): return Data.ITEMS[id].rarity == rar and (Data.ITEMS[id].owner == "any" or _job_here(Data.ITEMS[id].owner)))  # les pièces de métier : seulement si la classe est là
 		rar -= 1
+	for id in ids.duplicate():
+		if Data.ITEMS[id].owner != "any":
+			ids.append_array([id, id])  # une pièce de métier de l'équipe sort trois fois plus souvent
 	return ids[rng.randi_range(0, ids.size() - 1)]
+
+
+func _job_here(k: String) -> bool:
+	## Une classe présente dans l'équipe, en classe ou en vocation.
+	return party.has(k) or heroes.any(func(h): return h.voc == k or h.voc2 == k)
 
 
 func rack_weapon(h: Unit) -> void:
@@ -1679,7 +1691,7 @@ func rack_weapon(h: Unit) -> void:
 	var rar := 3 if r > 0.7 else 2
 	var ids: Array = []
 	while ids.is_empty() and rar > 0:
-		ids = Data.ITEMS.keys().filter(func(id): return Data.ITEMS[id].slot == "arme" and Data.ITEMS[id].rarity == rar)
+		ids = Data.ITEMS.keys().filter(func(id): return Data.ITEMS[id].slot == "arme" and Data.ITEMS[id].rarity == rar and Data.item_fits(id, h.key, h.voc, h.voc2))
 		rar -= 1
 	if ids.size() > 0:
 		_gain_item(ids[rng.randi_range(0, ids.size() - 1)], h)
@@ -1691,7 +1703,7 @@ func _gain_item(id: String, h: Unit = null) -> void:
 	library_see("item:" + id)
 	var who: Array = [h] if h else heroes
 	for u in who:
-		if u.equip[it.slot] == "":
+		if u.equip[it.slot] == "" and Data.item_fits(id, u.key, u.voc, u.voc2):
 			u.equip[it.slot] = id
 			u.apply_gear()
 			fight_loot.append("%s (équipé)" % it.name)
@@ -2126,6 +2138,7 @@ func _load_run() -> bool:
 	for tid in d.get("besace", []):  # vieille sauvegarde : la besace devient des cartes-objets
 		if Data.TOOLS.has(tid):
 			gain_obj(Data.obj_of(tid), party[0])
+	bag = bag.map(func(id): return _item_now(str(id))).filter(func(id): return id != "")
 	purges = int(d.get("purges", 0))
 	rare_off = float(d.get("rare_off", -0.05))
 	obj_chance = float(d.get("obj_chance", 0.4))
@@ -2139,6 +2152,9 @@ func _load_run() -> bool:
 	for i in heroes.size():
 		for k in HERO_KEEP:
 			heroes[i].set(k, d.heroes[i][k])
+		var eq: Dictionary = heroes[i].equip
+		for sl in eq:
+			eq[sl] = _item_now(str(eq[sl]))
 		heroes[i].apply_gear()
 		heroes[i].hp = int(d.heroes[i].hp)
 		heroes[i].wear_voc(heroes[i].voc)
@@ -2154,6 +2170,12 @@ func _load_run() -> bool:
 	else:
 		_loop()
 	return true
+
+
+func _item_now(id: String) -> String:
+	## Vieille sauvegarde : une pièce retirée par le concile de l'équipement devient celle qui la remplace (ou rien).
+	id = {"stylet": "poincon_voilier"}.get(id, id)
+	return id if id == "" or Data.ITEMS.has(id) else ""
 
 
 func _testing() -> bool:

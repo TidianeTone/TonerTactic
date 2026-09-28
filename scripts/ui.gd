@@ -285,7 +285,7 @@ func _paint_title(l: Label) -> void:
 	var k: float = float(l.get_meta("tsize")) * 0.9 / 74.0
 	var asc := 0
 	var desc := 0
-	var txt: String = l.text.to_upper()
+	var txt: String = Lang.t(l.text).to_upper()  # le mot peint suit la langue (le Label, lui, se traduit tout seul)
 	for ch in txt:
 		if LETTRES.has(ch):
 			asc = maxi(asc, LETTRES[ch][4])
@@ -4086,7 +4086,7 @@ func equipment_screen(heroes: Array, bag: Array) -> Dictionary:
 		for i in bag_tiles.size():
 			bag_tiles[i].modulate = Color(1.3, 1.2, 0.9) if i == sel[0] else (Color(0.7, 0.7, 0.75) if sel[0] >= 0 else Color.WHITE)
 		for i in hero_panels.size():
-			var ok: bool = true  # tout se porte par tout le monde
+			var ok: bool = sel[0] < 0 or Data.item_fits(bag[sel[0]], heroes[i].key, heroes[i].voc, heroes[i].voc2)
 			hero_panels[i].modulate = Color.WHITE if ok else Color(0.4, 0.4, 0.45)
 			hero_panels[i].mouse_filter = Control.MOUSE_FILTER_STOP if ok else Control.MOUSE_FILTER_IGNORE
 	if bag.is_empty():
@@ -4095,7 +4095,7 @@ func equipment_screen(heroes: Array, bag: Array) -> Dictionary:
 		var id: String = bag[bi]
 		var it: Dictionary = Data.ITEMS[id]
 		var t := _gear_tile(id, 76, ITEM_COL[it.rarity])
-		var fits: Array = heroes
+		var fits: Array = heroes.filter(func(u): return Data.item_fits(id, u.key, u.voc, u.voc2))
 		t.mouse_entered.connect(func():
 			show.call(id, ("pour " + ", ".join(fits.map(func(u): return u.nm))) if fits.size() > 0 else "personne ici ne sait s'en servir"))
 		t.gui_input.connect(func(e):
