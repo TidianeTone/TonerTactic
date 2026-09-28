@@ -53,7 +53,7 @@ var mode := "descente"      # "descente" (carte d'étage) | "aventure" (explorat
 var voc_start := true      # réglage : le premier Ancien propose toujours la Vocation (une run différente dès le départ)
 var tactic := false         # vue tactique (réglage) : arènes plates en damier, pour la lisibilité seulement
 var elites_seen: Array = []  # "étage:élite" déjà affrontées
-var fight_loot: Array = []   # ce que le combat en cours a rapporté (écran de fin de combat)
+var fight_loot: Array = []   # ce que le combat en cours a rapporté (écran de fin de combat) : {or}, {card: ci}, {item: id, eq?}
 var aboard: Board           # le donjon du mode aventure, gardé à part de l'arène
 var adv_root: Node3D
 var rooms: Array = []       # salles du donjon : {rect, type, cell, ids, arch, mods, done, seen, node, fog}
@@ -1166,10 +1166,10 @@ func _tuto_gear() -> void:
 	var i := await ui.choose("BUTIN", "Après chaque combat : une carte parmi trois pour le paquet, ou aucune", ids.map(func(id): return {"card": {"id": id, "lvl": 1}, "tag": "Pour " + Data.HEROES[Data.def(id).owner].name}), true)
 	if i >= 0:
 		deck.append({"id": ids[i], "lvl": 1})
-		fight_loot.append(Data.def(ids[i]).name)
+		fight_loot.append({"card": {"id": ids[i], "lvl": 1}})
 	await ui.choose("ÉQUIPEMENT", "Une pièce d'équipement : elle rejoint le sac", [_item_opt(TUTO_ITEM).merged({"w": 300})], true, "Au sac")
 	bag.append(TUTO_ITEM)
-	fight_loot.append(Data.ITEMS[TUTO_ITEM].name)
+	fight_loot.append({"item": TUTO_ITEM})
 	var rows: Array = heroes.map(func(h): return {"nm": h.nm, "key": h.key, "pj0": h.pj, "pj1": h.pj, "m": 1, "lo": 0, "hi": Data.MASTERY[2]})
 	var say := func(t: String, at: String) -> void:
 		ui.coach(_tuto_title(), t)
@@ -1706,11 +1706,11 @@ func _gain_item(id: String, h: Unit = null) -> void:
 		if u.equip[it.slot] == "" and Data.item_fits(id, u.key, u.voc, u.voc2):
 			u.equip[it.slot] = id
 			u.apply_gear()
-			fight_loot.append("%s (équipé)" % it.name)
+			fight_loot.append({"item": id, "eq": true})
 			ui.toast("%s : %s, équipé." % [u.nm, it.name])
 			return
 	bag.append(id)
-	fight_loot.append(it.name)
+	fight_loot.append({"item": id})
 	ui.toast("%s rejoint le sac." % it.name)
 
 
@@ -1735,7 +1735,7 @@ func open_chest(h: Unit) -> void:
 		var it := _roll_item()
 		_gain_item(it, h)
 		gains.append(_item_opt(it).merged({"text": Data.item_passives(it) + ("\n" if Data.item_passives(it) != "" else "") + "Au sac : s'équiper après le combat.", "w": 250}, true))
-		fight_loot.append(Data.ITEMS[it].name)
+		fight_loot.append({"item": it})
 	else:
 		g += rng.randi_range(20, 35)  # 2 à 3 coffres par combat
 	if g > 0:
@@ -1743,7 +1743,7 @@ func open_chest(h: Unit) -> void:
 		ui.set_gold(gold)
 		Fx.number(self, h.position + Vector3(0, 0.6, 0), "+%d or" % g, Color(1.0, 0.85, 0.4))
 		gains.append({"title": "+%d or" % g, "glyph": "◆", "text": "La bourse de l'escouade", "color": UI.GOLD, "w": 210})
-		fight_loot.append("+%d or" % g)
+		fight_loot.append({"or": g})
 	# 1. ce que le coffre donne d'office : tout est reçu, rien à choisir
 	var more := (" · puis une carte à attribuer") if obj != "" or card != "" else ""
 	await ui.choose("COFFRE", "Ouvert par %s · vous recevez tout%s" % [h.nm, more], gains, true, "Continuer")
@@ -1770,7 +1770,7 @@ func open_chest(h: Unit) -> void:
 func _rewards(type: String) -> void:
 	var g := int((rng.randi_range(18, 28) + (20 if type == "elite" else 0)) * (1.0 + 0.25 * pacts.size()) * (1.15 if heroes.any(func(h): return h.trait_id == "radin") else 1.0) * (1.5 if next_mods.size() > 0 else 1.0) * (1.25 if relics.has("bourse") else 1.0))
 	gold += g
-	fight_loot.append("+%d or" % g)
+	fight_loot.append({"or": g})
 	ui.set_gold(gold)
 	var opts: Array = []
 	var n := 4 if relics.has("oeil") else 3
@@ -1806,7 +1806,7 @@ func _rewards(type: String) -> void:
 		gain_obj(oid, hh.key, int(opts[i].card.lvl))
 	elif i >= 0:
 		deck.append(opts[i].card)
-		fight_loot.append(Data.def(opts[i].card.id).name)
+		fight_loot.append({"card": opts[i].card})
 		if Data.def(opts[i].card.id).get("rar", 1) == 4:
 			ui.banner("Légendaire !", "%s rejoint le paquet de %s" % [Data.def(opts[i].card.id).name, Data.HEROES[Data.holder(opts[i].card)].name])
 		await _replace_starter(opts[i].card)
@@ -1818,7 +1818,7 @@ func _rewards(type: String) -> void:
 				await _hero_offer(h.key)
 	if i < 0 and relics.has("sebile_cuivre"):
 		gold += 20  # Sébile de cuivre : passer le butin de cartes
-		fight_loot.append("+20 or")
+		fight_loot.append({"or": 20})
 		ui.set_gold(gold)
 	if type == "elite":
 		_gain_item(_roll_item(2))
@@ -1846,7 +1846,7 @@ func _hero_offer(k: String) -> void:
 	var i := await ui.choose("BUTIN D'ÉLITE", "Une carte pour %s (paquet : %d cartes)" % [Data.HEROES[k].name, deck.filter(func(c): return Data.holder(c) == k).size()], opts, true)
 	if i >= 0:
 		deck.append(opts[i].card)
-		fight_loot.append(Data.def(opts[i].card.id).name)
+		fight_loot.append({"card": opts[i].card})
 		await _replace_starter(opts[i].card)
 
 
@@ -2893,7 +2893,7 @@ func _capture() -> void:
 	battle.changed.emit()
 	await _frames(150)
 	if args.has("screens"):  # --screens : fin de combat et coffre, pour vérifier la mise en page
-		fight_loot = ["+24 or", "Dossière du guetteur", "Élixir de braise", "Estoc"]
+		fight_loot = [{"or": 24}, {"item": "oeil_vigilant", "eq": true}, {"card": {"id": "o_elixir", "lvl": 1}}, {"card": {"id": "c_decharge", "lvl": 1}}, {"or": 20}]
 		bag = ["oeil_vigilant"]
 		heroes[0].pj = 5
 		var f := func(): await _summary({heroes[0]: 3, heroes[1]: 0, heroes[2]: 1})
@@ -3220,6 +3220,15 @@ func _voctest() -> void:
 	f2.call()
 	await get_tree().create_timer(2.5).timeout  # l'écran apparaît en ~1,6 s (fondus en chaîne)
 	_shot(dir, "2_choix")
+	for n in ui.overlay.find_children("*", "Control", true, false):  # survol d'une miniature de guilde : carte en grand + encarts
+		if n.has_meta("kwcard") and n.get_parent().get_parent() is HBoxContainer:
+			ui._card_peek({"id": n.get_meta("kwcard").id, "lvl": 1}, n.get_parent())
+			ui.kw_force = n
+			break
+	await _frames(20)
+	_shot(dir, "2b_survol")
+	ui.kw_force = null
+	ui._card_peek({}, null)
 	ui.picked.emit(0)
 	await _frames(40)
 	_shot(dir, "3_guilde")
@@ -4553,7 +4562,7 @@ func gain_obj(id: String, hkey: String, lvl := 1) -> Dictionary:
 			ui.toast("%s : doublon absorbé, %d charges." % [Data.def(id).name, ci.uses])
 			return ci
 	var ci := {"id": id, "lvl": lvl, "h": hkey, "uses": mini(lvl, 2)}
-	fight_loot.append(Data.def(id).name)
+	fight_loot.append({"card": ci})
 	if lvl >= 3:
 		ci.erase("uses")
 		library_see(id + "#3")

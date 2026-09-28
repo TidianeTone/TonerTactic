@@ -3251,7 +3251,7 @@ func kill(u: Unit, src: Unit = null) -> void:
 		for sl in u.equip:
 			if u.equip[sl] != "" and (randf() < 0.1 or (src and src.has_p("main_leste"))):
 				main.bag.append(u.equip[sl])
-				main.fight_loot.append(Data.ITEMS[u.equip[sl]].name)
+				main.fight_loot.append({"item": u.equip[sl]})
 				Fx.number(main, u.position + Vector3(0, 1.6, 0), "Butin : " + Data.ITEMS[u.equip[sl]].name, GOLD_FX, true)
 				main.ui.toast("%s rejoint le sac." % Data.ITEMS[u.equip[sl]].name)
 				u.equip[sl] = ""
@@ -5647,7 +5647,7 @@ func _steal(h: Unit, f: Unit) -> bool:
 			var gid: String = f.equip[sl]
 			f.equip[sl] = ""
 			main.bag.append(gid)
-			main.fight_loot.append(Data.ITEMS[gid].name)
+			main.fight_loot.append({"item": gid})
 			stolen_turn += 1
 			_fourgue(h, true)
 			Fx.number(main, f.position + Vector3(0, 1.2, 0), "Volé : %s (au sac)" % Data.ITEMS[gid].name, GOLD_FX, true)

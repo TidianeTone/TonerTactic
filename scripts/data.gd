@@ -295,7 +295,7 @@ const CARDS := {
 	"c_demolition": {"name": "Charge de démolition", "owner": "artificier", "rar": 2, "cost": 1, "kind": "atk", "range": [1, 2], "dmg": 4, "stick": 7, "text": "Inflige {dmg}. Charge collée : {stick} autour de la cible en fin de tour.", "up": [{"stick": 3}, {"cost": -1}], "arch": "Poudrière"},
 	"c_ressort": {"name": "Tourelle à ressort", "owner": "artificier", "rar": 2, "cost": 2, "kind": "skill", "target": "tile", "range": [1, 2], "place": "tourelle", "tdmg": 3, "tpush": 1, "turns": 3, "text": "Tourelle, {turns} rounds : {tdmg} et repousse {tpush} l'ennemi le plus proche.", "up": [{"tpush": 1}, {"cost": -1}], "arch": "Chantier de siège"},
 	"c_decharge": {"name": "Décharge", "owner": "artificier", "rar": 2, "cost": 0, "kind": "atk", "range": [1, 4], "dmg": 4, "chain": 1, "xcost": {"chain": 1}, "text": "Coût X. Inflige {dmg}. Saute ensuite sur X ennemis proches.", "up": [{"dmg": 2}, {"chain": 1, "text": "Coût X. Inflige {dmg}. Saute ensuite sur X + 1 ennemis proches."}], "arch": "Chaudière"},
-	"c_bombarde": {"name": "Bombarde de siège", "owner": "artificier", "rar": 3, "cost": 2, "kind": "skill", "target": "tile", "range": [1, 2], "place": "tourelle", "tdmg": 3, "tgrow": 2, "turns": 4, "trange": 6, "text": "Bombarde, {turns} rounds : {tdmg} à 6 cases, +{tgrow} à chaque tir.", "up": [{"tgrow": 1}, {"tpierce": true, "text": "Bombarde, {turns} rounds : {tdmg} à 6 cases, armure ignorée, +{tgrow} à chaque tir."}], "arch": "Chantier de siège"},
+	"c_bombarde": {"name": "Bombarde de siège", "owner": "artificier", "rar": 3, "cost": 2, "kind": "skill", "target": "tile", "range": [1, 2], "place": "tourelle", "tdmg": 3, "tgrow": 2, "turns": 4, "trange": 6, "text": "Pose une bombarde : {turns} rounds, {tdmg} à l'ennemi le plus proche (6 cases), +{tgrow} par tir.", "up": [{"tgrow": 1}, {"tpierce": true, "text": "Pose une bombarde : {turns} rounds, {tdmg} à l'ennemi le plus proche (6 cases), armure ignorée, +{tgrow} par tir."}], "arch": "Chantier de siège"},
 	"c_salve": {"name": "Salve de mortiers", "owner": "artificier", "rar": 3, "cost": 0, "kind": "atk", "target": "tile", "range": [3, 6], "dmg": 3, "aoe": true, "xcost": {"dmg": 5}, "text": "Coût X. Obus en croix : {dmg}, +5 par énergie.", "up": [{"dmg": 3}, {"aoe_baril": true, "text": "Coût X. Obus en croix : {dmg}, +5 par énergie. Laisse un baril au centre."}], "arch": "Chaudière"},
 	"c_art2_baril_blinde": {"name": "Baril blindé", "owner": "artificier", "rar": 1, "cost": 1, "kind": "skill", "target": "tile", "range": [1, 3], "place": "baril", "block": 5, "text": "Pose un baril. +{block} armure.", "up": [{"block": 3}, {"draw": 1, "text": "Pose un baril. +{block} armure. Pioche {draw}."}], "arch": "Poudrière"},
 	"c_art2_tourelle_givre": {"name": "Tourelle givrante", "owner": "artificier", "rar": 2, "cost": 2, "kind": "skill", "target": "tile", "range": [1, 2], "place": "tourelle", "tdmg": 2, "tpush": 1, "turns": 3, "ground": "glace", "aoe": true, "text": "Tourelle, {turns} rounds : {tdmg} et repousse {tpush} l'ennemi le plus proche. Glace sur les 4 cases autour.", "up": [{"tdmg": 2}, {"turns": 1}], "arch": "Chantier de siège"},
@@ -518,6 +518,11 @@ const KEYWORDS := {
 	"Vol de vie": "Soigne le héros de la moitié des dégâts qu'il inflige avec cette carte.",
 	"Glace": "Poussé sur la glace, on glisse jusqu'au prochain obstacle (et on s'y cogne).",
 	"Vase": "Y entrer coûte 2 de déplacement. Poussé dedans, on s'enlise : entravé 1 tour.",
+	"Tourelle": "Machine posée sur la case : elle tire seule au début de chaque round, pendant le nombre de rounds indiqué, puis disparaît.",
+	"Bombarde": "Tourelle lourde, posée sur la case : elle tire seule au début de chaque round, pendant le nombre de rounds indiqué, puis disparaît.",
+	"Baliste": "Tourelle posée sur la case : elle tire seule au début de chaque round, pendant le nombre de rounds indiqué, puis disparaît.",
+	"Bélier": "Machine posée sur la case : elle frappe seule au début de chaque round, pendant le nombre de rounds indiqué, puis disparaît.",
+	"Rage": "Chaque point de Rage ajoute +1 aux dégâts des coups du héros, jusqu'à la fin du combat.",
 }
 # Outils : effets des cartes-objets (o_*) et des objets portés par les ennemis.
 # target : self | ally | foe | free (case libre) | tile. foe_ai : ce que fait un ennemi qui le porte.
@@ -594,7 +599,7 @@ const KW_ICON := {"Épuise": "epuise", "Pouvoir": "pouvoir", "Marqué": "marque"
 	"Pioche": "pioche", "pioche": "pioche", "énergie": "energie",
 	"Coup de grâce": "grace", "Dos au mur": "mur", "Enchaîné": "enchaine", "Surplomb": "surplomb", "Précision": "precision",
 	"Premier jet": "premier", "Grixis": "grixis",
-	"Recharge": "recharge", "Lance": "lance", "Conservé": "conserve", "Éphémère": "ephemere", "Égide": "egide", "Exécution": "execution", "Découvre": "decouvre", "Braquage": "braquage", "Surcharge": "surcharge", "Provocation": "provocation", "Exposé": "expose", "Exposée": "expose", "Choc": "choc", "BPM": "bpm", "Drop": "drop", "Flashback": "flashback", "Débordement": "debordement", "déborde": "debordement", "X": "x", "Ouï-dire": "oui_dire", "Présage": "presage", "Conservé chargé": "conserve_charge", "Vol de vie": "vol_de_vie", "Glace": "glace", "Vase": "vase", "Niveau": "niveau"}
+	"Recharge": "recharge", "Lance": "lance", "Conservé": "conserve", "Éphémère": "ephemere", "Égide": "egide", "Exécution": "execution", "Découvre": "decouvre", "Braquage": "braquage", "Surcharge": "surcharge", "Provocation": "provocation", "Exposé": "expose", "Exposée": "expose", "Choc": "choc", "BPM": "bpm", "Drop": "drop", "Flashback": "flashback", "Débordement": "debordement", "déborde": "debordement", "X": "x", "Ouï-dire": "oui_dire", "Présage": "presage", "Conservé chargé": "conserve_charge", "Vol de vie": "vol_de_vie", "Glace": "glace", "Vase": "vase", "Rage": "rage", "Tourelle": "tourelle", "Bombarde": "tourelle", "Baliste": "tourelle", "Bélier": "tourelle", "Niveau": "niveau"}
 # Modificateurs de combat : affichés sur les salles marquées (plus de risque, plus de butin).
 const MODIFIERS := {
 	"brume": {"name": "Brume", "glyph": "≈", "text": "Portée des attaques à distance -1, pour tout le monde."},
@@ -1538,6 +1543,19 @@ const KIND_WORD := {"power": "Pouvoir"}
 
 
 static var _kwx := {}
+static func keywords_in(txt: String) -> Array:
+	## Les mots-clés d'un texte libre (carte, relique, équipement) en encarts {icon, title, text}.
+	var out: Array = []
+	for kw in KEYWORDS:
+		if kw in ["Niveau", "Charges"]:
+			continue
+		if not _kwx.has(kw):
+			_kwx[kw] = RegEx.create_from_string("(?i)(?<![A-Za-zÀ-ÿ])" + kw + "(?![A-Za-zÀ-ÿ])")
+		if (_kwx[kw] as RegEx).search(txt):
+			out.append({"icon": KW_ICON.get(kw, KW_ICON.get(kw.to_lower(), "niveau")), "title": kw[0].to_upper() + kw.substr(1), "text": KEYWORDS[kw]})
+	return out
+
+
 static func keyword_list(c: Dictionary) -> Array:
 	## Les encarts du survol (façon cartes à collectionner) : un pictogramme, un titre, une phrase. {icon, title, text}
 	var out: Array = []
@@ -1550,14 +1568,7 @@ static func keyword_list(c: Dictionary) -> Array:
 		out.append({"icon": "fabrique", "title": "Carte-objet", "text": "Gratuite, et elle reste en main d'un tour à l'autre. Jouée, elle perd une charge ; à zéro, elle quitte le paquet."})
 		if c.get("legend", false):
 			out.append({"icon": "niveau", "title": "Légendaire", "text": "Inépuisable : une fois par combat, effet nettement plus fort."})
-	var txt: String = card_text(c) + " " + KIND_WORD.get(c.kind, "")
-	for kw in KEYWORDS:
-		if kw in ["Niveau", "Charges"]:
-			continue
-		if not _kwx.has(kw):
-			_kwx[kw] = RegEx.create_from_string("(?i)(?<![A-Za-zÀ-ÿ])" + kw + "(?![A-Za-zÀ-ÿ])")
-		if (_kwx[kw] as RegEx).search(txt):
-			out.append({"icon": ic.call(kw), "title": kw[0].to_upper() + kw.substr(1), "text": KEYWORDS[kw]})
+	out.append_array(keywords_in(card_text(c) + " " + KIND_WORD.get(c.kind, "")))
 	if c.has("trig"):
 		var tr: Dictionary = TRIGGERS[c.trig.on]
 		out.append({"icon": ic.call(tr.name), "title": tr.name, "text": "Bonus " + tr.text + "."})

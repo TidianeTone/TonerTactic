@@ -12,6 +12,8 @@ const CARD_BASE := Vector2(196, 272)  # proportions des cadres KIE, telles que p
 const CARD_EXTRA := 48.0  # la bande du texte s'allonge d'autant : la carte respire
 const CARD := Vector2(196, 272 + 48)  # proportions des cadres KIE
 var hand_k := 1.0  # échelle de la main au repos (survol : ×1,33) ; --handk= pour essayer
+const HAND_PEEK := 112.0  # main repliée : ce qui dépasse du bas de l'écran (coût, nom, haut de l'illustration)
+var _hand_up := true      # main dépliée : la souris est dessus (ou un doigt vient d'y toucher)
 const KIND_NAME := {"atk": "Attaque", "skill": "Technique", "move": "Mouvement", "power": "Pouvoir"}
 const ICON := {
 	"frappe": "⚔", "pavois": "🛡", "charge": "➤", "defi": "⚑", "rempart": "✠", "marteau": "⚒", "bastion": "🛡",
@@ -1316,6 +1318,7 @@ func refresh_relics(relics: Array) -> void:
 		p.custom_minimum_size = Vector2(40, 40)
 		p.add_theme_stylebox_override("panel", sb(Color(0.08, 0.07, 0.07, 0.85), GOLD.darkened(0.2), 20, 2, 4))
 		p.tooltip_text = "%s\n%s" % [Data.RELICS[r].name, Data.RELICS[r].text]
+		p.set_meta("kwtext", Data.RELICS[r].text)  # ses mots-clés (Rage…) en encarts au survol
 		var rp := "res://assets/ui/relic_%s.png" % r
 		if not ResourceLoader.exists(rp):
 			var gl := _label(Data.RELICS[r].glyph, 20, GOLD, title_f)
@@ -1780,7 +1783,11 @@ static func kw_bbcode(t: String) -> String:
 				t = nt
 				used.append(k)
 	for i in used.size():
-		t = t.replace("§%d¤" % i, "[img=15x15]res://assets/ui/kw_%s.png[/img][color=#ffe3a3]%s[/color]" % [Data.KW_ICON[_kw_disp[used[i]]], used[i]])
+		var ic: String = Data.KW_ICON[_kw_disp[used[i]]]
+		if ic == "x":  # « X » : une lettre, pas un mot ; son idéogramme devant chaque X brouillait la phrase (l'encart l'explique)
+			t = t.replace("§%d¤" % i, "[b][color=#ffe3a3]%s[/color][/b]" % used[i])
+			continue
+		t = t.replace("§%d¤" % i, "[img=15x15]res://assets/ui/kw_%s.png[/img][color=#ffe3a3]%s[/color]" % [ic, used[i]])
 	return t
 
 
@@ -1894,11 +1901,11 @@ func _kw_update() -> void:
 	for k in 5:
 		if n == null:
 			break
-		if n.has_meta("kwcard"):
+		if n.has_meta("kwcard") or n.has_meta("kwtext"):
 			tgt = n
 			break
 		for ch in n.get_children():
-			if ch is Control and ch.has_meta("kwcard"):
+			if ch is Control and (ch.has_meta("kwcard") or ch.has_meta("kwtext")):
 				tgt = ch
 				break
 		if tgt:
@@ -1927,9 +1934,14 @@ func _kw_update() -> void:
 	kw_panel.visible = false
 	if tgt == null:
 		return
-	var kc := Data.card(tgt.get_meta("kwcard"))
-	var list := Data.keyword_list(kc)
-	var made: String = kc.gives.id if kc.has("gives") else str(kc.get("shows", ""))  # carte créée : montrée en entier
+	var list: Array
+	var made := ""
+	if tgt.has_meta("kwtext"):  # relique, équipement : les mots-clés de son texte
+		list = Data.keywords_in(tgt.get_meta("kwtext"))
+	else:
+		var kc := Data.card(tgt.get_meta("kwcard"))
+		list = Data.keyword_list(kc)
+		made = kc.gives.id if kc.has("gives") else str(kc.get("shows", ""))  # carte créée : montrée en entier
 	if list.is_empty() and made == "":
 		return
 	for e in list:
@@ -1987,6 +1999,8 @@ func _kw_place(tgt: Control) -> void:
 	if not kw_panel or not kw_panel.visible:
 		return
 	var r := tgt.get_global_rect()
+	if _peek and is_instance_valid(_peek):
+		r = r.merge(_peek.get_global_rect())  # miniature agrandie à côté : les encarts se posent au-delà, pas dessus
 	var vs := root.size
 	var w := kw_panel.get_combined_minimum_size().x
 	var x := r.end.x + 10 if r.end.x + 10 + w < vs.x else r.position.x - w - 10
@@ -2018,6 +2032,8 @@ func over_hand(p: Vector2) -> bool:
 	var vp := root.size
 	var half := (n - 1) * 0.5 * minf(146.0, 900.0 / n) * hand_k / 0.84 + CARD.x * 0.5 * hand_k * 1.33 + 12.0
 	var top := vp.y - (CARD.y * hand_k * 1.33 + 80.0 if _hover_card >= 0 else CARD.y * hand_k + 28.0)
+	if not _hand_up:
+		top = vp.y - HAND_PEEK - 36.0  # repliée : seule la bande qui dépasse (et un peu au-dessus) la redéplie
 	return absf(p.x - vp.x * 0.5) < half and p.y > top
 
 
@@ -2028,10 +2044,16 @@ func _layout_hand(dt: float) -> void:
 	var vp := root.size
 	var spacing := minf(146.0, 900.0 / n) * hand_k / 0.84
 	var k := 1.0 - exp(-dt * 14.0)
+	# la main se replie vers le bas dès que la souris la quitte : l'arène reste au premier plan ; la carte choisie reste levée
+	# (les modes de test la gardent dépliée, sauf --replie)
+	_hand_up = _hover_card >= 0 or (main._testing() and not main.args.has("replie")) or over_hand(root.get_local_mouse_position())
+	var sink := 0.0 if _hand_up else CARD.y * hand_k - HAND_PEEK
 	for i in n:
 		var card: Control = _cards[i]
 		var off := i - (n - 1) * 0.5
 		var pos := Vector2(vp.x * 0.5 + off * spacing - CARD.x * 0.5, vp.y - CARD.y - 20 + off * off * 3.0)  # les bulles des coins débordent en bas
+		if i != battle.card_sel:
+			pos.y += sink
 		var rot := off * 0.03
 		var sc := hand_k
 		var z := i
@@ -2879,6 +2901,8 @@ func _vignette(title: String, icon: String, text: String, col: Color, tag: Strin
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 4)
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if seen:
+		v.set_meta("kwtext", text)  # ses mots-clés en encarts au survol (le parent survolé la trouve)
 	var nl := _shadowed(_label(title if seen else "???", 15 if w >= 160 else (13 if w >= 140 else 12), col.lightened(0.35) if seen else DIM, title_f), 5)
 	nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	nl.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
@@ -2950,10 +2974,10 @@ func _vignette(title: String, icon: String, text: String, col: Color, tag: Strin
 
 
 # encarts de classe peints (KIE, tools/encarts.py) : marges 9-slice puis bord uni, en pixels de l'image réduite
-const ENCARTS := {"encart_garde": [45, 51, 45, 47, 24, 33, 21, 22], "encart_lame": [42, 54, 42, 42, 7, 23, 7, 9], "encart_oracle": [28, 52, 28, 32, 10, 32, 10, 12], "encart_artificier": [33, 49, 33, 42, 11, 29, 11, 10], "encart_moine": [43, 63, 43, 42, 17, 36, 17, 16], "encart_trappeur": [44, 63, 44, 44, 25, 44, 24, 26], "encart_tidiane": [26, 42, 26, 28, 7, 27, 7, 8], "encart_receleur": [32, 46, 32, 34, 14, 28, 13, 15], "encart_voc_garde": [52, 69, 52, 57, 28, 39, 24, 26], "bandeau_garde": [36, 29, 36, 22, 19, 13, 19, 7], "encart_voc_lame": [30, 66, 30, 42, 15, 33, 14, 14], "bandeau_lame": [38, 45, 38, 36, 28, 7, 29, 9], "encart_voc_oracle": [43, 76, 43, 64, 14, 46, 18, 18], "bandeau_oracle": [38, 24, 38, 24, 10, 9, 9, 9], "encart_voc_artificier": [68, 133, 68, 89, 22, 66, 21, 20], "bandeau_artificier": [39, 22, 39, 22, 10, 9, 10, 9], "encart_voc_moine": [54, 91, 54, 64, 22, 49, 23, 22], "bandeau_moine": [40, 31, 40, 32, 16, 14, 16, 11], "encart_voc_trappeur": [51, 71, 51, 50, 27, 49, 28, 29], "bandeau_trappeur": [37, 42, 37, 38, 33, 11, 34, 11], "encart_voc_tidiane": [39, 73, 39, 32, 10, 43, 11, 11], "bandeau_tidiane": [67, 45, 67, 46, 39, 8, 37, 8], "encart_voc_receleur": [41, 88, 41, 72, 17, 35, 17, 19], "bandeau_receleur": [24, 18, 24, 17, 12, 11, 12, 12]}
+const ENCARTS := {"encart_garde": [45, 51, 45, 47, 24, 33, 21, 22], "encart_lame": [42, 54, 42, 42, 7, 23, 7, 9], "encart_oracle": [28, 52, 28, 32, 10, 32, 10, 12], "encart_artificier": [33, 49, 33, 42, 11, 29, 11, 10], "encart_moine": [43, 63, 43, 42, 17, 36, 17, 16], "encart_trappeur": [44, 63, 44, 44, 25, 44, 24, 26], "encart_tidiane": [26, 42, 26, 28, 7, 27, 7, 8], "encart_receleur": [32, 46, 32, 34, 14, 28, 13, 15], "encart_voc_garde": [52, 69, 52, 57, 28, 39, 24, 26], "bandeau_garde": [36, 29, 36, 22, 19, 13, 19, 7], "encart_voc_lame": [30, 66, 30, 42, 15, 33, 14, 14], "bandeau_lame": [38, 45, 38, 36, 28, 7, 29, 9], "encart_voc_oracle": [43, 76, 43, 64, 14, 46, 18, 18], "bandeau_oracle": [38, 24, 38, 24, 10, 9, 9, 9], "encart_voc_artificier": [68, 133, 68, 89, 22, 66, 21, 20], "bandeau_artificier": [39, 22, 39, 22, 10, 9, 10, 9], "encart_voc_moine": [54, 91, 54, 64, 22, 49, 23, 22], "bandeau_moine": [40, 31, 40, 32, 16, 14, 16, 11], "encart_voc_trappeur": [51, 71, 51, 50, 27, 49, 28, 29], "bandeau_trappeur": [37, 42, 37, 38, 33, 11, 34, 11], "encart_voc_tidiane": [39, 73, 39, 32, 10, 43, 11, 11], "bandeau_tidiane": [67, 45, 67, 46, 39, 8, 37, 8], "encart_voc_receleur": [41, 88, 41, 72, 17, 35, 17, 19], "bandeau_receleur": [24, 18, 24, 17, 12, 11, 12, 12], "encart_vocl_garde": [52, 69, 52, 57, 28, 39, 24, 26], "encart_vocl_lame": [30, 66, 30, 42, 15, 33, 14, 14], "encart_vocl_oracle": [43, 76, 43, 64, 14, 46, 18, 18], "encart_vocl_artificier": [68, 133, 68, 89, 22, 66, 21, 20], "encart_vocl_moine": [54, 91, 54, 64, 22, 49, 23, 22], "encart_vocl_trappeur": [51, 71, 51, 50, 27, 49, 28, 29], "encart_vocl_tidiane": [39, 73, 39, 32, 10, 43, 11, 11], "encart_vocl_receleur": [41, 88, 41, 72, 17, 35, 17, 19]}
 func encart(k: String, pad := 10, fam := "encart") -> StyleBox:
 	## L'encart peint de la classe (9-slice), ou null s'il n'est pas (encore) dans assets/ui. fam : encart (portrait, escouade),
-	## encart_voc (colonne haute, écran de vocation), bandeau (rectangle large, voies de la vocation).
+	## encart_voc (colonne haute, écran de vocation), encart_vocl (la même, élargie : panneau d'aperçu), bandeau (rectangle large, voies de la vocation).
 	var name := "%s_%s" % [fam, k]
 	var path := "res://assets/ui/%s.png" % name
 	if not ENCARTS.has(name) or not ResourceLoader.exists(path) or main.args.has("sans_kie"):
@@ -2981,6 +3005,7 @@ func _option(o: Dictionary, w := 250) -> Control:
 			vg.modulate = Color(0.55, 0.55, 0.6)
 		var pc := PanelContainer.new()
 		pc.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+		pc.set_meta("kwtext", o.get("text", ""))
 		pc.add_child(vg)
 		return pc
 	var small := w < 170  # version compacte, sous l'étal du marchand
@@ -3048,13 +3073,13 @@ func _option(o: Dictionary, w := 250) -> Control:
 
 
 func mini_cards(ids: Array, k := 0.34) -> HBoxContainer:
-	## Trois cartes en miniature (classe ou guilde) ; au survol, la carte en grand à côté. Le clic passe au parent.
+	## Des cartes en miniature (ids ou cartes) ; au survol, la carte en grand à côté. Le clic passe au parent.
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 6)
 	row.mouse_filter = Control.MOUSE_FILTER_PASS
 	for id in ids:
-		var ci := {"id": id, "lvl": 1}
+		var ci: Dictionary = id if id is Dictionary else {"id": id, "lvl": 1}  # un id, ou la carte elle-même (niveau, charges)
 		var holder := Control.new()
 		holder.custom_minimum_size = CARD * k
 		holder.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -3174,8 +3199,40 @@ func fight_summary(title: String, rows: Array, loot: Array, can_equip: bool) -> 
 	var lv := VBoxContainer.new()
 	lv.add_theme_constant_override("separation", 4)
 	lp.add_child(lv)
-	lv.add_child(_shadowed(_label("Butin du combat", 18, GOLD, title_f), 4))
-	lv.add_child(_label(" · ".join(loot) if loot.size() > 0 else "Rien de plus que la gloire.", 16, INK))
+	var lt := _shadowed(_label("Butin du combat", 18, GOLD, title_f), 4)
+	lt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lv.add_child(lt)
+	# le butin se voit : l'or en gros, les cartes en miniature (en grand au survol), l'équipement en vignette
+	var gold_sum := 0
+	var cards: Array = []
+	var items: Array = []
+	for e in loot:
+		if e.has("or"):
+			gold_sum += int(e.or)
+		elif e.has("card"):
+			cards.append(e.card)
+		elif e.has("item") and Data.ITEMS.has(e.item):
+			items.append(e)
+	var lr := HBoxContainer.new()
+	lr.alignment = BoxContainer.ALIGNMENT_CENTER
+	lr.add_theme_constant_override("separation", 18)
+	lv.add_child(lr)
+	if gold_sum > 0:
+		var gv := VBoxContainer.new()
+		gv.alignment = BoxContainer.ALIGNMENT_CENTER
+		gv.add_theme_constant_override("separation", 0)
+		for t in [["+%d" % gold_sum, 40], ["or", 18]]:
+			var gl := _shadowed(_label(t[0], t[1], Color("#ffd46a"), title_f), 5)
+			gl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			gv.add_child(gl)
+		lr.add_child(gv)
+	if cards.size() > 0:
+		lr.add_child(mini_cards(cards, 0.5))
+	for e in items:
+		var it: Dictionary = Data.ITEMS[e.item]
+		lr.add_child(_vignette(it.name, Data.item_icon(e.item), Data.item_passives(e.item), ITEM_COL[it.rarity], "Équipé" if e.get("eq", false) else Data.item_slot(e.item), true, 104.0))
+	if loot.is_empty():
+		lv.add_child(_label("Rien de plus que la gloire.", 16, INK))
 	var br := HBoxContainer.new()
 	br.alignment = BoxContainer.ALIGNMENT_CENTER
 	br.add_theme_constant_override("separation", 16)
@@ -3607,7 +3664,7 @@ func vocation_screen(h: Unit, picks: Array) -> int:
 		cam3.look_at(Vector3(0, ht * 0.5, 0))
 		var g := Guildes.index(h.key, k)
 		var gl: Array = Guildes.LIST[g]
-		pv.add_theme_stylebox_override("panel", encart(k, 10, "encart_voc") if encart(k, 10, "encart_voc") else ps)  # l'encart de la voie survolée
+		pv.add_theme_stylebox_override("panel", encart(k, 10, "encart_vocl") if encart(k, 10, "encart_vocl") else ps)  # l'encart de la voie survolée, élargi (tools/encarts_larges.py) : 9-slice sans étirer le cimier
 		var kc: Color = Data.CLASS_COLOR[k]
 		info.text = "[center][font_size=22][color=#%s]%s + %s[/color][/font_size]\n[color=#e3b45c]Guilde : %s[/color] — %s[/center]\n%s\n\n[color=#%s]%s[/color]" % [
 			kc.lightened(0.3).to_html(false), Data.HEROES[h.key].name, Data.HEROES[k].name, gl[2], gl[3], Guildes.DESC[g],

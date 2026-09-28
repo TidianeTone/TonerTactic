@@ -1,0 +1,22 @@
+{
+"Chaque point de Rage ajoute +1 aux dégâts des coups du héros, jusqu'à la fin du combat": "Each point of Rage adds +1 damage to the hero's hits, until the end of the fight",
+"Chaque point de Rage ajoute +1 aux dégâts des coups du héros, jusqu'à la fin du combat.": "Each point of Rage adds +1 damage to the hero's hits, until the end of the fight.",
+"Machine posée sur la case : elle frappe seule au début de chaque round, pendant le nombre de rounds indiqué, puis disparaît": "A machine placed on the tile: it strikes on its own at the start of each round, for the listed number of rounds, then vanishes",
+"Machine posée sur la case : elle frappe seule au début de chaque round, pendant le nombre de rounds indiqué, puis disparaît.": "A machine placed on the tile: it strikes on its own at the start of each round, for the listed number of rounds, then vanishes.",
+"Machine posée sur la case : elle tire seule au début de chaque round, pendant le nombre de rounds indiqué, puis disparaît": "A machine placed on the tile: it fires on its own at the start of each round, for the listed number of rounds, then vanishes",
+"Machine posée sur la case : elle tire seule au début de chaque round, pendant le nombre de rounds indiqué, puis disparaît.": "A machine placed on the tile: it fires on its own at the start of each round, for the listed number of rounds, then vanishes.",
+"Pose une bombarde : {turns} rounds, {tdmg} à l'ennemi le plus proche (6 cases), +{tgrow} par tir.": "Place a bombard: {turns} rounds, {tdmg} to the nearest enemy (6 tiles), +{tgrow} per shot.",
+"Pose une bombarde : {turns} rounds, {tdmg} à l'ennemi le plus proche (6 cases), armure ignorée, +{tgrow} par tir.": "Place a bombard: {turns} rounds, {tdmg} to the nearest enemy (6 tiles), ignoring armor, +{tgrow} per shot.",
+"Tourelle lourde, posée sur la case : elle tire seule au début de chaque round, pendant le nombre de rounds indiqué, puis disparaît": "A heavy turret placed on the tile: it fires on its own at the start of each round, for the listed number of rounds, then vanishes",
+"Tourelle lourde, posée sur la case : elle tire seule au début de chaque round, pendant le nombre de rounds indiqué, puis disparaît.": "A heavy turret placed on the tile: it fires on its own at the start of each round, for the listed number of rounds, then vanishes.",
+"Tourelle posée sur la case : elle tire seule au début de chaque round, pendant le nombre de rounds indiqué, puis disparaît": "A turret placed on the tile: it fires on its own at the start of each round, for the listed number of rounds, then vanishes",
+"Tourelle posée sur la case : elle tire seule au début de chaque round, pendant le nombre de rounds indiqué, puis disparaît.": "A turret placed on the tile: it fires on its own at the start of each round, for the listed number of rounds, then vanishes.",
+"Équipé": "Equipped",
+"à l'ennemi le plus proche (6 cases": "to the nearest enemy (6 tiles",
+"à l'ennemi le plus proche (6 cases), armure ignorée": "to the nearest enemy (6 tiles), ignoring armor",
+"Rage": "Rage",
+"Tourelle": "Turret",
+"Bombarde": "Bombard",
+"Baliste": "Ballista",
+"Bélier": "Ram"
+}
