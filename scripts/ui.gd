@@ -2739,6 +2739,7 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 			var st: Array = _room_stakes(n, k == fmap.size() - 1) if fight else []
 			var show_room := func():
 				room_title.visible = fight
+				room_art.custom_minimum_size = Vector2(160, 90) if fight else Vector2(240, 160)  # un combat : l'enjeu prime sur l'image
 				stakes.visible = fight
 				info.text = desc
 				if fight:
