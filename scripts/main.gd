@@ -50,7 +50,8 @@ var floor_biomes: Array = []
 var party: Array = ["garde", "lame", "oracle"]
 var leader: Unit            # pion du mode aventure
 var mode := "descente"      # "descente" (carte d'étage) | "aventure" (exploration)
-var voc_start := true      # réglage : le premier Ancien propose toujours la Vocation (une run différente dès le départ)
+var voc_start := false     # dernier choix de départ : multiclasse (user://reglages.cfg [partie] multiclasse)
+var multi := false         # run en départ multiclasse : chaque héros part avec sa vocation et un paquet de guilde
 var tactic := false         # vue tactique (réglage) : arènes plates en damier, pour la lisibilité seulement
 var elites_seen: Array = []  # "étage:élite" déjà affrontées
 var fight_loot: Array = []   # ce que le combat en cours a rapporté (écran de fin de combat) : {or}, {card: ci}, {item: id, eq?}
@@ -151,6 +152,8 @@ func _ready() -> void:
 		_cardtest.call_deferred()
 	elif args.has("voctest"):
 		_voctest.call_deferred()
+	elif args.has("multitest"):
+		_multitest.call_deferred()
 	elif args.has("looktest"):
 		_looktest.call_deferred()
 	elif args.has("hdtest"):
@@ -184,7 +187,7 @@ func _setup_world() -> void:
 	if cf.load("user://reglages.cfg") == OK:
 		music_vol = float(cf.get_value("son", "musique", music_vol))
 		tactic = bool(cf.get_value("ecran", "tactique", false))
-		voc_start = bool(cf.get_value("partie", "vocation", true))
+		voc_start = bool(cf.get_value("partie", "multiclasse", false))
 	for i in 2:
 		var mp := AudioStreamPlayer.new()
 		mp.volume_db = -80.0
@@ -772,13 +775,51 @@ func new_run() -> void:
 	party = await _draft()
 	rolled_traits = _roll_traits()
 	await ui.trait_roulette(party, rolled_traits)
+	multi = await _pick_start()
 	pacts = await _pick_pacts()
 	tuto = false
 	_start_run()
+	if multi:
+		await _multi_start()
 	if mode == "aventure":
 		_adventure()
 	else:
 		_loop()
+
+
+func _pick_start() -> bool:
+	## Classique (la vocation se gagne en combattant) ou multiclasse (tout de suite, pour découvrir vite). Le dernier choix est retenu.
+	var i := await ui.choose("DÉPART", "Comment l'escouade commence", [
+		{"title": "Classique", "glyph": "◆", "art": "res://assets/ui/tuto_2.png", "w": 380, "color": UI.GOLD,
+		"text": "Chaque héros part avec sa classe. Au palier II de maîtrise, il choisit une vocation : une deuxième classe." + ("\nVotre dernier choix." if not voc_start else "")},
+		{"title": "Multiclasse", "glyph": "⚭", "art": "res://assets/ui/tuto_3.png", "w": 380, "color": Color("#d08aff"),
+		"text": "Chaque héros choisit sa vocation dès le départ et part avec un paquet de guilde prêt. Pour découvrir le jeu vite." + ("\nVotre dernier choix." if voc_start else "")},
+	])
+	var on := i == 1
+	if on != voc_start:
+		voc_start = on
+		var cf := ConfigFile.new()
+		cf.load("user://reglages.cfg")
+		cf.set_value("partie", "multiclasse", on)
+		cf.save("user://reglages.cfg")
+	return on
+
+
+func _multi_start() -> void:
+	## Départ multiclasse : chaque héros choisit sa vocation (maîtrise II d'office), son paquet de départ devient
+	## le paquet multiclasse préfait (Data.multi_starter), puis on montre ce qui y est entré.
+	var rows: Array = []
+	for h in heroes:
+		await _choose_vocation(h, false, false)
+		h.pj = maxi(h.pj, Data.MASTERY[2])
+		deck = deck.filter(func(ci): return not (ci.get("st", false) and Data.holder(ci) == h.key))
+		var md := Data.multi_starter(h.key, h.voc, rng)
+		for ci in md:
+			deck.append(ci)
+			library_see(ci.id)
+		rows.append({"key": h.key, "voc": h.voc, "nm": h.nm, "guild": Guildes.LIST[Guildes.index(h.key, h.voc)][2], "n": md.size(),
+			"cards": md.filter(func(ci): return not ci.get("st", false))})
+	await ui.multi_decks(rows)
 
 
 func _start_run() -> void:
@@ -871,7 +912,7 @@ const TUTO := [
 			{"do": "play", "card": "estoc", "at": Vector2i(4, 4), "hand": ["estoc", "double", "fente"], "say": "Un dernier Moussu, à bout de souffle : achevez-le à l'Estoc."}]},
 	{"name": "La vocation", "art": "res://assets/ui/tuto_3.png", "glyph": "⚭", "text": "Les points de job, une deuxième classe, et sa guilde au butin.",
 		"party": ["garde", "lame", "oracle"]},
-	{"name": "Version rapide", "glyph": "»", "text": "Un combat, puis l'essentiel en un écran.",
+	{"name": "Version rapide", "glyph": "»", "text": "Un combat, une vocation, puis l'essentiel en un écran.",
 		"party": ["lame"], "heroes": [Vector2i(4, 8)],
 		"water": [Vector2i(8, 4), Vector2i(9, 4), Vector2i(8, 5), Vector2i(9, 5), Vector2i(8, 6), Vector2i(9, 6)],
 		"foes": [["husk", Vector2i(5, 4), Vector2i(0, -1)], ["husk", Vector2i(7, 5), Vector2i(-1, 0)]],
@@ -884,6 +925,8 @@ const TUTO := [
 ]
 const TUTO_TRAITS := {"garde": "costaud", "lame": "gaucher", "oracle": "lynx"}
 const TUTO_ITEM := "epee_ecluse"
+const TUTO_MULTI := {"title": "Départ multiclasse", "art": "res://assets/ui/tuto_3.png", "w": 340, "glyph": "⚭", "color": Color("#d08aff"),
+	"text": "Au lancement d'une descente, choisissez « Multiclasse » : chaque héros prend sa vocation tout de suite et part avec un paquet de guilde prêt."}
 const TUTO_RELIC := "ecaille"
 var tuto_k := 0              # chapitre en cours (index dans TUTO ; 5 : la version rapide)
 var tuto_steps: Array = []
@@ -986,6 +1029,7 @@ func _tuto_play(k: int) -> void:
 	rng.seed = run_seed
 	party = ch.party.duplicate()
 	rolled_traits = party.map(func(p): return TUTO_TRAITS[p])
+	multi = false
 	_start_run()
 	if not battle.coach.is_connected(_coach):
 		battle.coach.connect(_coach)
@@ -1009,6 +1053,7 @@ func _tuto_play(k: int) -> void:
 		4:
 			await _tuto_voc()
 		5:
+			await _tuto_voc(true)
 			await _tuto_recap()
 	_tuto_mark(k)
 
@@ -1193,14 +1238,16 @@ func _tuto_gear() -> void:
 	await _add_relic(TUTO_RELIC)
 
 
-func _tuto_voc() -> void:
-	## Chapitre 5 : les points de job, la vocation, puis une carte de guilde au butin.
-	var h: Unit = heroes[1]  # la Lame
+func _tuto_voc(quick := false) -> void:
+	## Chapitre 5 : les points de job, la vocation, puis une carte de guilde au butin. Version rapide : la vocation
+	## et son cadeau seulement (le reste tient dans l'écran de l'essentiel).
+	var hs: Array = heroes.filter(func(u): return u.key == "lame")
+	var h: Unit = hs[0] if hs.size() > 0 else heroes[0]
 	await ui.choose("POINTS DE JOB", "Chaque combat en rapporte : 1, et 2 contre une élite", [
 		{"title": "La maîtrise", "art": "res://assets/ui/tuto_3.png", "w": 320, "glyph": "⚭", "color": Color("#d08aff"),
 		"text": "Au palier II, le héros choisit une vocation : une deuxième classe. L'initiation triple les points : la Lame y est."}], true, "Compris")
 	await _gain_pj(h, 1)
-	if h.voc == "":
+	if h.voc == "" or quick:
 		return
 	var g := Guildes.index(h.key, h.voc)
 	var opts: Array = [{"card": {"id": Guildes.cards_of(g, [1])[0], "lvl": 1, "h": h.key}, "tag": "⚭ " + Guildes.LIST[g][2]},
@@ -1209,6 +1256,7 @@ func _tuto_voc() -> void:
 	if i >= 0:
 		deck.append(opts[i].card)
 	await _tuto_mastery()
+	await ui.choose("DÉPART MULTICLASSE", "Pour découvrir vite", [TUTO_MULTI], true, "Compris")
 
 
 func _tuto_recap() -> void:
@@ -1217,8 +1265,7 @@ func _tuto_recap() -> void:
 		{"title": "Le butin", "art": "res://assets/ui/tuto_2.png", "w": 300, "glyph": "◆", "color": UI.GOLD,
 		"text": "Après chaque combat, une carte parmi trois. Coffres et élites donnent objets et reliques."},
 		_item_opt(TUTO_ITEM).merged({"title": "L'équipement", "w": 300, "text": "Hors combat, « S'équiper » : un objet du sac, puis un héros. Sa fiche montre ce qui change."}, true),
-		{"title": "La vocation", "art": "res://assets/ui/tuto_3.png", "w": 300, "glyph": "⚭", "color": Color("#d08aff"),
-		"text": "1 point de job par combat, 2 par élite. Au palier II : une deuxième classe, et sa guilde au butin."}], true, "Compris")
+		TUTO_MULTI.merged({"w": 300}, true)], true, "Compris")
 
 
 func _tuto_mastery() -> void:
@@ -1857,8 +1904,9 @@ func _replace_starter(ci: Dictionary) -> void:
 	var idx: Array = range(deck.size()).filter(func(q): return deck[q].get("st", false) and Data.holder(deck[q]) == k)
 	if idx.is_empty() or tuto:
 		return
-	var j := await ui.choose("REMPLACER ?", "%s rejoint le paquet de %s. Retirer une de ses cartes de départ ?" % [Data.def(ci.id).name, Data.HEROES[k].name],
-		idx.map(func(q): return {"card": deck[q], "tag": "Retirer"}), true, "Garder les deux")
+	# vue d'ensemble : tout le paquet du héros (la nouvelle carte comprise), seules ses cartes de départ se retirent
+	var mine: Array = range(deck.size()).filter(func(q): return Data.holder(deck[q]) == k)
+	var j := await ui.replace_screen(ci, k, mine.map(func(q): return deck[q]), idx.map(func(q): return mine.find(q)))
 	if j >= 0:
 		ui.toast("%s quitte le paquet." % Data.def(deck[idx[j]].id).name)
 		deck.remove_at(idx[j])
@@ -1894,7 +1942,7 @@ func _mastery_up(h: Unit, lvl: int) -> void:
 	ui.banner("Maîtrise %s" % Data.MASTERY_NAME[lvl], h.nm)  # rien d'annoncé : au joueur de découvrir
 
 
-func _choose_vocation(h: Unit, second := false) -> void:
+func _choose_vocation(h: Unit, second := false, gift := true) -> void:
 	## La cérémonie : pourquoi c'est grand, les 7 guildes possibles, puis trois vocations au choix.
 	if not voc_intro_done:
 		voc_intro_done = true
@@ -1906,7 +1954,7 @@ func _choose_vocation(h: Unit, second := false) -> void:
 		others[i] = others[j]
 		others[j] = t
 	var picks: Array = others.slice(0, 3)
-	var i: int = await ui.vocation_screen(h, picks) if not _testing() or args.has("voctest") or tuto else 0
+	var i: int = await ui.vocation_screen(h, picks) if not _testing() or args.has("voctest") or args.has("multitest") or tuto else 0
 	var k: String = picks[maxi(i, 0)]
 	if second:
 		h.voc2 = k
@@ -1916,7 +1964,7 @@ func _choose_vocation(h: Unit, second := false) -> void:
 	var g := Guildes.index(h.key, k)
 	var gl: Array = Guildes.LIST[g]
 	ui.banner("Vocation : %s" % Data.HEROES[k].name, h.nm)
-	if not second:
+	if not second and gift:
 		# cadeau de vocation : une carte au choix, tout de suite dans le paquet (un vrai palier de puissance) :
 		# la commune de la guilde, sa peu commune, et une carte de la classe apprise
 		var ids: Array = []
@@ -2180,7 +2228,7 @@ func _item_now(id: String) -> String:
 
 func _testing() -> bool:
 	## Les essais n'écrivent ni dans la bibliothèque ni dans la sauvegarde du joueur.
-	return ["autoplay", "uitest", "advtest", "capture", "cardtest", "voctest", "looktest", "hdtest", "haventest", "eventtest", "tutotest", "maptest", "tuto2run", "uxtest", "cardsheet"].any(func(k): return args.has(k))
+	return ["autoplay", "uitest", "advtest", "capture", "cardtest", "voctest", "looktest", "hdtest", "haventest", "eventtest", "tutotest", "maptest", "tuto2run", "uxtest", "cardsheet", "multitest"].any(func(k): return args.has(k))
 
 
 func _save_library() -> void:
@@ -3194,6 +3242,48 @@ func _hdtest() -> void:
 	_snap_cam()
 	await _frames(20)
 	_shot(dir, "5_dos")
+	get_tree().quit()
+
+
+func _multitest() -> void:
+	## Départ multiclasse : l'écran de départ, une vocation, les paquets préfaits, puis le remplacement en vue d'ensemble.
+	var dir: String = args.multitest
+	DirAccess.make_dir_recursive_absolute(dir)
+	run_seed = 5
+	rng.seed = run_seed
+	_start_run()
+	_build_room(4242, 0, 16, "ecluse")
+	_snap_cam()
+	await _frames(30)
+	var f0 := func(): multi = await _pick_start()
+	f0.call()
+	await _frames(40)
+	_shot(dir, "1_depart")
+	ui.picked.emit(1)
+	await _frames(5)
+	voc_intro_done = true
+	var f1 := func(): await _multi_start()
+	f1.call()
+	for n in heroes.size():
+		await get_tree().create_timer(2.5).timeout
+		if n == 0:
+			_shot(dir, "2_vocation")
+		ui.picked.emit(n % 3)
+		await _frames(5)
+	await _frames(40)
+	_shot(dir, "3_paquets")
+	print("paquet : ", deck.map(func(ci): return "%s%s" % [ci.id, "*" if ci.get("st", false) else ""]))
+	ui.picked.emit(-1)
+	await _frames(10)
+	var ci := {"id": Guildes.cards_of(Guildes.index(heroes[0].key, heroes[0].voc), [3])[0], "lvl": 1, "h": heroes[0].key}
+	deck.append(ci)
+	tuto = false
+	var f2 := func(): await _replace_starter(ci)
+	f2.call()
+	await _frames(40)
+	_shot(dir, "4_remplacer")
+	ui.picked.emit(0)
+	await _frames(10)
 	get_tree().quit()
 
 
@@ -4629,8 +4719,6 @@ func _ancient() -> void:
 		pool[i] = pool[j]
 		pool[j] = t
 	var picks: Array = pool.slice(0, 3)
-	if voc_start and floor_i == 1 and not tuto and not picks.has("vocation"):
-		picks[0] = "vocation"  # réglage « Vocation dès le départ »
 	if floor_i >= 2 and not tuto and rng.randf() < 1.0 / 3.0 and _relic_draw("boss") != "":
 		picks[2] = "relique_boss"  # étages 2 et 3 : parfois une relique de gardien de plus, à la place d'un bienfait
 	var opts: Array = picks.map(func(b): return {"title": Data.BOONS[b].name, "glyph": Data.BOONS[b].glyph, "art": "res://assets/ui/boon_%s.png" % b, "text": Data.BOONS[b].text, "color": an.col})
@@ -5187,15 +5275,6 @@ func set_music_volume(v: float) -> void:
 	cf.load("user://reglages.cfg")
 	cf.set_value("son", "musique", music_vol)
 	cf.save("user://reglages.cfg")
-
-
-func set_voc_start(on: bool) -> void:
-	voc_start = on
-	var cf := ConfigFile.new()
-	cf.load("user://reglages.cfg")
-	cf.set_value("partie", "vocation", on)
-	cf.save("user://reglages.cfg")
-	ui.toast("Vocation dès le départ %s : le premier Ancien la proposera %s." % (["activée", "toujours"] if on else ["désactivée", "au hasard"]))
 
 
 func set_tactic(on: bool) -> void:

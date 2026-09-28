@@ -1080,9 +1080,7 @@ func toggle_menu() -> void:
 	var first: Button
 	var entries: Array = [["Reprendre", func(): toggle_menu(), "menu_reprendre"], ["Bibliothèque", func(): library_screen(), "menu_bibliotheque"], ["Mode portable : %s" % ("oui" if big else "non"), func(): main.set_mobile(not big), "menu_portable"], ["Vue tactique : %s" % ("oui" if main.tactic else "non"), func():
 		main.set_tactic(not main.tactic)
-		_reopen_menu(), "menu_tactique"], ["Vocation dès le départ : %s" % ("oui" if main.voc_start else "non"), func():
-		main.set_voc_start(not main.voc_start)
-		_reopen_menu(), "menu_vocation"], ["Langue : Français" if not Lang.on else "Language: English", func(): main.set_lang("fr" if Lang.on else "en"), "menu_langue"], ["Abandonner la run", func(): main.abandon(), "menu_abandonner"], ["Quitter le jeu", func(): get_tree().quit(), "menu_quitter"]]
+		_reopen_menu(), "menu_tactique"], ["Langue : Français" if not Lang.on else "Language: English", func(): main.set_lang("fr" if Lang.on else "en"), "menu_langue"], ["Abandonner la run", func(): main.abandon(), "menu_abandonner"], ["Quitter le jeu", func(): get_tree().quit(), "menu_quitter"]]
 	if hud.visible and battle.player_turn and not battle.over:
 		entries.insert(1, ["Passer la salle (debug)", func():
 			toggle_menu()
@@ -3259,6 +3257,235 @@ func fight_summary(title: String, rows: Array, loot: Array, can_equip: bool) -> 
 	return i
 
 
+func multi_decks(rows: Array) -> void:
+	## Départ multiclasse : une colonne par héros, sa vocation, sa guilde et les trois cartes entrées dans son paquet.
+	_close_overlay()
+	skip_ok = true
+	last_n = 0
+	overlay = Control.new()
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.z_index = 100
+	root.add_child(overlay)
+	var opened := Time.get_ticks_msec()
+	var dim := ColorRect.new()
+	dim.color = Color(0.03, 0.03, 0.04, 0.86)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(dim)
+	var box := VBoxContainer.new()
+	box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 16)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(box)
+	var tl := _title("PAQUETS MULTICLASSES", 44)
+	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(tl)
+	box.add_child(_speech("Chaque paquet de départ perd deux cartes et gagne sa guilde : une commune, une peu commune, et la graine de la classe apprise."))
+	var hb := HBoxContainer.new()
+	hb.alignment = BoxContainer.ALIGNMENT_CENTER
+	hb.add_theme_constant_override("separation", 22)
+	hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(hb)
+	for r in rows:
+		var p := PanelContainer.new()
+		var st := sb(Color(0.07, 0.06, 0.07, 0.95), Data.CLASS_COLOR[r.key], 12, 2, 10)
+		st.set_content_margin_all(14)
+		p.add_theme_stylebox_override("panel", st)
+		if encart(r.voc, 8, "encart_vocl"):
+			p.add_theme_stylebox_override("panel", encart(r.voc, 8, "encart_vocl"))
+		hb.add_child(p)
+		var v := VBoxContainer.new()
+		v.add_theme_constant_override("separation", 6)
+		p.add_child(v)
+		var top := HBoxContainer.new()
+		top.alignment = BoxContainer.ALIGNMENT_CENTER
+		top.add_theme_constant_override("separation", 6)
+		v.add_child(top)
+		for k in [r.key, r.voc]:
+			var pt := TextureRect.new()
+			pt.texture = load("res://assets/art/portrait_%s.png" % k)
+			pt.custom_minimum_size = Vector2(64, 64)
+			pt.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			pt.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			top.add_child(pt)
+			if k == r.key:
+				top.add_child(_label("⚭", 26, GOLD, title_f))
+		for t in [["%s + %s" % [r.nm, Data.HEROES[r.voc].name], 22, Data.CLASS_COLOR[r.voc].lightened(0.35), title_f], [r.guild, 16, GOLD, title_f], ["Paquet : %d cartes, dont :" % r.n, 13, DIM, null]]:
+			var l := _label(t[0], t[1], t[2], t[3])
+			l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			v.add_child(l)
+		v.add_child(mini_cards(r.cards, 0.62))
+	var sk := Button.new()
+	sk.text = "En route"
+	sk.add_theme_font_override("font", title_f)
+	sk.add_theme_font_size_override("font_size", 22)
+	sk.add_theme_color_override("font_color", INK)
+	sk.add_theme_stylebox_override("normal", sb(Color(0.1, 0.09, 0.1, 0.94), GOLD.darkened(0.2), 10, 2, 8))
+	sk.add_theme_stylebox_override("hover", sb(Color(0.2, 0.16, 0.1, 0.96), GOLD, 10, 2, 8))
+	sk.custom_minimum_size = Vector2(260, 52)
+	sk.pressed.connect(func():
+		if Time.get_ticks_msec() - opened > 300:
+			picked.emit(-1))
+	var sc := CenterContainer.new()
+	sc.add_child(sk)
+	box.add_child(sc)
+	overlay.modulate.a = 0
+	create_tween().tween_property(overlay, "modulate:a", 1.0, 0.25)
+	await picked
+	_card_peek({}, null)
+	_close_overlay()
+
+
+func replace_screen(new_ci: Dictionary, hk: String, cards: Array, removable: Array) -> int:
+	## Remplacer une carte de départ : la carte qui arrive à gauche, tout le paquet du héros à droite (vue d'ensemble :
+	## compte, types, coût moyen). Seules les cartes de départ se retirent ; rend l'indice parmi elles, -1 pour garder les deux.
+	_close_overlay()
+	skip_ok = true
+	last_n = removable.size()
+	overlay = Control.new()
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.z_index = 100
+	root.add_child(overlay)
+	var opened := Time.get_ticks_msec()
+	var dim := ColorRect.new()
+	dim.color = Color(0.03, 0.03, 0.04, 0.88)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(dim)
+	var box := VBoxContainer.new()
+	box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 14)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(box)
+	var tl := _title("REMPLACER ?", 44)
+	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(tl)
+	var hname: String = Data.HEROES[hk].name
+	box.add_child(_speech("%s rejoint le paquet de %s. Cliquez une carte de départ pour la retirer, ou gardez les deux." % [Data.def(new_ci.id).name, hname]))
+	var body := HBoxContainer.new()
+	body.alignment = BoxContainer.ALIGNMENT_CENTER
+	body.add_theme_constant_override("separation", 40)
+	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(body)
+	# à gauche : la carte qui arrive
+	var lv := VBoxContainer.new()
+	lv.alignment = BoxContainer.ALIGNMENT_CENTER
+	lv.add_theme_constant_override("separation", 8)
+	body.add_child(lv)
+	var al := _shadowed(_label("Arrive", 24, GOLD, title_f), 6)
+	al.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lv.add_child(al)
+	var nk := 1.15
+	var nh := Control.new()
+	nh.custom_minimum_size = CARD * nk
+	nh.set_meta("kwcard", new_ci)
+	var nw := make_card(new_ci)
+	nw.scale = Vector2.ONE * nk
+	nw.pivot_offset = Vector2.ZERO
+	_passthrough(nw)
+	nh.add_child(nw)
+	lv.add_child(nh)
+	# à droite : le paquet du héros, en entier
+	var pp := _plate(body)
+	var pv := VBoxContainer.new()
+	pv.add_theme_constant_override("separation", 8)
+	pp.add_child(pv)
+	var kinds := {}
+	var cost_sum := 0
+	var cost_n := 0
+	for ci in cards:
+		var d := Data.card(ci)
+		kinds[d.kind] = int(kinds.get(d.kind, 0)) + 1
+		if not d.has("xcost") and not d.has("tool"):
+			cost_sum += int(d.get("cost", 0))
+			cost_n += 1
+	var parts: Array = []
+	for kd in ["atk", "skill", "move", "power"]:
+		if kinds.has(kd):
+			parts.append("%d %s%s" % [kinds[kd], KIND_NAME[kd].to_lower(), "s" if kinds[kd] > 1 else ""])
+	var ph := _label("Paquet de %s · %d cartes" % [hname, cards.size()], 22, Data.CLASS_COLOR[hk].lightened(0.35), title_f)
+	ph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pv.add_child(ph)
+	var st := _label(" · ".join(parts) + ("  ·  coût moyen %.1f" % (float(cost_sum) / cost_n) if cost_n > 0 else ""), 15, DIM)
+	st.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pv.add_child(st)
+	var grid := GridContainer.new()
+	var k := 0.6
+	grid.columns = clampi(ceili(cards.size() / 2.0), 4, 7)
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 8)
+	var gc := CenterContainer.new()
+	gc.add_child(grid)
+	pv.add_child(gc)
+	var order: Array = range(cards.size())
+	order.sort_custom(func(a, b):  # départ d'abord, puis par coût
+		var ra: int = 0 if removable.has(a) else 1
+		var rb: int = 0 if removable.has(b) else 1
+		if ra != rb:
+			return ra < rb
+		return int(Data.def(cards[a].id).get("cost", 0)) < int(Data.def(cards[b].id).get("cost", 0)))
+	for q in order:
+		var can: bool = removable.has(q)
+		var holder := Control.new()
+		holder.custom_minimum_size = CARD * k + Vector2(0, 26)
+		holder.set_meta("kwcard", cards[q])
+		var fresh_card: bool = is_same(cards[q], new_ci)
+		var tg := _shadowed(_label("Départ · retirer ?" if can else ("Nouvelle" if fresh_card else "Gardée"), 14, Color("#f0a08a") if can else (GOLD if fresh_card else DIM), title_f), 4)
+		tg.size = Vector2(CARD.x * k, 22)
+		tg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		holder.add_child(tg)
+		var w := make_card(cards[q], false)
+		w.scale = Vector2.ONE * k
+		w.pivot_offset = Vector2.ZERO
+		w.position.y = 26
+		_passthrough(w)
+		holder.add_child(w)
+		grid.add_child(holder)
+		if not can:
+			w.modulate = Color.WHITE if fresh_card else Color(0.62, 0.6, 0.64)
+			holder.mouse_filter = Control.MOUSE_FILTER_PASS
+			continue
+		var j: int = removable.find(q)
+		holder.mouse_filter = Control.MOUSE_FILTER_STOP
+		holder.focus_mode = Control.FOCUS_ALL
+		var cross := _shadowed(_label("✕", 64, Color("#ff6a50"), title_f), 8)
+		cross.size = CARD * k
+		cross.position.y = 26
+		cross.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		cross.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		cross.visible = false
+		holder.add_child(cross)
+		holder.mouse_entered.connect(func():
+			w.modulate = Color(1.2, 0.75, 0.7)
+			cross.visible = true)
+		holder.mouse_exited.connect(func():
+			w.modulate = Color.WHITE
+			cross.visible = false)
+		holder.gui_input.connect(func(e):
+			if ((e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT) or e.is_action_pressed("ui_accept")) and Time.get_ticks_msec() - opened > 300:
+				holder.accept_event()
+				picked.emit(j))
+	var sk := Button.new()
+	sk.text = "Garder les deux"
+	sk.add_theme_font_override("font", title_f)
+	sk.add_theme_font_size_override("font_size", 20)
+	sk.add_theme_color_override("font_color", INK)
+	sk.add_theme_stylebox_override("normal", sb(Color(0.1, 0.09, 0.1, 0.94), GOLD.darkened(0.2), 10, 2, 8))
+	sk.add_theme_stylebox_override("hover", sb(Color(0.2, 0.16, 0.1, 0.96), GOLD, 10, 2, 8))
+	sk.custom_minimum_size = Vector2(260, 50)
+	sk.pressed.connect(func():
+		if Time.get_ticks_msec() - opened > 300:
+			picked.emit(-1))
+	var sc := CenterContainer.new()
+	sc.add_child(sk)
+	box.add_child(sc)
+	overlay.modulate.a = 0
+	create_tween().tween_property(overlay, "modulate:a", 1.0, 0.25)
+	var i: int = await picked
+	_close_overlay()
+	return i
+
+
 func _close_overlay() -> void:
 	_card_peek({}, null)
 	skip_ok = false
@@ -3493,7 +3720,7 @@ func vocation_intro(h: Unit) -> void:
 	var tl := _title("MAÎTRISE II", 50)
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(tl)
-	var sl := _shadowed(_label("%s a assez combattu pour apprendre une deuxième voie" % h.nm, 20, col.lightened(0.35), title_f), 6)
+	var sl := _shadowed(_label(("Départ multiclasse : %s apprend une deuxième voie dès maintenant" if main.multi and main.fights == 0 and not main.tuto else "%s a assez combattu pour apprendre une deuxième voie") % h.nm, 20, col.lightened(0.35), title_f), 6)
 	sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(sl)
 	var txt := RichTextLabel.new()
@@ -3582,7 +3809,7 @@ func vocation_screen(h: Unit, picks: Array) -> int:
 	por.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	hv.add_child(por)
 	for t in [[h.nm, 26, INK, title_f], ["Maîtrise II", 18, GOLD, title_f], [Data.HEROES[h.key].title, 14, col.lightened(0.35), null],
-			["A assez combattu pour apprendre une deuxième classe. Choisis sa voie.", 14, INK, null]]:
+			["Départ multiclasse : choisis sa deuxième classe dès maintenant." if main.multi and main.fights == 0 and not main.tuto else "A assez combattu pour apprendre une deuxième classe. Choisis sa voie.", 14, INK, null]]:
 		var l := _label(t[0], t[1], t[2], t[3])
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

@@ -168,5 +168,19 @@ func _init() -> void:
 		if it.owner != "any" and (Data.item_fits(id, "garde" if it.owner != "garde" else "lame") or not Data.item_fits(id, it.owner)):
 			print("verrou de métier faux : ", id)
 			fails += 1
+	# départ multiclasse : pour chaque paire, 7 cartes, 4 de départ (graine gardée), 2 de la guilde, 1 de la classe apprise
+	var mr := RandomNumberGenerator.new()
+	for k in Data.HEROES:
+		for v in Data.HEROES:
+			if k == v:
+				continue
+			var md: Array = Data.multi_starter(k, v, mr)
+			var st: Array = md.filter(func(ci): return ci.get("st", false))
+			var gc: Array = md.filter(func(ci): return Guildes.CARDS.has(ci.id) and Guildes.CARDS[ci.id].g == Guildes.index(k, v))
+			var vc: Array = md.filter(func(ci): return Data.CARDS.has(ci.id) and Data.CARDS[ci.id].owner == v)
+			var seeds: Array = Data.STARTER[k].filter(func(id): return id.begins_with("c_"))
+			if md.size() != 7 or st.size() != 4 or gc.size() != 2 or vc.size() != 1 or md.any(func(ci): return not ci.get("st", false) and ci.get("h", "") != k) 					or seeds.any(func(id): return not st.any(func(ci): return ci.id == id)):
+				print("paquet multiclasse faux : ", k, "+", v, " ", md.map(func(ci): return ci.id))
+				fails += 1
 	print("OK" if fails == 0 else "ÉCHECS : %d" % fails)
 	quit(1 if fails else 0)

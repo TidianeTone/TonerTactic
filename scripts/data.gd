@@ -650,6 +650,35 @@ const RARITY_COL := {1: Color("#a79d8b"), 2: Color("#6fb0e0"), 3: Color("#ffcf5a
 const RARITY_NAME := {1: "Commune", 2: "Peu commune", 3: "Rare", 4: "Légendaire"}
 
 
+static func multi_starter(k: String, v: String, r: RandomNumberGenerator) -> Array:
+	## Départ multiclasse : le paquet de départ allégé de 2 cartes (doublons d'abord, jamais la graine c_*),
+	## une commune et une peu commune de la guilde, et la graine de la classe apprise. 7 cartes.
+	var own: Array = STARTER[k].duplicate()
+	for n in 2:
+		var drop := -1
+		for q in range(own.size() - 1, -1, -1):
+			if own.count(own[q]) > 1:
+				drop = q
+				break
+		if drop < 0:
+			for q in range(own.size() - 1, -1, -1):
+				if not own[q].begins_with("c_"):
+					drop = q
+					break
+		own.remove_at(drop)
+	var out: Array = own.map(func(id): return {"id": id, "lvl": 1, "st": true})
+	var g := Guildes.index(k, v)
+	for rr in [1, 2]:
+		var pool: Array = Guildes.cards_of(g, [rr])
+		if pool.size() > 0:
+			out.append({"id": pool[r.randi_range(0, pool.size() - 1)], "lvl": 1, "h": k})
+	var seed: Array = STARTER[v].filter(func(id): return id.begins_with("c_"))
+	if seed.is_empty():
+		seed = CARDS.keys().filter(func(id): return CARDS[id].owner == v and CARDS[id].rar == 1 and not STARTER[v].has(id))
+	out.append({"id": seed[r.randi_range(0, seed.size() - 1)], "lvl": 1, "h": k})
+	return out
+
+
 static func starter(party: Array) -> Array:
 	var out: Array = []
 	for k in party:
