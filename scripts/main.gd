@@ -3218,7 +3218,7 @@ func _voctest() -> void:
 	voc_intro_done = true
 	var f2 := func(): await _choose_vocation(h)
 	f2.call()
-	await _frames(90)
+	await get_tree().create_timer(2.5).timeout  # l'écran apparaît en ~1,6 s (fondus en chaîne)
 	_shot(dir, "2_choix")
 	ui.picked.emit(0)
 	await _frames(40)

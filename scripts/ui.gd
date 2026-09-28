@@ -2873,7 +2873,7 @@ func _vignette(title: String, icon: String, text: String, col: Color, tag: Strin
 
 
 # encarts de classe peints (KIE, tools/encarts.py) : marges 9-slice puis bord uni, en pixels de l'image réduite
-const ENCARTS := {"encart_garde": [45, 51, 45, 47, 24, 33, 21, 22], "encart_lame": [42, 54, 42, 42, 7, 23, 7, 9], "encart_oracle": [28, 52, 28, 32, 10, 32, 10, 12], "encart_artificier": [33, 49, 33, 42, 11, 29, 11, 10], "encart_moine": [43, 63, 43, 42, 17, 36, 17, 16], "encart_trappeur": [44, 63, 44, 44, 25, 44, 24, 26], "encart_tidiane": [26, 42, 26, 28, 7, 27, 7, 8], "encart_receleur": [32, 46, 32, 34, 14, 28, 13, 15]}
+const ENCARTS := {"encart_garde": [45, 51, 45, 47, 24, 33, 21, 22], "encart_lame": [42, 54, 42, 42, 7, 23, 7, 9], "encart_oracle": [28, 52, 28, 32, 10, 32, 10, 12], "encart_artificier": [33, 49, 33, 42, 11, 29, 11, 10], "encart_moine": [43, 63, 43, 42, 17, 36, 17, 16], "encart_trappeur": [44, 63, 44, 44, 25, 44, 24, 26], "encart_tidiane": [26, 42, 26, 28, 7, 27, 7, 8], "encart_receleur": [32, 46, 32, 34, 14, 28, 13, 15], "encart_voc_garde": [52, 69, 52, 57, 28, 39, 24, 26], "bandeau_garde": [36, 29, 36, 22, 19, 13, 19, 7], "encart_voc_lame": [30, 66, 30, 42, 15, 33, 14, 14], "bandeau_lame": [38, 45, 38, 36, 28, 7, 29, 9], "encart_voc_oracle": [43, 76, 43, 64, 14, 46, 18, 18], "bandeau_oracle": [38, 24, 38, 24, 10, 9, 9, 9], "encart_voc_artificier": [68, 133, 68, 89, 22, 66, 21, 20], "bandeau_artificier": [39, 22, 39, 22, 10, 9, 10, 9], "encart_voc_moine": [54, 91, 54, 64, 22, 49, 23, 22], "bandeau_moine": [40, 31, 40, 32, 16, 14, 16, 11], "encart_voc_trappeur": [51, 71, 51, 50, 27, 49, 28, 29], "bandeau_trappeur": [37, 42, 37, 38, 33, 11, 34, 11], "encart_voc_tidiane": [39, 73, 39, 32, 10, 43, 11, 11], "bandeau_tidiane": [67, 45, 67, 46, 39, 8, 37, 8], "encart_voc_receleur": [41, 88, 41, 72, 17, 35, 17, 19], "bandeau_receleur": [24, 18, 24, 17, 12, 11, 12, 12]}
 func encart(k: String, pad := 10, fam := "encart") -> StyleBox:
 	## L'encart peint de la classe (9-slice), ou null s'il n'est pas (encore) dans assets/ui. fam : encart (portrait, escouade),
 	## encart_voc (colonne haute, écran de vocation), bandeau (rectangle large, voies de la vocation).
@@ -3553,7 +3553,8 @@ func vocation_screen(h: Unit, picks: Array) -> int:
 				b.add_theme_stylebox_override(st_name, bs)
 		var hb := HBoxContainer.new()
 		hb.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		hb.offset_left = 10
+		hb.offset_left = 30 if ban else 10  # le bandeau peint a des ornements aux deux bouts
+		hb.offset_right = -24 if ban else 0
 		hb.add_theme_constant_override("separation", 12)
 		hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		b.add_child(hb)
