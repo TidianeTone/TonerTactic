@@ -15,9 +15,9 @@ dest_files=["res://.godot/imported/card_g_sap2_sape.png-6b1ff0e1c0457cb8fc8f9002
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.85
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1

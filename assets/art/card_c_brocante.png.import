@@ -15,9 +15,9 @@ dest_files=["res://.godot/imported/card_c_brocante.png-0ae0f2c7e594c0d5d3211a096
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.85
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1

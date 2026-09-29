@@ -15,9 +15,9 @@ dest_files=["res://.godot/imported/card_murmure.png-c5eab427696a06f6f41a6e73dfc1
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.85
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
