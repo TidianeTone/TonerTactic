@@ -54,3 +54,6 @@ __pycache__/
 
 # planches KIE des pactes (sources) : seules les icônes assets/ui/pact_* sont publiées
 blender/kie_ui/pactes/
+
+# planches KIE des salles (sources)
+blender/kie_ui/salles/
