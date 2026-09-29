@@ -22,6 +22,11 @@ K = {
 	"dojo": BOX + "Frame: red lacquered wood and black iron like samurai armor plates, a sword blade lying along the top edge, two small red maple leaves at a corner.",
 	"sourcier": BOX + "Frame: pale sandstone with turquoise water flowing along its edges and small splashes at the corners, a thin water ring above the name tab.",
 	"barre_boss": BAR + "Frame: thick golden bronze tube with rounded end caps, and in the top middle a menacing horned skull with spread dark bat wings sitting on the bar.",
+	"barre_rouleau": ("A single wide horizontal slot-machine reel window frame for a fantasy video game user interface, seen perfectly flat and front-on, centered, "
+		"filling about 85 percent of the image width and about 22 percent of its height. The window opening in the middle is EMPTY and filled with pure flat chroma green #00FF00, "
+		"exactly the same green as the background. Frame: dark iron and warm brass with rivets, a small ornate brass pointer arrow on the left end and one on the right end "
+		"pointing inward at the window, a tiny gear and a little lever on the right side like a fortune machine, hand-painted stylized game art with clean dark outlines. "
+		"The whole background is pure flat chroma green #00FF00. No text, no letters, no symbols inside the window. "),
 	"barre_heros": BAR + "Frame: thin simple bronze tube with small rounded end caps and one tiny gem at the left end, sober.",
 }
 only = sys.argv[1:] or list(K)

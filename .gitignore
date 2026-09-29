@@ -48,3 +48,9 @@ blender/kie_ui/reliques2/
 blender/kie_cartes/planches_c2/
 blender/kie_cartes/planches_c3/
 blender/kie_ui/encarts/
+
+# caches Python
+__pycache__/
+
+# planches KIE des pactes (sources) : seules les icônes assets/ui/pact_* sont publiées
+blender/kie_ui/pactes/

@@ -1247,7 +1247,7 @@ HD = int(os.environ.get("DELVE_HD", "0"))  # 3 : chaque voxel devient 3x3x3 grai
 
 
 def hd(vox, seed, F, chip=True):
-    """Voxel fin : subdivise, écaille les arêtes vives, piquette les faces, varie la teinte grain par grain."""
+    """Voxel fin : subdivise, écaille un peu les arêtes vives, varie la teinte grain par grain."""
     R = random.Random(seed)
     out = {}
     for (x, y, z), c in vox.items():
@@ -1257,9 +1257,7 @@ def hd(vox, seed, F, chip=True):
                 for k in range(F):
                     loc = (i, j, k)
                     on = sum(1 for n in ex if any(n[a] and loc[a] == (F - 1 if n[a] > 0 else 0) for a in range(3)))
-                    if chip and on >= 2 and R.random() < 0.5:
-                        continue
-                    if chip and on == 1 and R.random() < 0.06:
+                    if chip and on >= 3 and R.random() < 0.35:  # seulement les coins : ni trous ni encoches sur les faces et les arêtes (trypophobie)
                         continue
                     out[(x * F + i, y * F + j, z * F + k)] = tone(c, R.uniform(0.9, 1.07)) if chip else c
     return out

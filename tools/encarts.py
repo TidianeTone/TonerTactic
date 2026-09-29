@@ -11,8 +11,10 @@ OUT = os.path.join(ROOT, "assets", "ui")
 d = json.load(open(os.path.join(SRC, "encarts.json")))
 out = {}
 for k, v in d.items():
-	fam = next((f for f in ("encart_voc", "bandeau", "guilde", "encart") if k.startswith(f + "_")), "bouton")
-	s = {"encart": 0.32, "encart_voc": 250.0 / v["size"][0], "guilde": 250.0 / v["size"][0], "bandeau": 108.0 / v["size"][1]}.get(fam, 64.0 / v["size"][1])  # colonne de vocation : à la largeur de la colonne du héros (le cimier ne s'étire pas)  # encarts ~210 px de large, bandeaux 108 px de haut, boutons 64
+	fam = next((f for f in ("encart_voc", "bandeau", "guilde", "encart", "neutre") if k.startswith(f + "_")), "bouton")
+	if fam == "neutre":  # colonne d'annonce de la carte à ~380 px de large ; plaques Risques / Récompenses et panneau générique plus fins
+		fam = "neutre_annonce" if k == "neutre_annonce" else "neutre"
+	s = {"neutre_annonce": 380.0 / v["size"][0], "neutre": 0.34, "encart": 0.32, "encart_voc": 250.0 / v["size"][0], "guilde": 250.0 / v["size"][0], "bandeau": 108.0 / v["size"][1]}.get(fam, 64.0 / v["size"][1])  # colonne de vocation : à la largeur de la colonne du héros (le cimier ne s'étire pas)  # encarts ~210 px de large, bandeaux 108 px de haut, boutons 64
 	im = Image.open(os.path.join(SRC, k + ".png")).convert("RGBA")
 	w, h = round(im.width * s), round(im.height * s)
 	if "--dry" not in sys.argv:

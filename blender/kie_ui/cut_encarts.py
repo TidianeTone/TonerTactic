@@ -15,6 +15,7 @@ MAGENTA = {"moine"}
 # marges relevées à l'œil (encarts/planche_guides) là où la mesure rate : volutes sombres sur fond sombre (lame),
 # perles fines sous les disques de jade (moine). À refaire si le brut change.
 MANUEL = {"lame": (130, 170, 130, 130), "moine": (134, 197, 134, 132),
+	"tidiane": (90, 170, 90, 95), "guilde_artificier_tidiane": (102, 154, 102, 130), "guilde_oracle_tidiane": (78, 110, 78, 130),  # v5 du 29/09 (le peintre), ramené à 633 px de large : les coups de pinceau trompent la mesure
 	"encart_voc_moine": (85, 142, 85, 100)}  # voc : la mesure prend la bande de bas de la moulure pour un ornement
 
 
@@ -215,6 +216,22 @@ if __name__ == "__main__" and sys.argv[1:2] == ["voc"]:
 	planche_voc(meta, out)
 	planche_voc(meta, out.replace(".png", "_guides.png"), True)
 	print(out)
+elif __name__ == "__main__" and sys.argv[1:2] == ["neutres"]:
+	# panneaux neutres (28/09) : neutre_annonce, neutre_panneau, neutre_risque, neutre_gain -> encarts.json
+	meta = json.load(open(os.path.join(D, "encarts.json")))
+	for f in sorted(os.listdir(BRUT)):
+		name = f[:-4]
+		if not name.startswith("neutre_"):
+			continue
+		rgba = key(np.asarray(Image.open(os.path.join(BRUT, f)).convert("RGB")).astype(float), False)
+		Image.fromarray(rgba).save(os.path.join(D, f))
+		meta[name] = measure(rgba, name)
+		if name in ("neutre_risque", "neutre_gain"):
+			# fermoirs à mi-hauteur : marges verticales au ras du bord, la plaque est réduite à la hauteur de son contenu
+			b, mg = meta[name]["bord"], meta[name]["marges"]
+			meta[name]["marges"] = [mg[0], b[1] + 14, mg[2], b[3] + 14]
+		print(name, json.dumps(meta[name]))
+	json.dump(meta, open(os.path.join(D, "encarts.json"), "w"), indent=1)
 elif __name__ == "__main__" and sys.argv[1:2] == ["guildes"]:
 	# guilde_<a>_<b> (un encart par guilde), bouton_action, encart_option : fusionnés dans encarts.json
 	meta = json.load(open(os.path.join(D, "encarts.json")))

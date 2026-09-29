@@ -7550,5 +7550,14 @@
 "🃏 %s : garde %s. %s%s": "🃏 %s: keeps %s. %s%s",
 "🃏 %s — %s": "🃏 %s — %s",
 "🛡 %d": "🛡 %d",
-"🛡 +%d": "🛡 +%d"
+"🛡 +%d": "🛡 +%d",
+"Au tour de la Lame. Les cases éclairées : jusqu'où elle va. Touchez la case marquée, puis retouchez.": "The Blade's turn. The lit tiles: how far she can go. Tap the marked tile, then tap again.",
+"Une carte : l'Estoc, en bas, puis touchez le Moussu. Chaque carte coûte du mana : 3 par tour.": "A card: Thrust, at the bottom, then tap the Mossback. Each card costs mana: 3 per turn.",
+"La flèche dorée : où regarde la Lame. Ils frappent de dos : bouton ⤵ à droite, jusqu'à leur faire face.": "The golden arrow: where the Blade is facing. They strike from behind: the ⤵ button on the right, until they face them.",
+"Aucun Moussu dans son dos : bouton ⤵ à droite, jusqu'à leur faire face.": "No Mossback at her back: the ⤵ button on the right, until they face them.",
+"Un coffre ◆ au contact : touchez-le. L'ouvrir ne coûte rien.": "A chest ◆ next to you: tap it. Opening it is free.",
+"L'Oracle soigne de loin : Sève, puis touchez le Garde blessé.": "The Oracle heals from afar: Sap, then tap the wounded Guard.",
+"Touchez la case marquée (le chemin s'affiche), retouchez : la Lame y va, dans son dos.": "Tap the marked tile (the path shows), tap again: the Blade goes there, behind it.",
+"Eux aussi frappent de dos : bouton ⤵ à droite, jusqu'à leur faire face.": "They backstab too: the ⤵ button on the right, until they face them.",
+"Bouton ⤵ à droite : le héros se tourne d'un quart.": "⤵ button on the right: the hero turns a quarter."
 }

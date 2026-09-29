@@ -23,7 +23,9 @@ const ICON := {
 
 var main: Node3D
 static var big := false     # mode portable : petits textes grossis, boutons tactiles
-var touch_box: HBoxContainer
+var touch_box: VBoxContainer
+var touch_left: HBoxContainer  # rotation de la caméra, en bas à gauche
+var touch_menu: Button  # « Menu » hors combat (en combat : celui du groupe Caméra)
 var dim_alpha := 0.62   # voile des écrans de choix ; plus léger dans les lieux de repos
 var battle: Battle
 var root: Control
@@ -132,17 +134,32 @@ func _toggle_danger() -> void:
 	main.refresh_hover()
 
 
+var face_btn: Button  # le bouton ⤵ du mode portable : la flèche de l'Initiation le montre
 func _build_touch() -> void:
-	## Mode portable : ce que font Échap, Q/E, clic droit et D, à portée de pouce sur le bord droit.
-	touch_box = HBoxContainer.new()
+	## Mode portable : ce que font Q/E, clic droit et D, à portée de pouce. Rotation de la caméra en bas à gauche (pouce gauche,
+	## au-dessus de la pioche) ; orienter, danger, annuler en colonne sur le bord droit, au-dessus de Caméra (pouce droit),
+	## hors de la main. Le menu est le bouton peint « Menu » du groupe Caméra (_build_hud).
+	var left := HBoxContainer.new()
+	left.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	left.position = Vector2(206, -206)
+	left.add_theme_constant_override("separation", 10)
+	left.z_index = 50
+	root.add_child(left)
+	touch_left = left
+	touch_menu = _quick_btn("Menu", "Pause, réglages, bibliothèque", func(): toggle_menu())
+	touch_menu.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	touch_menu.position = Vector2(-196, -170)
+	touch_menu.z_index = 50
+	root.add_child(touch_menu)
+	touch_box = VBoxContainer.new()
 	touch_box.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	touch_box.position = Vector2(-454, -290)  # au-dessus de « Fin du tour » et des boutons Caméra / Commandes
+	touch_box.position = Vector2(-86, -452)
 	touch_box.add_theme_constant_override("separation", 10)
 	touch_box.z_index = 50
 	root.add_child(touch_box)
-	for e in [["☰", "Menu", func(): toggle_menu()], ["↺", "Tourner", func(): main.yaw -= 90.0], ["↻", "Tourner", func(): main.yaw += 90.0],
-			["⤵", "Le héros se tourne d'un quart", func(): battle.turn_facing(1)], ["✕", "Annuler", func(): battle.cancel()],
-			["⚠", "Danger", _toggle_danger]]:
+	for e in [["↺", "Tourner", func(): main.yaw -= 90.0, left], ["↻", "Tourner", func(): main.yaw += 90.0, left],
+			["⤵", "Le héros se tourne d'un quart", func(): battle.turn_facing(1), touch_box], ["⚠", "Danger", _toggle_danger, touch_box],
+			["✕", "Annuler", func(): battle.cancel(), touch_box]]:
 		var b := Button.new()
 		b.text = e[0]
 		b.tooltip_text = e[1]
@@ -155,7 +172,9 @@ func _build_touch() -> void:
 		b.custom_minimum_size = Vector2(64, 64)
 		b.focus_mode = Control.FOCUS_NONE
 		b.pressed.connect(e[2])
-		touch_box.add_child(b)
+		(e[3] as Container).add_child(b)
+		if e[0] == "⤵":
+			face_btn = b
 
 
 # ------------------------------------------------------------------ helpers
@@ -548,7 +567,8 @@ func _build_hud() -> void:
 	quick2.alignment = BoxContainer.ALIGNMENT_END
 	quick2.add_theme_constant_override("separation", 10)
 	hud.add_child(quick2)
-	var kb := _quick_btn("?  Commandes", "Les touches (survol)", func(): show_keys = 0 if show_keys == 1 else 1)
+	# au doigt, pas de touches à montrer : ce bouton ouvre le menu, à portée du pouce droit
+	var kb := _quick_btn("Menu", "Pause, réglages, bibliothèque", func(): toggle_menu()) if big else _quick_btn("?  Commandes", "Les touches (survol)", func(): show_keys = 0 if show_keys == 1 else 1)
 	kb.mouse_entered.connect(func():
 		_keys_hover = true
 		keys_plate.visible = not big)
@@ -589,9 +609,9 @@ func _build_hud() -> void:
 	kv.add_child(grid)
 	for row in [["Clic · reclic", "viser une case · y aller"], ["Clic ennemi", "épingler / retirer sa fiche"], ["Course", "déjà marché ? cases orange : 3 mana"],
 			["Survol", "infos de la case ou de l'objet"], ["Clic droit", "annuler, sinon se tourner · maintenu : caméra"],
-			["ZQSD", "déplacer la caméra (clic droit tenu)"], ["Q / E · molette", "pivoter · zoomer"],
+			["ZQSD" if main.azerty else "WASD", "déplacer la caméra (clic droit tenu)"], ["A / E · molette" if main.azerty else "Q / E · molette", "pivoter · zoomer"],
 			["Espace · ← →", "fin du tour · se tourner"], ["D · L", "zone de danger · journal"], ["Tab · 1 à 9", "recentrer · jouer une carte"],
-			["Alt", "montrer les objets interactifs"], ["P · M · T", "paquet · musique · vue tactique"], ["H · Échap", "cette aide · menu"]]:
+			["Alt", "montrer les objets interactifs"], ["P · M · T · G", "paquet · musique · vue tactique · rendu"], ["H · Échap", "cette aide · menu"]]:
 		var k := _label(row[0], 14, Color("#ffe3a3"), title_f)
 		k.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		grid.add_child(k)
@@ -768,9 +788,14 @@ func banner(title: String, subtitle := "") -> void:
 	tw.tween_property(banner_box, "modulate:a", 0.0, 0.4)
 
 
-func _reopen_menu() -> void:
+var menu_page := ""  # "" : pause ; "gfx" : Graphismes
+
+
+func _reopen_menu(page := "__garder") -> void:
 	## Un réglage changé depuis la pause : le menu se redessine, son libellé dit tout de suite le nouvel état.
+	var keep := menu_page if page == "__garder" else page
 	toggle_menu()
+	menu_page = keep
 	toggle_menu()
 
 
@@ -840,6 +865,10 @@ func coach(kicker: String, text: String, next := false) -> void:
 	coach_next.visible = next
 	if text == "":
 		return
+	# dessinée devant ne suffit pas : l'ordre des nœuds décide qui reçoit le clic. Sans ça, un écran ouvert après
+	# (butin, équipement) prenait le clic de « Suite », et la carte sous la boîte partait avec.
+	coach_plate.move_to_front()
+	coach_plate.mouse_filter = Control.MOUSE_FILTER_STOP if next else Control.MOUSE_FILTER_IGNORE
 	coach_kick.text = kicker.to_upper()
 	coach_txt.text = _hl(text)
 	coach_plate.modulate.a = 0.0
@@ -1064,6 +1093,7 @@ func toggle_menu() -> void:
 	if menu_open():
 		menu.queue_free()
 		menu = null
+		menu_page = ""
 		return
 	menu = Control.new()
 	menu.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -1079,25 +1109,64 @@ func toggle_menu() -> void:
 	box.add_theme_constant_override("separation", 16)
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	menu.add_child(box)
-	var t := _title("PAUSE", 56)
+	var t := _title({"gfx": "GRAPHISMES", "reglages": "RÉGLAGES"}.get(menu_page, "PAUSE"), 56)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(t)
 	var first: Button
-	var entries: Array = [["Reprendre", func(): toggle_menu(), "menu_reprendre"], ["Bibliothèque", func(): library_screen(), "menu_bibliotheque"], ["Mode portable : %s" % ("oui" if big else "non"), func(): main.set_mobile(not big), "menu_portable"], ["Vue tactique : %s" % ("oui" if main.tactic else "non"), func():
-		main.set_tactic(not main.tactic)
-		_reopen_menu(), "menu_tactique"], ["Langue : Français" if not Lang.on else "Language: English", func(): main.set_lang("fr" if Lang.on else "en"), "menu_langue"], ["Abandonner la run", func(): main.abandon(), "menu_abandonner"], ["Quitter le jeu", func(): get_tree().quit(), "menu_quitter"]]
-	if hud.visible and battle.player_turn and not battle.over:
+	# [texte, action, icône, explication au survol]
+	var entries: Array = [
+		["Reprendre", func(): toggle_menu(), "menu_reprendre", "Retour au jeu (Échap)."],
+		["Bibliothèque", func(): library_screen(), "menu_bibliotheque", "Les cartes, reliques, équipements et ennemis déjà croisés."],
+		["Conseils : " + ("oui" if main.coach_on else "non"), func():
+			main.set_coach(not main.coach_on)
+			_reopen_menu(), "menu_bibliotheque", "Une bulle courte la première fois qu'on croise quelque chose de nouveau. Jamais deux fois, rien d'annoncé à l'avance."],
+		["Graphismes", func(): _reopen_menu("gfx"), "menu_tactique", "Qualité du rendu, modèles, décor, particules."],
+		["Réglages", func(): _reopen_menu("reglages"), "menu_portable", "Affichage portable, vue tactique, langue, touches de la caméra."],
+		["Abandonner la run", func(): main.abandon(), "menu_abandonner", "La descente en cours est perdue ; retour au titre."],
+		["Quitter le jeu", func(): get_tree().quit(), "menu_quitter", "La descente est sauvegardée entre deux salles."]]
+	if menu_page == "reglages":
+		entries = [
+			["Mode portable : %s" % ("oui" if big else "non"), func(): main.set_mobile(not big), "menu_portable", "Textes plus grands et boutons tactiles à droite, pour un téléphone ou une tablette."],
+			["Vue tactique : %s" % ("oui" if main.tactic else "non"), func():
+				main.set_tactic(not main.tactic)
+				_reopen_menu(), "menu_tactique", "Caméra de dessus et plateau épuré pour lire le combat. Touche T en combat."],
+			["Langue : Français" if not Lang.on else "Language: English", func(): main.set_lang("fr" if Lang.on else "en"), "menu_langue", "Français ou anglais ; la partie en cours est gardée."],
+			["Caméra : " + ("ZQSD · AZERTY" if main.azerty else "WASD · QWERTY"), func():
+				main.set_azerty(not main.azerty)
+				_reopen_menu(), "menu_portable", "Clic droit maintenu : ces touches déplacent la caméra ; A/E ou Q/E la font pivoter. Selon votre clavier."],
+			["Retour", func(): _reopen_menu(""), "menu_reprendre", ""]]
+	elif menu_page == "gfx":
+		var q: int = main.quality
+		entries = [
+			["Rendu : " + ["portable", "normal", "ultra"][q], func():
+				main.set_gfx("rendu", (q + 1) % 3)
+				_reopen_menu(), "menu_portable", "Portable : le plus léger. Normal : ombres et flou de profondeur. Ultra : lumière globale et brume volumétrique. Touche G."],
+			["Modèles : " + ("HD" if main.gfx_models else "classiques"), func():
+				main.set_gfx("modeles", not main.gfx_models)
+				_reopen_menu(), "menu_bibliotheque", "HD : héros et ennemis en voxel fin, animés. Classiques : les modèles d'origine, plus légers."],
+			["Décor : " + ("HD" if main.gfx_terrain else "classique"), func():
+				main.set_gfx("decor", not main.gfx_terrain)
+				_reopen_menu(), "menu_tactique", "HD : le décor en voxel fin, plus détaillé mais plus lourd. S'applique à la salle suivante."],
+			["Particules : " + ("oui" if Fx.particles else "non"), func():
+				main.set_gfx("particules", not Fx.particles)
+				_reopen_menu(), "menu_langue", "Étincelles, braises, feuilles et poussière des coups."],
+			["Retour", func(): _reopen_menu(""), "menu_reprendre", ""]]
+	elif hud.visible and battle.player_turn and not battle.over:
 		entries.insert(1, ["Passer la salle (debug)", func():
 			toggle_menu()
-			battle.debug_win(), "menu_reprendre"])
+			battle.debug_win(), "menu_reprendre", "Gagne le combat tout de suite (essais)."])
 	for e in entries:
 		var b := _bar_button(e[0], e[2], 440.0, 54.0, 20)
 		b.pressed.connect(e[1])
+		b.tooltip_text = e[3]  # au survol prolongé : ce que fait le réglage
 		var c := CenterContainer.new()
 		c.add_child(b)
 		box.add_child(c)
 		if first == null:
 			first = b
+	if menu_page != "":  # pas de curseur de musique sur les pages Graphismes et Réglages
+		first.grab_focus()
+		return
 	# volume de la musique
 	var vr := HBoxContainer.new()
 	vr.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -1195,7 +1264,7 @@ func _rebuild_heroes(box: VBoxContainer = null, list: Array = [], panels: Dictio
 				if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT and h.alive:
 					battle.pick_hero(h))
 		box.add_child(p)
-		var badge := _panel(p, sb(col, col.lightened(0.4), 8, 2))
+		var badge := _panel(p, sb(col.darkened(0.82), col.lightened(0.4), 8, 2))  # le buste sur le fond sombre du panneau, pas sur un aplat de couleur
 		badge.position = Vector2(12, 13)
 		badge.size = Vector2(52, 52)
 		# le portrait ouvre la fiche : trait, vocation, les quatre pièces d'équipement
@@ -1209,7 +1278,8 @@ func _rebuild_heroes(box: VBoxContainer = null, list: Array = [], panels: Dictio
 				else:
 					hero_sheet(h))
 		var por := TextureRect.new()
-		por.texture = load("res://assets/art/portrait_%s.png" % h.key)
+		por.texture = load(portrait_path(h.key, h.voc))
+		sharp(por, portrait_path(h.key, h.voc))
 		por.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		por.offset_left = 3
 		por.offset_top = 3
@@ -1278,6 +1348,13 @@ func _rebuild_heroes(box: VBoxContainer = null, list: Array = [], panels: Dictio
 		stats.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		p.add_child(stats)
 		panels[h] = {"panel": p, "bar": bar, "hp": hp, "st": st, "col": col, "stats": stats}
+		var ban := encart(h.key, 0, "bandeau")  # le cadre peint de sa classe, comme les voies de la vocation
+		if ban:
+			for c in p.get_children():
+				c.position.x += 16  # place aux ornements des deux bouts
+			p.custom_minimum_size.x = 302
+			p.add_theme_stylebox_override("panel", ban)
+			panels[h]["ban"] = ban
 
 
 func _stats_row(row: HBoxContainer, h: Unit) -> void:
@@ -1309,7 +1386,12 @@ func _refresh_heroes(panels: Dictionary = {}) -> void:
 		boot.visible = h.alive
 		boot.modulate = Color(1, 1, 1, 0.25) if h.moved else Color.WHITE
 		var sel: bool = battle.active == h
-		d.panel.add_theme_stylebox_override("panel", sb(Color(0.1, 0.09, 0.08, 0.88) if sel else Color(0.07, 0.065, 0.07, 0.78), GOLD if sel else d.col.darkened(0.2), 10, 2 if sel else 1, 6))
+		if d.has("ban"):
+			var bs: StyleBoxTexture = d.ban.duplicate()
+			bs.modulate_color = Color(1.4, 1.28, 1.02) if sel else Color(0.92, 0.9, 0.9)  # le héros qui joue s'éclaire
+			d.panel.add_theme_stylebox_override("panel", bs)
+		else:
+			d.panel.add_theme_stylebox_override("panel", sb(Color(0.1, 0.09, 0.08, 0.88) if sel else Color(0.07, 0.065, 0.07, 0.78), GOLD if sel else d.col.darkened(0.2), 10, 2 if sel else 1, 6))
 		d.panel.modulate = Color(1, 1, 1, 1) if h.alive else Color(0.5, 0.5, 0.5, 0.8)
 
 
@@ -1355,6 +1437,7 @@ func refresh() -> void:
 		_rebuild_heroes()
 	_refresh_heroes()
 	_refresh_frieze()
+	refresh_targets()
 	energy_lbl.text = str(battle.energy)
 	var ah: Unit = battle.active
 	bpm_lbl.visible = ah != null and "tidiane" in [ah.key, ah.voc, ah.voc2]
@@ -1554,9 +1637,9 @@ func make_card(ci: Dictionary, see := true) -> Control:
 	var col: Color = Data.CLASS_COLOR[c.cls[0]]
 	var col2: Color = Data.CLASS_COLOR[c.cls[1]] if c.cls.size() > 1 else col
 	var obj: bool = c.has("tool")
-	var rar: int = 4 if c.get("legend", false) else c.get("rar", 1)  # carte-objet de niveau 3 : légendaire
+	var rar: int = 4 if c.get("legend", false) else c.get("rar", 1)  # objet de niveau 3 : légendaire
 	var legend: bool = rar == 4
-	# niveau 3 d'une carte-objet jamais obtenu : on sait qu'il existe, pas ce qu'il fait
+	# niveau 3 d'un objet jamais obtenu : on sait qu'il existe, pas ce qu'il fait
 	var secret: bool = obj and c.get("legend", false) and main and not main.library.has(c.id + "#3")
 	if secret:
 		c.name = "???"
@@ -1633,7 +1716,7 @@ func make_card(ci: Dictionary, see := true) -> Control:
 		var tlab := _label(tname, 10, tc.lightened(0.35), title_f)
 		var tw: float = title_f.get_string_size(tname, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x + 16
 		tp.size = Vector2(tw, 15)
-		tp.position = Vector2((CARD.x - tw) * 0.5, txt_r.position.y - 9)
+		tp.position = Vector2((CARD.x - tw) * 0.5, txt_r.position.y - 33)  # au-dessus de la gemme de rareté
 		tlab.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		tlab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		tlab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -1684,8 +1767,13 @@ func make_card(ci: Dictionary, see := true) -> Control:
 	card.set_meta("live", live)
 	card.tooltip_text = ""
 	card.set_meta("kwcard", ci)
-	var gem := _shadowed(_label("✦" if legend else "◆", 19 if rar >= 3 else 15, Data.RARITY_COL[rar], title_f), 4)
-	gem.position = Vector2(CARD.x * 0.83, CARD_BASE.y * 0.05)
+	# la gemme de rareté, sertie au milieu de la ligne entre l'illustration et le texte (blender/render_gemmes.py)
+	var gem := TextureRect.new()
+	gem.texture = load("res://assets/ui/gemme_%d.png" % clampi(rar, 1, 4))
+	gem.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	gem.size = Vector2(22, 28)
+	gem.position = Vector2((CARD.x - 22) * 0.5, txt_r.position.y - 16)
+	gem.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(gem)
 	if rar > 1:
 		nm.add_theme_color_override("font_color", Data.RARITY_COL[rar].lightened(0.3))
@@ -1695,7 +1783,7 @@ func make_card(ci: Dictionary, see := true) -> Control:
 		var band := _panel(card, sb(Color(0.05, 0.04, 0.05, 0.82), Color(0, 0, 0, 0), 6))
 		band.position = art_r.position + Vector2(4, 22 if lvc >= 2 else 4)
 		band.size = Vector2(art_r.size.x - 8, 17)
-		var btxt: String = "Objet · Éphémère" if c.get("eph", false) else ("Objet · ✦ Inépuisable" if legend else "Objet · %s %d charge%s" % ["◆".repeat(maxi(uses, 1)), uses, "s" if uses > 1 else ""])
+		var btxt: String = "Objet · Éphémère" if c.get("eph", false) else ("Objet · ✦ Inépuisable" if legend else "Objet niv. %d · %d charge%s" % [lvc, uses, "s" if uses > 1 else ""])
 		var bl := _label(btxt, 11, (Data.RARITY_COL[4] if legend else col).lightened(0.35))
 		bl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		bl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1703,11 +1791,11 @@ func make_card(ci: Dictionary, see := true) -> Control:
 		bl.clip_text = true
 		band.add_child(bl)
 	elif c.has("guild") or c.cls[0] != c.owner:
-		# bandeau : la guilde, ou la classe d'origine d'une carte de vocation
+		# bandeau : la guilde, la classe d'origine d'une carte de vocation ou embauchée, ou « Neutre »
 		var band := _panel(card, sb(Color(0.05, 0.04, 0.05, 0.82), Color(0, 0, 0, 0), 6))
 		band.position = art_r.position + Vector2(4, 22 if lvc >= 2 else 4)
 		band.size = Vector2(art_r.size.x - 8, 17)
-		var bl := _label(c.guild if c.has("guild") else "Vocation · " + Data.HEROES[c.cls[0]].name, 11, col2.lightened(0.45) if c.has("guild") else col.lightened(0.4))
+		var bl := _label(c.guild if c.has("guild") else ("Neutre" if c.cls[0] == "neutre" else ("Embauche · " if c.get("cb", false) else "Vocation · ") + Data.HEROES[c.cls[0]].name), 11, col2.lightened(0.45) if c.has("guild") else col.lightened(0.4))
 		bl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		bl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		bl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -2030,13 +2118,69 @@ func _process(dt: float) -> void:
 	_fit_screen(overlay)  # un écran trop haut se réduit (téléphone, ou l'escouade en deux rangées)
 	_fit_screen(sheet_layer)
 	if touch_box:
-		# menu toujours là ; caméra, annuler et danger seulement sur le plateau
-		for i in range(1, touch_box.get_child_count()):
-			touch_box.get_child(i).visible = hud.visible or explore_box.visible
+		# caméra, orienter, annuler et danger seulement sur le plateau ; le menu hors combat, en combat c'est celui du groupe Caméra
+		touch_box.visible = hud.visible or explore_box.visible
+		touch_left.visible = touch_box.visible
+		touch_menu.visible = not hud.visible
 	if not hud.visible:
 		return
 	_layout_hand(dt)
 	_place_tags()
+
+
+var target_box: VBoxContainer  # le menu des cibles de la carte choisie (battle.target_list)
+func refresh_targets() -> void:
+	## Un toucher sur une entrée la vise (aperçu), un second joue la carte ; la plus proche arrive déjà visée.
+	if target_box == null:
+		target_box = VBoxContainer.new()
+		target_box.add_theme_constant_override("separation", 4)
+		target_box.z_index = 40
+		hud.add_child(target_box)
+	for ch in target_box.get_children():
+		target_box.remove_child(ch)  # tout de suite : sinon l'ancienne liste compte encore dans la taille du menu
+		ch.queue_free()
+	var list: Array = battle.target_list() if battle.player_turn and not battle.busy else []
+	target_box.visible = list.size() > 1  # une seule cible : déjà visée, le menu n'apprendrait rien
+	if not target_box.visible:
+		return
+	for t in list:
+		var on: bool = main.hover == t
+		var b := Button.new()
+		b.text = battle.target_label(t)
+		b.tooltip_text = Lang.t("Visée : retoucher pour jouer la carte")
+		b.focus_mode = Control.FOCUS_NONE
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.add_theme_font_size_override("font_size", 16 if not big else 21)
+		b.add_theme_color_override("font_color", INK if battle.unit_at(t) else DIM)
+		for k in ["normal", "hover", "pressed"]:
+			var st := sb(Color(0.08, 0.07, 0.075, 0.88), GOLD if on else GOLD.darkened(0.55), 6, 2 if on else 1, 4)
+			st.content_margin_left = 12
+			st.content_margin_right = 12
+			b.add_theme_stylebox_override(k, st)
+		b.custom_minimum_size = Vector2(250 if not big else 320, 32 if not big else 46)
+		var cell: Vector2i = t
+		b.pressed.connect(func():
+			if main.hover == cell:
+				battle.click(cell)
+			else:
+				main.hover = cell
+				main.refresh_hover())
+		target_box.add_child(b)
+	target_box.reset_size()
+	# à gauche, sous les portraits : la fiche de l'ennemi visé occupe la droite
+	var col := Rect2()
+	# la colonne des portraits et tout ce qui en déborde (cadres, barres, stats)
+	if hero_box and hero_box.is_visible_in_tree():
+		for ch in [hero_box] + hero_box.find_children("*", "Control", true, false):
+			if ch.is_visible_in_tree() and ch.size != Vector2.ZERO:
+				var r: Rect2 = ch.get_global_transform() * Rect2(Vector2.ZERO, ch.size)  # get_global_rect oublie l'échelle
+				col = r if col.size == Vector2.ZERO else col.merge(r)
+	# les portraits débordent de leur boîte (ornements, ligne de stats) : à côté plutôt que dessous
+	target_box.position = Vector2(col.end.x + 20.0, col.position.y) if col.size != Vector2.ZERO else Vector2(24, root.size.y * 0.3)
+
+
+func over_targets(p: Vector2) -> bool:
+	return target_box != null and target_box.visible and target_box.get_global_rect().has_point(p)
 
 
 func over_hand(p: Vector2) -> bool:
@@ -2402,8 +2546,19 @@ func choose(title: String, subtitle: String, options: Array, allow_skip := false
 			w.scale = Vector2.ONE * sc_k
 			w.pivot_offset = Vector2.ZERO
 			holder.add_child(w)
+			if o.get("route", []).size() > 0:
+				# la route de la carte, sous le « Pour ... » : un conseil (suivre sa route, en ouvrir une), détail au survol
+				w.position.y += 26
+				holder.custom_minimum_size.y += 26
+				var rt := _shadowed(_label(o.route[0], 15, GOLD if o.route[1] else Data.CLASS_COLOR.get(Data.holder(o.card), DIM).lightened(0.3)), 5)
+				rt.position = Vector2(0, 34)
+				rt.size = Vector2(CARD.x * sc_k, 22)
+				rt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+				rt.tooltip_text = o.route[2]
+				rt.mouse_filter = Control.MOUSE_FILTER_PASS
+				holder.add_child(rt)
 			if o.has("tag"):
-				w.position.y = 38
+				w.position.y += 38
 				holder.custom_minimum_size.y += 38
 				var gold_tag: bool = o.tag == "Après" or o.tag.begins_with("✦")
 				var tg := _shadowed(_label(o.tag, 22 if o.tag.length() < 16 else (16 if o.tag.length() < 24 else 13), GOLD if gold_tag else DIM, title_f), 6)
@@ -2449,7 +2604,8 @@ func choose(title: String, subtitle: String, options: Array, allow_skip := false
 		team.add_child(team_lbl)
 		for h in main.heroes:
 			var tb := TextureButton.new()
-			tb.texture_normal = load("res://assets/art/portrait_%s.png" % h.key)
+			tb.texture_normal = load(portrait_path(h.key, h.voc))
+			sharp(tb, portrait_path(h.key, h.voc))
 			tb.ignore_texture_size = true
 			tb.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 			tb.custom_minimum_size = Vector2(56, 56)
@@ -2537,7 +2693,10 @@ func _room_stakes(n: Dictionary, last: bool) -> Array:
 		gain.append(["Un équipement", ""])
 		gain.append(["Relique de gardien" if last and main.floor_i < 3 else "Une relique", ""])
 	else:
-		gain.append(["Une carte", "Peu commune ou mieux." if mods.size() > 0 else "Une parmi trois."])
+		if n.get("each", false):
+			gain.append(["Une carte par héros", "Trois de sa classe au choix, pour chacun."])
+		else:
+			gain.append(["Une carte", "Peu commune ou mieux." if mods.size() > 0 else "Une parmi trois."])
 	return [risk, gain]
 
 
@@ -2548,7 +2707,8 @@ func _stakes_box(head: String, lines: Array, col: Color) -> Control:
 	s.content_margin_right = 14
 	s.content_margin_top = 6
 	s.content_margin_bottom = 8
-	p.add_theme_stylebox_override("panel", s)
+	var pe: StyleBox = encart("gain" if head == "RÉCOMPENSES" else "risque", 10, "neutre")  # plaques peintes : liseré or, liseré cramoisi
+	p.add_theme_stylebox_override("panel", pe if pe else s)
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 1)
@@ -2562,9 +2722,12 @@ func _stakes_box(head: String, lines: Array, col: Color) -> Control:
 		if ln[1] != "":
 			var d := _label(ln[1], 14, INK)
 			d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			d.custom_minimum_size.x = 270
+			d.custom_minimum_size.x = 250
 			v.add_child(d)
 	return p
+
+
+const MAP_ICONS := "px"  # marqueurs de la carte d'étage : pixel art posé au sol (son choix du 28/09) ; "vox" hologramme, "" pastilles
 
 
 func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: int, nexts: Array, visited: Array, equip_txt: String, bi := 0) -> int:
@@ -2736,12 +2899,13 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 	ips.content_margin_right = 18
 	ips.content_margin_top = 8
 	ips.content_margin_bottom = 8
-	info_plate.add_theme_stylebox_override("panel", ips)
+	var ipe: StyleBox = encart("annonce", 6, "neutre")  # la colonne peinte (pierre des ruines, feuilles d'automne), comme la boîte du coach
+	info_plate.add_theme_stylebox_override("panel", ipe if ipe else ips)
 	info_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var info := _label("Choisissez la prochaine salle.", 17, INK)
 	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	info.custom_minimum_size.x = colw - 76
+	info.custom_minimum_size.x = colw - (110 if ipe else 76)
 	# l'enjeu d'un combat en deux blocs qu'on lit d'un coup d'œil : ce qu'on risque, ce qu'on gagne
 	var room_title := _label("", 24, GOLD, title_f)
 	room_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -2798,6 +2962,29 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 			b.add_theme_color_override("font_focus_color", Color.WHITE)
 			b.add_theme_color_override("font_disabled_color", INK if done else col.darkened(0.3))
 			b.disabled = not open
+			var ico_p := "res://assets/ui/mapico_%s_%s.png" % [main.args.get("mapicons", MAP_ICONS), n.type]
+			if ResourceLoader.exists(ico_p):
+				# marqueur peint posé au sol (pixel art) ou hologramme voxel, à la place de la pastille
+				var vox: bool = ico_p.contains("_vox_")
+				var isz: Vector2 = (Vector2(84, 99) if vox else Vector2(78, 78)) * (1.25 if n.type == "boss" else 1.0)
+				b.text = ""
+				for stn in ["normal", "hover", "focus", "pressed", "disabled"]:
+					b.add_theme_stylebox_override(stn, StyleBoxEmpty.new())
+				b.size = isz
+				b.position = pos.call(k, i) - Vector2(isz.x * 0.5, isz.y * (0.82 if vox else 0.78))
+				b.pivot_offset = Vector2(isz.x * 0.5, isz.y * 0.8)
+				var ic := TextureRect.new()
+				ic.texture = load(ico_p)
+				ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+				ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+				ic.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+				ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				if not vox:
+					ic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+				ic.modulate = Color.WHITE if open else (Color(0.55, 0.52, 0.5, 0.75) if done else Color(0.7, 0.7, 0.75, 0.8))
+				b.add_child(ic)
+				b.mouse_entered.connect(func(): ic.self_modulate = Color(1.35, 1.3, 1.2))
+				b.mouse_exited.connect(func(): ic.self_modulate = Color.WHITE)
 			var desc: String = n.desc
 			var art_p := "res://assets/ui/salle_%s.png" % ("elite" if n.type == "boss" else n.type)
 			var fight: bool = n.type in ["combat", "elite", "boss"]
@@ -2833,12 +3020,13 @@ func map_screen(title: String, subtitle: String, fmap: Array, step: int, lane: i
 			area.add_child(b)
 	if lane >= 0 and step > 0:
 		# l'escouade : le portrait de tête posé sur la dernière salle
-		var here := _panel(area, sb(GOLD, Color("#fff0c8"), 8, 2, 8))
+		var here := _panel(area, sb(Color(0.07, 0.065, 0.07, 0.85), GOLD, 8, 2, 8))
 		here.size = Vector2(44, 44)
 		here.position = pos.call(step - 1, lane) + Vector2(-22, -80)
 		if main.heroes.size() > 0:
 			var hp := TextureRect.new()
-			hp.texture = load("res://assets/art/portrait_%s.png" % main.heroes[0].key)
+			hp.texture = load(portrait_path(main.heroes[0].key, main.heroes[0].voc))
+			sharp(hp, portrait_path(main.heroes[0].key, main.heroes[0].voc))
 			hp.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			hp.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			hp.offset_left = 3
@@ -2978,7 +3166,7 @@ const ITEM_RAR := ["", "Commune", "Peu commune", "Rare", "Mythique"]
 const PARCH_INK := Color("#2b1a0e")
 
 
-func _vignette(title: String, icon: String, text: String, col: Color, tag: String, seen := true, w := 176.0, glyph := "", chips: Array = []) -> Control:
+func _vignette(title: String, icon: String, text: String, col: Color, tag: String, seen := true, w := 176.0, glyph := "", chips: Array = [], rar := 0) -> Control:
 	## Vignette façon étal (reliques, équipement) : nom au-dessus, cadre de cuir, rareté dans le bandeau,
 	## grande icône, gemme de rareté sur le séparateur, effet en dessous. Pas encore vue : silhouette et « ??? ».
 	var h := w * 609.0 / 360.0
@@ -3028,14 +3216,26 @@ func _vignette(title: String, icon: String, text: String, col: Color, tag: Strin
 		gl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		gl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		put.call(gl, 0.14, 0.15, 0.86, 0.52)
-	var gem := Panel.new()
-	gem.add_theme_stylebox_override("panel", sb(col if seen else DIM.darkened(0.3), Color(0.12, 0.06, 0.02), 2, 2))
-	gem.size = Vector2(14, 14)
-	gem.pivot_offset = Vector2(7, 7)
-	gem.rotation = PI / 4
-	gem.position = Vector2(w * 0.5 - 7, h * 0.557 - 7)
-	gem.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card.add_child(gem)
+	if rar > 0 and ResourceLoader.exists("res://assets/ui/gemme_%d.png" % clampi(rar, 1, 4)):
+		# la gemme de rareté des cartes, sertie sur le séparateur
+		var gt := TextureRect.new()
+		gt.texture = load("res://assets/ui/gemme_%d.png" % clampi(rar, 1, 4))
+		gt.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		gt.size = Vector2(22, 26) * clampf(w / 170.0, 0.8, 1.2)
+		gt.position = Vector2(w * 0.5, h * 0.557) - gt.size * 0.5
+		gt.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if not seen:
+			gt.modulate = Color(0.4, 0.3, 0.25, 0.5)
+		card.add_child(gt)
+	else:
+		var gem := Panel.new()
+		gem.add_theme_stylebox_override("panel", sb(col if seen else DIM.darkened(0.3), Color(0.12, 0.06, 0.02), 2, 2))
+		gem.size = Vector2(14, 14)
+		gem.pivot_offset = Vector2(7, 7)
+		gem.rotation = PI / 4
+		gem.position = Vector2(w * 0.5 - 7, h * 0.557 - 7)
+		gem.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		card.add_child(gem)
 	var y0 := 0.6
 	if seen and not chips.is_empty():
 		# bonus chiffrés : idéogrammes et valeurs, sous la gemme
@@ -3050,7 +3250,14 @@ func _vignette(title: String, icon: String, text: String, col: Color, tag: Strin
 			cr.add_child(ch)
 		put.call(cr, 0.06, 0.59, 0.94, 0.68)
 		y0 = 0.69
-	var tx := _label(text if seen else "", 12 if w >= 140 else 10, PARCH_INK)
+	# le texte tient toujours dans le cuir : la taille descend jusqu'à ce qu'il rentre
+	var fs := 13 if w >= 160 else (12 if w >= 140 else 10)
+	var tw := 0.78 * w
+	var th := (0.95 - y0) * h
+	var bf: Font = body_f
+	while fs > 8 and seen and bf.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_CENTER, tw, fs).y > th:
+		fs -= 1
+	var tx := _label(text if seen else "", fs, PARCH_INK)
 	tx.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	tx.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	put.call(tx, 0.11, y0, 0.89, 0.95)
@@ -3058,7 +3265,26 @@ func _vignette(title: String, icon: String, text: String, col: Color, tag: Strin
 
 
 # encarts de classe peints (KIE, tools/encarts.py) : marges 9-slice puis bord uni, en pixels de l'image réduite
-const ENCARTS := {"encart_garde": [45, 51, 45, 47, 24, 33, 21, 22], "encart_lame": [42, 54, 42, 42, 7, 23, 7, 9], "encart_oracle": [28, 52, 28, 32, 10, 32, 10, 12], "encart_artificier": [33, 49, 33, 42, 11, 29, 11, 10], "encart_moine": [43, 63, 43, 42, 17, 36, 17, 16], "encart_trappeur": [44, 63, 44, 44, 25, 44, 24, 26], "encart_tidiane": [29, 54, 29, 30, 14, 38, 13, 15], "encart_receleur": [32, 46, 32, 34, 14, 28, 13, 15], "encart_voc_garde": [52, 69, 52, 57, 28, 39, 24, 26], "bandeau_garde": [36, 29, 36, 22, 19, 13, 19, 7], "encart_voc_lame": [30, 66, 30, 42, 15, 33, 14, 14], "bandeau_lame": [38, 45, 38, 36, 28, 7, 29, 9], "encart_voc_oracle": [43, 76, 43, 64, 14, 46, 18, 18], "bandeau_oracle": [38, 24, 38, 24, 10, 9, 9, 9], "encart_voc_artificier": [68, 133, 68, 89, 22, 66, 21, 20], "bandeau_artificier": [39, 22, 39, 22, 10, 9, 10, 9], "encart_voc_moine": [54, 91, 54, 64, 22, 49, 23, 22], "bandeau_moine": [40, 31, 40, 32, 16, 14, 16, 11], "encart_voc_trappeur": [51, 71, 51, 50, 27, 49, 28, 29], "bandeau_trappeur": [37, 42, 37, 38, 33, 11, 34, 11], "encart_voc_tidiane": [57, 91, 57, 75, 19, 50, 18, 21], "bandeau_tidiane": [33, 45, 33, 45, 21, 7, 20, 6], "encart_voc_receleur": [41, 88, 41, 72, 17, 35, 17, 19], "bandeau_receleur": [24, 18, 24, 17, 12, 11, 12, 12], "bouton_action": [40, 19, 40, 19, 32, 13, 32, 13], "encart_option": [23, 19, 23, 24, 7, 5, 6, 6], "guilde_artificier_receleur": [40, 95, 40, 72, 18, 42, 17, 19], "guilde_artificier_trappeur": [47, 88, 47, 48, 22, 48, 22, 24], "guilde_lame_oracle": [40, 57, 40, 40, 15, 34, 15, 14], "guilde_garde_artificier": [64, 73, 64, 83, 32, 48, 33, 24], "guilde_garde_lame": [39, 70, 39, 33, 23, 48, 21, 25], "guilde_garde_moine": [49, 56, 49, 45, 24, 38, 22, 22], "guilde_garde_oracle": [55, 67, 55, 58, 29, 45, 24, 23], "guilde_garde_receleur": [49, 65, 49, 24, 21, 32, 20, 18], "guilde_garde_tidiane": [47, 97, 47, 76, 24, 50, 24, 20], "guilde_garde_trappeur": [49, 70, 49, 50, 29, 51, 28, 28], "guilde_lame_artificier": [38, 87, 38, 48, 21, 61, 21, 22], "guilde_artificier_moine": [56, 87, 56, 57, 19, 47, 20, 21], "guilde_artificier_tidiane": [65, 98, 65, 83, 19, 47, 20, 18], "guilde_lame_moine": [60, 64, 60, 60, 21, 43, 20, 22], "guilde_lame_receleur": [37, 83, 37, 65, 19, 36, 19, 18], "guilde_lame_tidiane": [28, 67, 28, 51, 17, 49, 18, 21], "guilde_lame_trappeur": [34, 67, 34, 62, 17, 45, 16, 15], "guilde_moine_receleur": [43, 87, 43, 24, 21, 49, 22, 19], "guilde_moine_tidiane": [68, 104, 68, 138, 18, 51, 18, 21], "guilde_moine_trappeur": [54, 74, 54, 50, 26, 45, 26, 29], "guilde_oracle_artificier": [41, 78, 41, 65, 22, 61, 22, 21], "guilde_oracle_moine": [58, 76, 58, 61, 22, 45, 23, 23], "guilde_oracle_receleur": [42, 59, 42, 25, 19, 35, 17, 19], "guilde_oracle_tidiane": [50, 70, 50, 83, 20, 41, 20, 20], "guilde_oracle_trappeur": [55, 90, 55, 60, 27, 51, 27, 27], "guilde_tidiane_receleur": [46, 108, 46, 92, 18, 54, 18, 19], "guilde_trappeur_receleur": [53, 78, 53, 25, 24, 54, 24, 19], "guilde_trappeur_tidiane": [54, 101, 54, 83, 29, 52, 29, 19], "encart_vocl_garde": [52, 69, 52, 57, 28, 39, 24, 26, 20, 4], "encart_vocl_lame": [30, 66, 30, 42, 15, 33, 14, 14, 20, 1], "encart_vocl_oracle": [43, 76, 43, 64, 14, 46, 18, 18, 35, 4], "encart_vocl_artificier": [68, 133, 68, 89, 22, 66, 21, 20, 45, 4], "encart_vocl_moine": [54, 91, 54, 64, 22, 49, 23, 22, 30, 4], "encart_vocl_trappeur": [51, 71, 51, 50, 27, 49, 28, 29, 35, 15], "encart_vocl_tidiane": [57, 91, 57, 75, 19, 50, 18, 21, 32, 1], "encart_vocl_receleur": [41, 88, 41, 72, 17, 35, 17, 19, 20, 2], "guildel_artificier_receleur": [40, 95, 40, 72, 18, 42, 17, 19, 26, 3], "guildel_artificier_trappeur": [47, 88, 47, 48, 22, 48, 22, 24, 34, 9], "guildel_lame_oracle": [40, 57, 40, 40, 15, 34, 15, 14, 21, 1], "guildel_garde_artificier": [64, 73, 64, 83, 32, 48, 33, 24, 25, 1], "guildel_garde_lame": [39, 70, 39, 33, 23, 48, 21, 25, 27, 0], "guildel_garde_moine": [49, 56, 49, 45, 24, 38, 22, 22, 19, 3], "guildel_garde_oracle": [55, 67, 55, 58, 29, 45, 24, 23, 26, 2], "guildel_garde_receleur": [49, 65, 49, 24, 21, 32, 20, 18, 16, 2], "guildel_garde_tidiane": [47, 97, 47, 76, 24, 50, 24, 20, 32, 1], "guildel_garde_trappeur": [49, 70, 49, 50, 29, 51, 28, 28, 35, 14], "guildel_lame_artificier": [38, 87, 38, 48, 21, 61, 21, 22, 43, 0], "guildel_artificier_moine": [56, 87, 56, 57, 19, 47, 20, 21, 31, 4], "guildel_artificier_tidiane": [65, 98, 65, 83, 19, 47, 20, 18, 33, 1], "guildel_lame_moine": [60, 64, 60, 60, 21, 43, 20, 22, 24, 2], "guildel_lame_receleur": [37, 83, 37, 65, 19, 36, 19, 18, 21, 1], "guildel_lame_tidiane": [28, 67, 28, 51, 17, 49, 18, 21, 32, 1], "guildel_lame_trappeur": [34, 67, 34, 62, 17, 45, 16, 15, 31, 1], "guildel_moine_receleur": [43, 87, 43, 24, 21, 49, 22, 19, 31, 2], "guildel_moine_tidiane": [68, 104, 68, 138, 18, 51, 18, 21, 33, 1], "guildel_moine_trappeur": [54, 74, 54, 50, 26, 45, 26, 29, 31, 15], "guildel_oracle_artificier": [41, 78, 41, 65, 22, 61, 22, 21, 40, 4], "guildel_oracle_moine": [58, 76, 58, 61, 22, 45, 23, 23, 27, 4], "guildel_oracle_receleur": [42, 59, 42, 25, 19, 35, 17, 19, 20, 3], "guildel_oracle_tidiane": [50, 70, 50, 83, 20, 41, 20, 20, 23, 1], "guildel_oracle_trappeur": [55, 90, 55, 60, 27, 51, 27, 27, 41, 14], "guildel_tidiane_receleur": [46, 108, 46, 92, 18, 54, 18, 19, 35, 3], "guildel_trappeur_receleur": [53, 78, 53, 25, 24, 54, 24, 19, 38, 2], "guildel_trappeur_tidiane": [54, 101, 54, 83, 29, 52, 29, 19, 36, 1]}
+const ENCARTS := {"encart_garde": [45, 51, 45, 47, 24, 33, 21, 22], "encart_lame": [42, 54, 42, 42, 7, 23, 7, 9], "encart_oracle": [28, 52, 28, 32, 10, 32, 10, 12], "encart_artificier": [33, 49, 33, 42, 11, 29, 11, 10], "encart_moine": [43, 63, 43, 42, 17, 36, 17, 16], "encart_trappeur": [44, 63, 44, 44, 25, 44, 24, 26], "encart_tidiane": [29, 54, 29, 30, 14, 38, 13, 15], "encart_receleur": [32, 46, 32, 34, 14, 28, 13, 15], "encart_voc_garde": [52, 69, 52, 57, 28, 39, 24, 26], "bandeau_garde": [36, 29, 36, 22, 19, 13, 19, 7], "encart_voc_lame": [30, 66, 30, 42, 15, 33, 14, 14], "bandeau_lame": [38, 45, 38, 36, 28, 7, 29, 9], "encart_voc_oracle": [43, 76, 43, 64, 14, 46, 18, 18], "bandeau_oracle": [38, 24, 38, 24, 10, 9, 9, 9], "encart_voc_artificier": [68, 133, 68, 89, 22, 66, 21, 20], "bandeau_artificier": [39, 22, 39, 22, 10, 9, 10, 9], "encart_voc_moine": [54, 91, 54, 64, 22, 49, 23, 22], "bandeau_moine": [40, 31, 40, 32, 16, 14, 16, 11], "encart_voc_trappeur": [51, 71, 51, 50, 27, 49, 28, 29], "bandeau_trappeur": [37, 42, 37, 38, 33, 11, 34, 11], "encart_voc_tidiane": [57, 91, 57, 75, 19, 50, 18, 21], "bandeau_tidiane": [33, 45, 33, 45, 21, 7, 20, 6], "encart_voc_receleur": [41, 88, 41, 72, 17, 35, 17, 19], "bandeau_receleur": [24, 18, 24, 17, 12, 11, 12, 12], "bouton_action": [40, 19, 40, 19, 32, 13, 32, 13], "encart_option": [23, 19, 23, 24, 7, 5, 6, 6], "guilde_artificier_receleur": [40, 95, 40, 72, 18, 42, 17, 19], "guilde_artificier_trappeur": [47, 88, 47, 48, 22, 48, 22, 24], "guilde_lame_oracle": [40, 57, 40, 40, 15, 34, 15, 14], "guilde_garde_artificier": [64, 73, 64, 83, 32, 48, 33, 24], "guilde_garde_lame": [39, 70, 39, 33, 23, 48, 21, 25], "guilde_garde_moine": [49, 56, 49, 45, 24, 38, 22, 22], "guilde_garde_oracle": [55, 67, 55, 58, 29, 45, 24, 23], "guilde_garde_receleur": [49, 65, 49, 24, 21, 32, 20, 18], "guilde_garde_tidiane": [47, 97, 47, 76, 24, 50, 24, 20], "guilde_garde_trappeur": [49, 70, 49, 50, 29, 51, 28, 28], "guilde_lame_artificier": [38, 87, 38, 48, 21, 61, 21, 22], "guilde_artificier_moine": [56, 87, 56, 57, 19, 47, 20, 21], "guilde_artificier_tidiane": [65, 98, 65, 83, 19, 47, 20, 18], "guilde_lame_moine": [60, 64, 60, 60, 21, 43, 20, 22], "guilde_lame_receleur": [37, 83, 37, 65, 19, 36, 19, 18], "guilde_lame_tidiane": [28, 67, 28, 51, 17, 49, 18, 21], "guilde_lame_trappeur": [34, 67, 34, 62, 17, 45, 16, 15], "guilde_moine_receleur": [43, 87, 43, 24, 21, 49, 22, 19], "guilde_moine_tidiane": [68, 104, 68, 138, 18, 51, 18, 21], "guilde_moine_trappeur": [54, 74, 54, 50, 26, 45, 26, 29], "guilde_oracle_artificier": [41, 78, 41, 65, 22, 61, 22, 21], "guilde_oracle_moine": [58, 76, 58, 61, 22, 45, 23, 23], "guilde_oracle_receleur": [42, 59, 42, 25, 19, 35, 17, 19], "guilde_oracle_tidiane": [50, 70, 50, 83, 20, 41, 20, 20], "guilde_oracle_trappeur": [55, 90, 55, 60, 27, 51, 27, 27], "guilde_tidiane_receleur": [46, 108, 46, 92, 18, 54, 18, 19], "guilde_trappeur_receleur": [53, 78, 53, 25, 24, 54, 24, 19], "guilde_trappeur_tidiane": [54, 101, 54, 83, 29, 52, 29, 19], "neutre_annonce": [98, 95, 98, 80, 31, 39, 32, 27], "neutre_gain": [30, 16, 30, 15, 17, 11, 16, 11], "neutre_panneau": [55, 58, 55, 53, 22, 22, 22, 20], "neutre_risque": [38, 19, 38, 19, 17, 14, 17, 14], "neutre_ennemi": [30, 26, 30, 25, 17, 15, 18, 15], "encart_vocl_garde": [52, 69, 52, 57, 28, 39, 24, 26, 20, 4], "encart_vocl_lame": [30, 66, 30, 42, 15, 33, 14, 14, 20, 1], "encart_vocl_oracle": [43, 76, 43, 64, 14, 46, 18, 18, 35, 4], "encart_vocl_artificier": [68, 133, 68, 89, 22, 66, 21, 20, 45, 4], "encart_vocl_moine": [54, 91, 54, 64, 22, 49, 23, 22, 30, 4], "encart_vocl_trappeur": [51, 71, 51, 50, 27, 49, 28, 29, 35, 15], "encart_vocl_tidiane": [57, 91, 57, 75, 19, 50, 18, 21, 32, 1], "encart_vocl_receleur": [41, 88, 41, 72, 17, 35, 17, 19, 20, 2], "guildel_artificier_receleur": [40, 95, 40, 72, 18, 42, 17, 19, 26, 3], "guildel_artificier_trappeur": [47, 88, 47, 48, 22, 48, 22, 24, 34, 9], "guildel_lame_oracle": [40, 57, 40, 40, 15, 34, 15, 14, 21, 1], "guildel_garde_artificier": [64, 73, 64, 83, 32, 48, 33, 24, 25, 1], "guildel_garde_lame": [39, 70, 39, 33, 23, 48, 21, 25, 27, 0], "guildel_garde_moine": [49, 56, 49, 45, 24, 38, 22, 22, 19, 3], "guildel_garde_oracle": [55, 67, 55, 58, 29, 45, 24, 23, 26, 2], "guildel_garde_receleur": [49, 65, 49, 24, 21, 32, 20, 18, 16, 2], "guildel_garde_tidiane": [47, 97, 47, 76, 24, 50, 24, 20, 32, 1], "guildel_garde_trappeur": [49, 70, 49, 50, 29, 51, 28, 28, 35, 14], "guildel_lame_artificier": [38, 87, 38, 48, 21, 61, 21, 22, 43, 0], "guildel_artificier_moine": [56, 87, 56, 57, 19, 47, 20, 21, 31, 4], "guildel_artificier_tidiane": [65, 98, 65, 83, 19, 47, 20, 18, 33, 1], "guildel_lame_moine": [60, 64, 60, 60, 21, 43, 20, 22, 24, 2], "guildel_lame_receleur": [37, 83, 37, 65, 19, 36, 19, 18, 21, 1], "guildel_lame_tidiane": [28, 67, 28, 51, 17, 49, 18, 21, 32, 1], "guildel_lame_trappeur": [34, 67, 34, 62, 17, 45, 16, 15, 31, 1], "guildel_moine_receleur": [43, 87, 43, 24, 21, 49, 22, 19, 31, 2], "guildel_moine_tidiane": [68, 104, 68, 138, 18, 51, 18, 21, 33, 1], "guildel_moine_trappeur": [54, 74, 54, 50, 26, 45, 26, 29, 31, 15], "guildel_oracle_artificier": [41, 78, 41, 65, 22, 61, 22, 21, 40, 4], "guildel_oracle_moine": [58, 76, 58, 61, 22, 45, 23, 23, 27, 4], "guildel_oracle_receleur": [42, 59, 42, 25, 19, 35, 17, 19, 20, 3], "guildel_oracle_tidiane": [50, 70, 50, 83, 20, 41, 20, 20, 23, 1], "guildel_oracle_trappeur": [55, 90, 55, 60, 27, 51, 27, 27, 41, 14], "guildel_tidiane_receleur": [46, 108, 46, 92, 18, 54, 18, 19, 35, 3], "guildel_trappeur_receleur": [53, 78, 53, 25, 24, 54, 24, 19, 38, 2], "guildel_trappeur_tidiane": [54, 101, 54, 83, 29, 52, 29, 19, 36, 1]}
+static func portrait_path(k: String, voc := "") -> String:
+	## Le portrait d'un héros : le buste pixel art sans fond (tools/bustes.py, sa vocation d'abord) ; à défaut le rendu du modèle HD
+	## (blender/render_portraits_hd.py) en PC ultra, sinon l'ancien. Un buste s'affiche sans lissage : voir UI.sharp().
+	for f in (["%s__%s" % [k, voc]] if voc != "" else []) + [k]:
+		if ResourceLoader.exists("res://assets/ui/buste_%s.png" % f):
+			return "res://assets/ui/buste_%s.png" % f
+	if Board.hd_units:
+		for f in (["%s__%s" % [k, voc]] if voc != "" else []) + [k]:
+			if ResourceLoader.exists(Board.hd_dir + "portrait_%s.png" % f):
+				return Board.hd_dir + "portrait_%s.png" % f
+	return "res://assets/art/portrait_%s.png" % k
+
+
+static func sharp(c: CanvasItem, path: String) -> void:
+	## Le pixel art (bustes, icônes) s'agrandit sans lissage.
+	if "buste_" in path or "icon_" in path:
+		c.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+
+
 func encart(k: String, pad := 10, fam := "encart") -> StyleBox:
 	## L'encart peint de la classe (9-slice), ou null s'il n'est pas (encore) dans assets/ui. fam : encart (portrait, escouade),
 	## encart_voc (colonne haute, écran de vocation), encart_vocl (la même, élargie : panneau d'aperçu), bandeau (rectangle large, voies de la vocation).
@@ -3091,7 +3317,7 @@ func _option(o: Dictionary, w := 250) -> Control:
 	var col: Color = o.get("color", GOLD)
 	if o.has("vignette"):
 		# équipement et reliques : la vignette de l'étal
-		var vg := _vignette(o.title, o.get("image", ""), o.get("text", ""), col, o.vignette, true, 118.0 if w < 170 else clampf(w * 0.8, 140.0, 190.0), o.get("glyph", ""), o.get("chips", []))
+		var vg := _vignette(o.title, o.get("image", ""), o.get("text", ""), col, o.vignette, true, 136.0 if w < 170 else clampf(w * 0.9, 160.0, 210.0), o.get("glyph", ""), o.get("chips", []), int(o.get("rar", 0)))
 		if o.get("dim", false):
 			vg.modulate = Color(0.55, 0.55, 0.6)
 		var pc := PanelContainer.new()
@@ -3131,6 +3357,7 @@ func _option(o: Dictionary, w := 250) -> Control:
 	elif o.has("image") and ResourceLoader.exists(o.image):
 		var im := TextureRect.new()
 		im.texture = load(o.image)
+		sharp(im, o.image)
 		im.custom_minimum_size = Vector2(56, 56) if small else (Vector2(78, 78) if o.has("cards") else Vector2(110, 110))
 		im.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		im.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -3257,14 +3484,17 @@ func fight_summary(title: String, rows: Array, loot: Array, can_equip: bool) -> 
 		st.content_margin_right = 16
 		st.content_margin_top = 14
 		st.content_margin_bottom = 14
-		p.add_theme_stylebox_override("panel", st)
-		p.custom_minimum_size = Vector2(250, 0)
+		var pe: StyleBox = encart(r.key, 8)  # l'encart peint de sa classe, comme à l'escouade
+		p.add_theme_stylebox_override("panel", pe if pe else st)
+		p.custom_minimum_size = Vector2(270 if pe else 250, 0)
 		hr.add_child(p)
 		var v := VBoxContainer.new()
 		v.add_theme_constant_override("separation", 8)
 		p.add_child(v)
 		var im := TextureRect.new()
-		im.texture = load("res://assets/art/portrait_%s.png" % r.key)
+		var bp := "res://assets/ui/buste_%s.png" % r.key
+		im.texture = load(portrait_path(r.key, r.get("voc", "")))  # le buste pixel art, sans fond uni
+		im.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		im.custom_minimum_size = Vector2(90, 90)
 		im.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		im.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -3289,6 +3519,9 @@ func fight_summary(title: String, rows: Array, loot: Array, can_equip: bool) -> 
 		nx.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		v.add_child(nx)
 	var lp := _plate(box)
+	var lpe: StyleBox = encart("panneau", 4, "neutre")  # le butin dans le panneau peint neutre
+	if lpe:
+		lp.add_theme_stylebox_override("panel", lpe)
 	lp.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	var lv := VBoxContainer.new()
 	lv.add_theme_constant_override("separation", 4)
@@ -3315,6 +3548,13 @@ func fight_summary(title: String, rows: Array, loot: Array, can_equip: bool) -> 
 		var gv := VBoxContainer.new()
 		gv.alignment = BoxContainer.ALIGNMENT_CENTER
 		gv.add_theme_constant_override("separation", 0)
+		var gi := TextureRect.new()
+		gi.texture = load("res://assets/ui/icon_or.png")
+		sharp(gi, "icon_or")
+		gi.custom_minimum_size = Vector2(64, 64)
+		gi.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		gi.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		gv.add_child(gi)
 		for t in [["+%d" % gold_sum, 40], ["or", 18]]:
 			var gl := _shadowed(_label(t[0], t[1], Color("#ffd46a"), title_f), 5)
 			gl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -3324,7 +3564,7 @@ func fight_summary(title: String, rows: Array, loot: Array, can_equip: bool) -> 
 		lr.add_child(mini_cards(cards, 0.5))
 	for e in items:
 		var it: Dictionary = Data.ITEMS[e.item]
-		lr.add_child(_vignette(it.name, Data.item_icon(e.item), Data.item_passives(e.item), ITEM_COL[it.rarity], "Équipé" if e.get("eq", false) else Data.item_slot(e.item), true, 104.0))
+		lr.add_child(_vignette(it.name, Data.item_icon(e.item), Data.item_passives(e.item), ITEM_COL[it.rarity], "Équipé" if e.get("eq", false) else Data.item_slot(e.item), true, 124.0, "", [], int(it.rarity)))
 	if loot.is_empty():
 		lv.add_child(_label("Rien de plus que la gloire.", 16, INK))
 	var br := HBoxContainer.new()
@@ -3404,8 +3644,9 @@ func multi_decks(rows: Array) -> void:
 		v.add_child(top)
 		for k in [r.key, r.voc]:
 			var pt := TextureRect.new()
-			pt.texture = load("res://assets/art/portrait_%s.png" % k)
-			pt.custom_minimum_size = Vector2(64, 64)
+			pt.texture = load("res://assets/ui/buste_%s.png" % k) if ResourceLoader.exists("res://assets/ui/buste_%s.png" % k) else load(portrait_path(k))  # buste pixel art
+			pt.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			pt.custom_minimum_size = Vector2(84, 84)
 			pt.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			pt.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 			top.add_child(pt)
@@ -3662,6 +3903,7 @@ func title_screen(resume := "") -> int:
 	entries.append([1, "Bibliothèque  %d / %d" % [main.cards_known(), Data.all_ids().size()], "bibliotheque", "Toutes les cartes déjà croisées, par classe et par guilde."])
 	if OS.has_feature("web") or main.args.has("portable"):
 		entries.append([4, "Mode portable : %s" % ("oui" if big else "non"), "portable", "Interface agrandie, gestes tactiles (deux doigts : zoom et rotation ; toucher = viser, retoucher = valider), rendu allégé."])
+	entries.append([8, "Graphismes minimum : %s" % ("oui" if main.gfx_min else "non"), "tactique", "Pour les tablettes et les petites machines : rendu le plus léger, sans particules, et vue tactique de dessus en combat."])
 	entries.append([5, "Langue : Français" if not Lang.on else "Language: English", "langue", "Français / English : les textes changent tout de suite, la partie en cours reste."])
 	if not OS.has_feature("web"):
 		entries.append([7, "Quitter", "quitter", "Refermer l'Écluse."])
@@ -3720,6 +3962,9 @@ func title_screen(resume := "") -> int:
 		k = await picked
 		if k == 4:
 			main.set_mobile(not big)
+			return -1
+		if k == 8:
+			main.set_minimum(not main.gfx_min)
 			return -1
 		if k == 5:
 			main.set_lang("fr" if Lang.on else "en")
@@ -3798,7 +4043,7 @@ func _fill_gear(list: VBoxContainer) -> void:
 		for id in ids:
 			var it: Dictionary = Data.ITEMS[id]
 			var seen: bool = main.library.has("item:" + id)
-			var tile := _vignette(it.name, Data.item_icon(id), Data.item_passives(id), ITEM_COL[it.rarity], Data.item_slot(id), seen, 150.0, "", Data.item_chips(id))
+			var tile := _vignette(it.name, Data.item_icon(id), Data.item_passives(id), ITEM_COL[it.rarity], Data.item_slot(id), seen, 176.0, "", Data.item_chips(id), int(it.rarity))
 			tile.mouse_filter = Control.MOUSE_FILTER_PASS
 			flow.add_child(tile)
 
@@ -3869,6 +4114,335 @@ func vocation_intro(h: Unit) -> void:
 	_close_overlay()
 
 
+static func model_path(k: String, voc := "") -> String:
+	## Le modèle d'un héros (sa vocation d'abord, sinon celui de la classe apprise) ; la version HD en PC ultra.
+	var files: Array = (["u_%s__%s.glb" % [k, voc], "u_%s.glb" % voc] if voc != "" else []) + ["u_%s.glb" % k]
+	for f in files:
+		for dir in ([Board.hd_dir, "res://assets/"] if Board.hd_units else ["res://assets/"]):
+			if ResourceLoader.exists(dir + f):
+				return dir + f
+	return "res://assets/u_%s.glb" % k
+
+
+func _figurine(sz: Vector2) -> SubViewportContainer:
+	## Une vitrine : la figurine en pied sur son socle, sous un projecteur, qui tourne lentement. _figurine_show y pose un modèle.
+	var svc := SubViewportContainer.new()
+	svc.stretch = true
+	svc.custom_minimum_size = sz
+	svc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sv := SubViewport.new()
+	sv.own_world_3d = true
+	sv.transparent_bg = true
+	sv.msaa_3d = Viewport.MSAA_4X
+	svc.add_child(sv)
+	var env := WorldEnvironment.new()
+	env.environment = Environment.new()
+	env.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.environment.ambient_light_color = Color(0.85, 0.82, 0.9)
+	env.environment.ambient_light_energy = 0.8
+	sv.add_child(env)
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-35, 30, 0)
+	sun.light_energy = 1.5
+	sun.light_color = Color(1.0, 0.9, 0.78)
+	sv.add_child(sun)
+	var rim := DirectionalLight3D.new()  # contre-jour froid : la silhouette se détache du fond
+	rim.rotation_degrees = Vector3(-20, 200, 0)
+	rim.light_energy = 1.1
+	rim.light_color = Color(0.6, 0.7, 1.0)
+	sv.add_child(rim)
+	var cam3 := Camera3D.new()
+	cam3.fov = 26.0
+	sv.add_child(cam3)
+	var pivot := Node3D.new()
+	sv.add_child(pivot)
+	# le socle façon figurine peinte : bois sombre et liseré doré
+	var sock := MeshInstance3D.new()
+	var cy := CylinderMesh.new()
+	cy.top_radius = 0.34
+	cy.bottom_radius = 0.37
+	cy.height = 0.08
+	sock.mesh = cy
+	var sm := StandardMaterial3D.new()
+	sm.albedo_color = Color(0.13, 0.1, 0.08)
+	sm.roughness = 0.55
+	sock.material_override = sm
+	sock.position.y = -0.04
+	pivot.add_child(sock)
+	var lip := MeshInstance3D.new()
+	var lc := CylinderMesh.new()
+	lc.top_radius = 0.345
+	lc.bottom_radius = 0.345
+	lc.height = 0.012
+	lip.mesh = lc
+	var lm := StandardMaterial3D.new()
+	lm.albedo_color = GOLD
+	lm.metallic = 0.8
+	lm.roughness = 0.35
+	lip.material_override = lm
+	lip.position.y = -0.004
+	pivot.add_child(lip)
+	var spin := pivot.create_tween().set_loops()
+	spin.tween_property(pivot, "rotation:y", TAU, 9.0).from(0.0)
+	var model := Node3D.new()
+	pivot.add_child(model)
+	# figurine d'une unité de haut, socle compris : cadrée pour la vitrine quelle que soit sa taille d'origine
+	var vis_h := 1.25
+	cam3.look_at_from_position(Vector3(0, 0.62, (vis_h * 0.5) / tan(deg_to_rad(cam3.fov * 0.5))), Vector3(0, 0.5, 0))
+	svc.set_meta("model", model)
+	return svc
+
+
+func _figurine_show(svc: SubViewportContainer, path: String) -> void:
+	if not is_instance_valid(svc) or not svc.is_inside_tree():
+		return  # l'écran a été refait entre-temps (appel différé)
+	var model: Node3D = svc.get_meta("model")
+	for ch in model.get_children():
+		ch.queue_free()
+	var inst: Node3D = load(path).instantiate()
+	model.add_child(inst)
+	var anim := inst.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	if anim and anim.has_animation("idle"):
+		anim.get_animation("idle").loop_mode = Animation.LOOP_LINEAR
+		anim.play("idle")
+	var box3 := AABB()
+	var first := true
+	var to_inst := inst.global_transform.affine_inverse()
+	for mi in inst.find_children("*", "MeshInstance3D", true, false):
+		mi.material_override = Board.material("glow_unit" if String(mi.name).ends_with("glow") else "unit")
+		if not mi.visible or String(mi.name).begins_with("Icosphere"):
+			continue
+		# un maillage skinné (HD Mixamo) porte l'échelle 0,01 de l'armature que le skinning ignore : sa boîte locale est la bonne
+		var bb: AABB = mi.get_aabb() if mi.skin else to_inst * mi.global_transform * mi.get_aabb()
+		box3 = bb if first else box3.merge(bb)
+		first = false
+	var k := 1.0 / maxf(maxf(box3.size.y, 0.3), 1.25 * maxf(box3.size.x, box3.size.z))  # un gros barda tourne sans sortir de la vitrine
+	inst.scale = Vector3.ONE * k
+	inst.position = Vector3(-box3.get_center().x, -box3.position.y, -box3.get_center().z) * k
+
+
+func card_anatomy(ci: Dictionary) -> void:
+	## Initiation : une carte en grand, chaque repère légendé et relié à sa place (coût, niveau, type, rareté, effet, bulles).
+	_close_overlay()
+	overlay = Control.new()
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.z_index = 100
+	root.add_child(overlay)
+	var dim := ColorRect.new()
+	dim.color = Color(0.03, 0.03, 0.04, 0.84)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(dim)
+	var box := VBoxContainer.new()
+	box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 14)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(box)
+	var tl := _title("LIRE UNE CARTE", 44)
+	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(tl)
+	const K := 1.6
+	const SIDE := 330.0
+	var stage := Control.new()
+	stage.custom_minimum_size = Vector2(CARD.x * K + SIDE * 2 + 80, CARD.y * K + 20)
+	stage.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(stage)
+	var cx := SIDE + 40.0
+	var card := make_card(ci, false)
+	card.pivot_offset = Vector2.ZERO  # make_card pivote au pied de la carte : ici, les repères se calculent depuis son coin
+	card.scale = Vector2.ONE * K
+	card.position = Vector2(cx, 10)
+	_passthrough(card)
+	stage.add_child(card)
+	var ty: float = CARD_BASE.y * F_TXT.position.y
+	# [titre, explication, point sur la carte (repère de la carte), côté]
+	var notes: Array = [
+		["Coût", "Le mana dépensé. Chaque héros en a 3 à son tour.", Vector2(14, 14), -1],
+		["Effet", "Ce que fait la carte. Les idéogrammes sont des mots-clés : survolez-les pour le détail.", Vector2(60, ty + 44), -1],
+		["Dégâts", "Rouge : dégâts. Vert : soin. Bleu : armure. « 4×2 » : deux coups de 4.", Vector2(10, CARD.y - 14), -1],
+		["Niveau", "Pastilles : le niveau de la carte, de 1 à 3. La forge le fait monter.", Vector2(CARD.x * 0.8, CARD_BASE.y * F_ART.position.y + 12), 1],
+		["Type", "Attaque, Technique, Mouvement ou Pouvoir (un effet qui dure tout le combat).", Vector2(CARD.x * 0.62, ty - 26), 1],
+		["Rareté", "La gemme : grise commune, bleue peu commune, violette rare, orange légendaire.", Vector2(CARD.x * 0.5 + 8, ty - 3), 1],
+		["Portée", "En cases, depuis le héros. « 2-4 » : ni trop près, ni trop loin.", Vector2(CARD.x - 10, CARD.y - 14), 1]]
+	var ys := {-1: 20.0, 1: 20.0}
+	for n in notes:
+		var side: int = n[3]
+		var p := PanelContainer.new()
+		var ps: StyleBox = encart("gain", 8, "neutre")
+		p.add_theme_stylebox_override("panel", ps if ps else sb(Color(0.06, 0.05, 0.06, 0.92), GOLD.darkened(0.3), 8, 1, 6))
+		p.custom_minimum_size.x = SIDE
+		p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var v := VBoxContainer.new()
+		v.add_theme_constant_override("separation", 0)
+		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		p.add_child(v)
+		v.add_child(_label(n[0], 18, GOLD, title_f))
+		var d := _label(n[1], 14, INK)
+		d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		d.custom_minimum_size.x = SIDE - 60
+		v.add_child(d)
+		stage.add_child(p)
+		p.reset_size()
+		var ph: float = p.get_combined_minimum_size().y
+		p.position = Vector2(0.0 if side < 0 else cx + CARD.x * K + 80, ys[side])
+		ys[side] += ph + 12
+		var ln := Line2D.new()
+		ln.width = 2.0
+		ln.default_color = GOLD.lightened(0.1)
+		var from := p.position + Vector2(SIDE if side < 0 else 0.0, ph * 0.5)
+		var to := card.position + (n[2] as Vector2) * K
+		ln.points = PackedVector2Array([from, from + Vector2(24 * -side, 0), to])
+		stage.add_child(ln)
+		var dot := Panel.new()
+		dot.add_theme_stylebox_override("panel", sb(GOLD, Color(0.1, 0.06, 0.02), 6, 2))
+		dot.size = Vector2(12, 12)
+		dot.position = to - Vector2(6, 6)
+		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		stage.add_child(dot)
+	var go := _bar_button("Compris", "menu_reprendre", 300.0, 52.0, 20)
+	go.pressed.connect(func(): picked.emit(0))
+	var gc := CenterContainer.new()
+	gc.add_child(go)
+	box.add_child(gc)
+	_fit_screen.call_deferred(overlay)  # un écran de téléphone : tout rentre en hauteur
+	await picked
+	_close_overlay()
+
+
+func squad_screen(keys: Array, took: Array) -> int:
+	## L'escouade : huit bustes en pixel art dans l'encart de leur classe ; au survol, la fiche à droite comme à la vocation
+	## (encart large, figurine sur socle, PV et déplacement, rôle, trois cartes). Un clic prend ou rend le héros ; -1 = au hasard.
+	_close_overlay()
+	overlay = Control.new()
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.z_index = 100
+	root.add_child(overlay)
+	var dim := ColorRect.new()
+	dim.color = Color(0.03, 0.03, 0.04, 0.78)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(dim)
+	var box := VBoxContainer.new()
+	box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 10)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(box)
+	var tl := _title("L'ESCOUADE", 46)
+	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(tl)
+	var sub := _label("Choisissez trois héros (%d / 3)%s" % [took.size(), ("  ·  " + ", ".join(took.map(func(k): return Data.HEROES[k].name))) if took.size() > 0 else ""], 17, INK)
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(sub)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 26)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(row)
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 12)
+	row.add_child(grid)
+	# la fiche du héros survolé
+	var pv := PanelContainer.new()
+	pv.custom_minimum_size = Vector2(620, 0)
+	row.add_child(pv)
+	var pvh := HBoxContainer.new()
+	pvh.add_theme_constant_override("separation", 10)
+	pv.add_child(pvh)
+	var fig := _figurine(Vector2(260, 420))
+	pvh.add_child(fig)
+	var pvv := VBoxContainer.new()
+	pvv.add_theme_constant_override("separation", 8)
+	pvv.alignment = BoxContainer.ALIGNMENT_CENTER
+	pvv.custom_minimum_size.x = 320
+	pvh.add_child(pvv)
+	var show := func(k: String) -> void:
+		var d: Dictionary = Data.HEROES[k]
+		var kc: Color = Data.CLASS_COLOR[k]
+		var st: StyleBox = encart(k, 14, "encart_vocl")
+		pv.add_theme_stylebox_override("panel", st if st else sb(Color(0.06, 0.05, 0.06, 0.95), kc, 12, 2, 12))
+		_figurine_show(fig, model_path(k))
+		for ch in pvv.get_children():
+			ch.queue_free()
+		for t in [[d.name, 30, kc.lightened(0.35), title_f], [d.title, 15, GOLD, null]]:
+			var l := _label(t[0], t[1], t[2], t[3])
+			l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			pvv.add_child(l)
+		var chips := HBoxContainer.new()
+		chips.alignment = BoxContainer.ALIGNMENT_CENTER
+		chips.add_theme_constant_override("separation", 18)
+		chips.add_child(_chip("pv", str(d.hp), Color.WHITE, 26))
+		chips.add_child(_chip("deplacement", str(d.move), Color.WHITE, 26))
+		pvv.add_child(chips)
+		var role := _label(d.role, 15, INK)
+		role.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		role.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		pvv.add_child(role)
+		pvv.add_child(mini_cards(main.emblem_cards(k), 0.5))
+	var btns: Array = []
+	for n in keys.size():
+		var k: String = keys[n]
+		var kc: Color = Data.CLASS_COLOR[k]
+		var on: bool = took.has(k)
+		var b := Button.new()
+		b.custom_minimum_size = Vector2(150, 176)
+		var st: StyleBox = encart(k, 4)
+		for sn in ["normal", "hover", "focus", "pressed"]:
+			var bs: StyleBox = st.duplicate() if st else sb(Color(0.07, 0.06, 0.07, 0.95), kc.darkened(0.2), 12, 2, 8)
+			if bs is StyleBoxTexture:
+				bs.modulate_color = Color(1.3, 1.22, 1.1) if sn in ["hover", "focus"] else Color.WHITE
+			b.add_theme_stylebox_override(sn, bs)
+		var v := VBoxContainer.new()
+		v.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		v.offset_top = 14
+		v.offset_bottom = -12
+		v.alignment = BoxContainer.ALIGNMENT_CENTER
+		v.add_theme_constant_override("separation", 2)
+		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(v)
+		var bu := TextureRect.new()
+		var bp := "res://assets/ui/buste_%s.png" % k
+		bu.texture = load(bp) if ResourceLoader.exists(bp) else load(portrait_path(k))
+		bu.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST  # pixel art : agrandi sans lissage
+		bu.custom_minimum_size = Vector2(112, 112)
+		bu.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		bu.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		bu.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		bu.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		v.add_child(bu)
+		var nm := _label(("✓ " if on else "") + Data.HEROES[k].name, 19, GOLD if on else kc.lightened(0.35), title_f)
+		nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		v.add_child(nm)
+		if on:
+			b.self_modulate = Color(1.0, 0.92, 0.6)  # pris : le cadre se dore
+		var nn := n
+		b.mouse_entered.connect(func(): show.call(k))
+		b.focus_entered.connect(func(): show.call(k))
+		b.pressed.connect(func(): picked.emit(nn))
+		grid.add_child(b)
+		btns.append(b)
+	var rnd := _bar_button("Compléter au hasard", "", 360.0, 52.0, 20)
+	rnd.pressed.connect(func(): picked.emit(-1))
+	var rc := CenterContainer.new()
+	rc.add_child(rnd)
+	box.add_child(rc)
+	var first: String = keys[0]
+	for k in keys:
+		if not took.has(k):
+			first = k
+			break
+	show.call(first)
+	overlay.modulate.a = 0
+	create_tween().tween_property(overlay, "modulate:a", 1.0, 0.25)
+	if Input.get_connected_joypads().size() > 0:
+		btns[keys.find(first)].grab_focus.call_deferred()
+	var i: int = await picked
+	_close_overlay()
+	return i
+
+
 func vocation_screen(h: Unit, picks: Array) -> int:
 	## D'abord le héros qui monte, puis ses trois voies. Au survol d'une voie : le modèle hybride qui tourne,
 	## la guilde, sa règle et la philosophie de la classe apprise.
@@ -3909,12 +4483,9 @@ func vocation_screen(h: Unit, picks: Array) -> int:
 	var hv := VBoxContainer.new()
 	hv.add_theme_constant_override("separation", 6)
 	hp.add_child(hv)
-	var por := TextureRect.new()
-	por.texture = load("res://assets/art/portrait_%s.png" % h.key)
-	por.custom_minimum_size = Vector2(170, 170)
-	por.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	por.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	hv.add_child(por)
+	var fig := _figurine(Vector2(218, 300))
+	hv.add_child(fig)
+	_figurine_show(fig, model_path(h.key, h.voc))
 	for t in [[h.nm, 26, INK, title_f], ["Maîtrise II", 18, GOLD, title_f], [Data.HEROES[h.key].title, 14, col.lightened(0.35), null],
 			["Départ multiclasse : choisis sa deuxième classe dès maintenant." if main.multi and main.fights == 0 and not main.tuto else "A assez combattu pour apprendre une deuxième classe. Choisis sa voie.", 14, INK, null]]:
 		var l := _label(t[0], t[1], t[2], t[3])
@@ -3932,40 +4503,19 @@ func vocation_screen(h: Unit, picks: Array) -> int:
 	var ps := sb(Color(0.06, 0.05, 0.06, 0.95), GOLD.darkened(0.3), 12, 2, 12)
 	ps.set_content_margin_all(14)
 	pv.add_theme_stylebox_override("panel", ps)
-	pv.custom_minimum_size = Vector2(420, 0)
+	pv.custom_minimum_size = Vector2(640, 0)
 	row.add_child(pv)
+	var pvh := HBoxContainer.new()
+	pvh.add_theme_constant_override("separation", 10)
+	pv.add_child(pvh)
+	var vit := _figurine(Vector2(300, 440))
+	pvh.add_child(vit)
 	var pvv := VBoxContainer.new()
 	pvv.add_theme_constant_override("separation", 6)
-	pv.add_child(pvv)
-	var svc := SubViewportContainer.new()
-	svc.stretch = true
-	svc.custom_minimum_size = Vector2(392, 240)
-	svc.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	pvv.add_child(svc)
-	var sv := SubViewport.new()
-	sv.own_world_3d = true
-	sv.transparent_bg = true
-	sv.msaa_3d = Viewport.MSAA_4X
-	svc.add_child(sv)
-	var env := WorldEnvironment.new()
-	env.environment = Environment.new()
-	env.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.environment.ambient_light_color = Color(0.85, 0.82, 0.9)
-	env.environment.ambient_light_energy = 0.9
-	sv.add_child(env)
-	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-35, 35, 0)
-	sun.light_energy = 1.6
-	sv.add_child(sun)
-	var cam3 := Camera3D.new()
-	cam3.fov = 30.0
-	sv.add_child(cam3)
-	var pivot := Node3D.new()
-	sv.add_child(pivot)
-	var spin := pivot.create_tween().set_loops()
-	spin.tween_property(pivot, "rotation:y", TAU, 7.0).from(0.0)
+	pvv.alignment = BoxContainer.ALIGNMENT_CENTER
+	pvh.add_child(pvv)
 	var info := _rich("", 15, INK)
-	info.custom_minimum_size = Vector2(392, 0)
+	info.custom_minimum_size = Vector2(330, 0)
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	pvv.add_child(info)
 	var ex_slot := VBoxContainer.new()  # trois cartes de la guilde, en miniature (en grand au survol)
@@ -3978,24 +4528,7 @@ func vocation_screen(h: Unit, picks: Array) -> int:
 		ex_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		ex_slot.add_child(ex_lbl)
 		ex_slot.add_child(mini_cards(main.guild_emblems(Guildes.index(h.key, k)), 0.4))
-		for ch in pivot.get_children():
-			ch.queue_free()
-		var path := "res://assets/u_%s__%s.glb" % [h.key, k]
-		if not ResourceLoader.exists(path):
-			path = "res://assets/u_%s.glb" % k
-		var inst: Node3D = load(path).instantiate()
-		pivot.add_child(inst)
-		var box3 := AABB()
-		var first := true
-		for mi in inst.find_children("*", "MeshInstance3D", true, false):
-			mi.material_override = Board.material("glow_unit" if String(mi.name).ends_with("glow") else "unit")
-			var bb: AABB = mi.get_aabb()
-			box3 = bb if first else box3.merge(bb)
-			first = false
-		var ht: float = maxf(box3.size.y, 0.5)
-		inst.position = Vector3(-box3.get_center().x, -box3.position.y, -box3.get_center().z)
-		cam3.position = Vector3(0, ht * 0.6, ht * 2.2)
-		cam3.look_at(Vector3(0, ht * 0.5, 0))
+		_figurine_show(vit, model_path(h.key, k))
 		var g := Guildes.index(h.key, k)
 		var gl: Array = Guildes.LIST[g]
 		var pve: StyleBox = encart("%s_%s" % [gl[0], gl[1]], 10, "guildel")  # l'encart de la guilde de la voie survolée (sinon de sa classe), élargi : 9-slice sans étirer le cimier
@@ -4030,7 +4563,8 @@ func vocation_screen(h: Unit, picks: Array) -> int:
 		hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		b.add_child(hb)
 		var pt := TextureRect.new()
-		pt.texture = load("res://assets/art/portrait_%s.png" % k)
+		pt.texture = load(portrait_path(k))
+		sharp(pt, portrait_path(k))
 		pt.custom_minimum_size = Vector2(86, 86)
 		pt.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		pt.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -4140,13 +4674,15 @@ func library_screen() -> void:
 			flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			list.add_child(flow)
 			for r in ids:
-				flow.add_child(_vignette(Data.RELICS[r].name, "res://assets/ui/relic_%s.png" % r, Data.RELICS[r].text, GOLD, Data.RELIC_TIERS[Data.RELICS[r].tier], main.library.has("relic:" + r), 150.0, Data.RELICS[r].glyph))
+				flow.add_child(_vignette(Data.RELICS[r].name, "res://assets/ui/relic_%s.png" % r, Data.RELICS[r].text, GOLD, Data.RELIC_TIERS[Data.RELICS[r].tier], main.library.has("relic:" + r), 176.0, Data.RELICS[r].glyph, [], {"commune": 1, "peu_commune": 2, "rare": 3, "boss": 4}.get(Data.RELICS[r].tier, 0)))
 			return
 		if which == "classes":
 			for k in Data.HEROES:
 				var ids: Array = Data.CARDS.keys().filter(func(id): return Data.CARDS[id].owner == k)
 				ids.sort_custom(func(a, b): return Data.CARDS[a].rar < Data.CARDS[b].rar)
 				sections.append([Data.HEROES[k].name, Data.HEROES[k].role, Data.CLASS_COLOR[k], ids])
+			var qids: Array = Data.CARDS.keys().filter(func(id): return Data.CARDS[id].owner == "neutre")
+			sections.append(["Neutres", "Sans classe : n'importe quel héros les joue.", Data.CLASS_COLOR["neutre"], qids])
 		else:
 			for g in Guildes.LIST.size():
 				var gl: Array = Guildes.LIST[g]
@@ -4230,7 +4766,7 @@ func _lib_focus(id: String) -> void:
 	var tl := _title(d.name, 38)
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(tl)
-	# le niveau 3 d'une carte-objet est un secret : absent tant qu'on ne l'a pas forgé
+	# le niveau 3 d'un objet est un secret : absent tant qu'on ne l'a pas forgé
 	var top: int = 2 if d.has("tool") and not main.library.has(id + "#3") else Data.MAX_LVL
 	var sl := _shadowed(_label("%s · les niveaux de la forge" % Data.RARITY_NAME[d.get("rar", 1)], 16, Data.RARITY_COL[d.get("rar", 1)]), 5)
 	sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -4298,14 +4834,21 @@ func _fill_bestiary(list: VBoxContainer) -> void:
 		st.content_margin_right = 12
 		st.content_margin_top = 10
 		st.content_margin_bottom = 10
-		p.add_theme_stylebox_override("panel", st)
-		p.custom_minimum_size = Vector2(430, 0)
+		var pe: StyleBox = encart("ennemi", 6, "neutre")  # l'encart peint de la faction ennemie (fer rouillé, crânes cornus)
+		if pe and boss:
+			pe = pe.duplicate()
+			pe.modulate_color = Color(1.25, 1.1, 0.85)  # un gardien : le cadre s'échauffe
+		p.add_theme_stylebox_override("panel", pe if pe else st)
+		p.custom_minimum_size = Vector2(450 if pe else 430, 0)
 		flow.add_child(p)
 		var hb := HBoxContainer.new()
 		hb.add_theme_constant_override("separation", 12)
 		p.add_child(hb)
 		var por := TextureRect.new()
 		var pp := "res://assets/art/foe_%s.png" % k
+		var hp := Board.hd_dir + "foe_%s.png" % str(f.get("model", k))  # le modèle HD, rendu en pied (blender/render_portraits_hd.py --foes)
+		if Board.hd_units and ResourceLoader.exists(hp):
+			pp = hp
 		if ResourceLoader.exists(pp):
 			por.texture = load(pp)
 		por.custom_minimum_size = Vector2(120, 120)
@@ -4361,6 +4904,95 @@ func _clicked(e: InputEvent) -> bool:
 	return e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT
 
 
+func _hero_doll(h: Unit, hover: Callable, click: Callable) -> PanelContainer:
+	## Le héros dans l'encart de sa classe : nom, trait, figurine au centre, arme et armure à gauche, bottes et bijou
+	## à droite, stats dessous. Partagé par l'écran d'équipement et la fiche du héros.
+	## hover(id, slot) au survol d'un emplacement, click(id, slot) au clic ; id vaut "" pour un emplacement libre.
+	var col: Color = Data.CLASS_COLOR[h.key]
+	var p := PanelContainer.new()
+	p.custom_minimum_size = Vector2(300, 0)
+	var ps := sb(Color(0.08, 0.07, 0.075, 0.92), col, 14, 2, 12)
+	ps.content_margin_left = 16
+	ps.content_margin_right = 16
+	ps.content_margin_top = 14
+	ps.content_margin_bottom = 14
+	var pe: StyleBox = encart(h.key, 8)  # l'encart peint de sa classe
+	p.add_theme_stylebox_override("panel", pe if pe else ps)
+	p.mouse_filter = Control.MOUSE_FILTER_STOP
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_child(v)
+	var nm := _label(h.nm, 24, col.lightened(0.35), title_f)
+	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(nm)
+	var tr := _label(Data.TRAITS[h.trait_id].name if Data.TRAITS.has(h.trait_id) else "", 13, col.lightened(0.5))
+	tr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(tr)
+	var doll := HBoxContainer.new()
+	doll.alignment = BoxContainer.ALIGNMENT_CENTER
+	doll.add_theme_constant_override("separation", 6)
+	doll.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(doll)
+	var cols: Array = []
+	for k in 2:
+		var cv2 := VBoxContainer.new()
+		cv2.alignment = BoxContainer.ALIGNMENT_CENTER
+		cv2.add_theme_constant_override("separation", 10)
+		cv2.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cols.append(cv2)
+	# la figurine du héros sur son socle (modèle HD, sa vocation comprise), comme à la vocation
+	var fig := _figurine(Vector2(120, 180) if big else Vector2(150, 225))
+	_figurine_show.call_deferred(fig, model_path(h.key, h.voc))
+	doll.add_child(cols[0])
+	doll.add_child(fig)
+	doll.add_child(cols[1])
+	const GHOST := {"arme": "epee", "armure": "plastron", "bottes": "bottes", "bijou": "amulette"}
+	for si in Data.SLOTS.size():
+		var slot: String = Data.SLOTS[si]
+		var id: String = h.equip.get(slot, "")
+		var cap: String = Data.SLOT_NAME[slot]
+		var sv := VBoxContainer.new()
+		sv.add_theme_constant_override("separation", 2)
+		sv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var t := _gear_tile(id, 60, ITEM_COL[Data.ITEMS[id].rarity] if id != "" else DIM.darkened(0.5))
+		if id == "":
+			# emplacement libre : l'ombre de ce qu'il attend
+			var gh := TextureRect.new()
+			gh.texture = load("res://assets/ui/gear_%s.png" % GHOST[slot])
+			gh.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			gh.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			gh.modulate = Color(1, 1, 1, 0.18)
+			gh.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			t.add_child(gh)
+		t.mouse_entered.connect(func(): hover.call(id, slot))
+		t.gui_input.connect(func(e):
+			if _clicked(e):
+				t.accept_event()
+				click.call(id, slot))
+		sv.add_child(t)
+		var sl2 := _label(cap if id == "" else Data.ITEMS[id].name, 12, DIM if id == "" else ITEM_COL[Data.ITEMS[id].rarity].lightened(0.3))
+		sl2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		sl2.custom_minimum_size.x = 76
+		sl2.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		sv.add_child(sl2)
+		cols[0 if si < 2 else 1].add_child(sv)
+	var st := HBoxContainer.new()
+	st.alignment = BoxContainer.ALIGNMENT_CENTER
+	st.add_theme_constant_override("separation", 12)
+	st.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	st.add_child(_chip("pv", "%d/%d" % [h.hp, h.max_hp], Color.WHITE, 20))
+	st.add_child(_chip("deplacement", str(h.move), Color.WHITE, 20))
+	st.add_child(_chip("attaque", "+%d" % h.gear_dmg(), Color(1.0, 0.75, 0.6), 20))
+	if h.block0() > 0:
+		st.add_child(_chip("armure", "+%d" % h.block0(), Color(0.8, 0.9, 1.0), 20))
+	var ex := _label(Lang.mark(Lang.t("saut %d · vit. %d") % [h.jump, h.speed]), 14, DIM)
+	ex.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	st.add_child(ex)
+	v.add_child(st)
+	return p
+
+
 func equipment_screen(heroes: Array, bag: Array) -> Dictionary:
 	## Héros et emplacements en haut, sac en dessous, fiche de l'objet survolé en bas.
 	## Un objet du sac puis un héros : équipe. Un emplacement occupé : retire. Rend {} pour fermer.
@@ -4400,7 +5032,8 @@ func equipment_screen(heroes: Array, bag: Array) -> Dictionary:
 	cs.content_margin_right = 22
 	cs.content_margin_top = 12
 	cs.content_margin_bottom = 12
-	card.add_theme_stylebox_override("panel", cs)
+	var ce: StyleBox = encart("gain", 14, "neutre")  # la fiche de l'objet : plaque peinte neutre
+	card.add_theme_stylebox_override("panel", ce if ce else cs)
 	card.custom_minimum_size = Vector2(760, 124)
 	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var ch := HBoxContainer.new()
@@ -4454,97 +5087,17 @@ func equipment_screen(heroes: Array, bag: Array) -> Dictionary:
 	box.add_child(hrow)
 	for hi in heroes.size():
 		var h: Unit = heroes[hi]
-		var col: Color = Data.CLASS_COLOR[h.key]
-		var p := PanelContainer.new()
-		p.custom_minimum_size = Vector2(300, 0)
-		var ps := sb(Color(0.08, 0.07, 0.075, 0.92), col, 14, 2, 12)
-		ps.content_margin_left = 16
-		ps.content_margin_right = 16
-		ps.content_margin_top = 14
-		ps.content_margin_bottom = 14
-		p.add_theme_stylebox_override("panel", ps)
-		p.mouse_filter = Control.MOUSE_FILTER_STOP
-		var v := VBoxContainer.new()
-		v.add_theme_constant_override("separation", 10)
-		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		p.add_child(v)
-		# la poupée : le héros en pied au centre, arme et armure à gauche, bottes et bijou à droite
-		var nm := _label(h.nm, 24, col.lightened(0.35), title_f)
-		nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		v.add_child(nm)
-		var tr := _label(Data.TRAITS[h.trait_id].name if Data.TRAITS.has(h.trait_id) else "", 13, col.lightened(0.5))
-		tr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		v.add_child(tr)
-		var doll := HBoxContainer.new()
-		doll.alignment = BoxContainer.ALIGNMENT_CENTER
-		doll.add_theme_constant_override("separation", 6)
-		doll.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		v.add_child(doll)
-		var cols: Array = []
-		for k in 2:
-			var cv2 := VBoxContainer.new()
-			cv2.alignment = BoxContainer.ALIGNMENT_CENTER
-			cv2.add_theme_constant_override("separation", 10)
-			cv2.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			cols.append(cv2)
-		var fig := TextureRect.new()
-		var fp := "res://assets/art/figure_%s.png" % h.key
-		fig.texture = load(fp) if ResourceLoader.exists(fp) else load("res://assets/art/portrait_%s.png" % h.key)
-		fig.custom_minimum_size = Vector2(120, 180) if big else Vector2(150, 225)
-		fig.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		fig.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		fig.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		doll.add_child(cols[0])
-		doll.add_child(fig)
-		doll.add_child(cols[1])
-		const GHOST := {"arme": "epee", "armure": "plastron", "bottes": "bottes", "bijou": "amulette"}
-		for si in Data.SLOTS.size():
-			var slot: String = Data.SLOTS[si]
-			var id: String = h.equip.get(slot, "")
-			var cap: String = Data.SLOT_NAME[slot]
-			var sv := VBoxContainer.new()
-			sv.add_theme_constant_override("separation", 2)
-			sv.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			var t := _gear_tile(id, 60, ITEM_COL[Data.ITEMS[id].rarity] if id != "" else DIM.darkened(0.5))
-			if id == "":
-				# emplacement libre : l'ombre de ce qu'il attend
-				var gh := TextureRect.new()
-				gh.texture = load("res://assets/ui/gear_%s.png" % GHOST[slot])
-				gh.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-				gh.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-				gh.modulate = Color(1, 1, 1, 0.18)
-				gh.mouse_filter = Control.MOUSE_FILTER_IGNORE
-				t.add_child(gh)
-			t.mouse_entered.connect(func():
-				if id != "":
-					show.call(id, "porté par %s · clic : retour au sac" % h.nm)
-				else:
-					show.call("", "%s de %s : libre" % [cap, h.nm]))
-			t.gui_input.connect(func(e):
-				if _clicked(e):
-					t.accept_event()
-					if sel[0] >= 0:
-						act.call({"equip": sel[0], "hero": hi})
-					elif id != "":
-						act.call({"unequip": slot, "hero": hi}))
-			sv.add_child(t)
-			var sl2 := _label(cap if id == "" else Data.ITEMS[id].name, 12, DIM if id == "" else ITEM_COL[Data.ITEMS[id].rarity].lightened(0.3))
-			sl2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			sl2.custom_minimum_size.x = 76
-			sl2.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			sv.add_child(sl2)
-			cols[0 if si < 2 else 1].add_child(sv)
-		var st := HBoxContainer.new()
-		st.alignment = BoxContainer.ALIGNMENT_CENTER
-		st.add_theme_constant_override("separation", 12)
-		st.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		st.add_child(_chip("pv", "%d/%d" % [h.hp, h.max_hp], Color.WHITE, 20))
-		st.add_child(_chip("deplacement", str(h.move), Color.WHITE, 20))
-		st.add_child(_chip("attaque", "+%d" % h.gear_dmg(), Color(1.0, 0.75, 0.6), 20))
-		var ex := _label(Lang.mark(Lang.t("saut %d · vit. %d") % [h.jump, h.speed]), 14, DIM)
-		ex.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		st.add_child(ex)
-		v.add_child(st)
+		var on_hover := func(id: String, slot: String) -> void:
+			if id != "":
+				show.call(id, "porté par %s · clic : retour au sac" % h.nm)
+			else:
+				show.call("", "%s de %s : libre" % [Data.SLOT_NAME[slot], h.nm])
+		var on_click := func(id: String, slot: String) -> void:
+			if sel[0] >= 0:
+				act.call({"equip": sel[0], "hero": hi})
+			elif id != "":
+				act.call({"unequip": slot, "hero": hi})
+		var p := _hero_doll(h, on_hover, on_click)
 		p.gui_input.connect(func(e):
 			if _clicked(e) and sel[0] >= 0:
 				act.call({"equip": sel[0], "hero": hi}))
@@ -4649,7 +5202,9 @@ func trait_roulette(keys: Array, traits: Array) -> void:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 28)
 	box.add_child(row)
-	const ROW_H := 56.0
+	const ROW_H := 63.0
+	const ROLL := "res://assets/ui/barre_rouleau.png"  # fenêtre de rouleau peinte (KIE, gen_boites.py barre_rouleau) ; ouverture en fractions
+	const ROLL_IN := [0.1711, 0.148, 0.7306, 0.861]
 	var all: Array = Data.TRAITS.keys()
 	var done := [0]
 	for hi in keys.size():
@@ -4661,15 +5216,18 @@ func trait_roulette(keys: Array, traits: Array) -> void:
 		ps.content_margin_right = 18
 		ps.content_margin_top = 16
 		ps.content_margin_bottom = 16
-		p.add_theme_stylebox_override("panel", ps)
-		p.custom_minimum_size = Vector2(300, 0)
+		var pe: StyleBox = encart(k, 12, "encart_voc")  # la colonne peinte de sa classe, comme à la vocation
+		p.add_theme_stylebox_override("panel", pe if pe else ps)
+		p.custom_minimum_size = Vector2(320, 0)
 		row.add_child(p)
 		var v := VBoxContainer.new()
 		v.add_theme_constant_override("separation", 10)
 		p.add_child(v)
 		var por := TextureRect.new()
-		por.texture = load("res://assets/art/portrait_%s.png" % k)
-		por.custom_minimum_size = Vector2(96, 96)
+		var bp := "res://assets/ui/buste_%s.png" % k
+		por.texture = load(bp) if ResourceLoader.exists(bp) else load(portrait_path(k))  # le buste pixel art, sans fond uni
+		por.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		por.custom_minimum_size = Vector2(128, 128)
 		por.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		por.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		v.add_child(por)
@@ -4678,10 +5236,31 @@ func trait_roulette(keys: Array, traits: Array) -> void:
 		v.add_child(nm)
 		# la fenêtre du rouleau : une ligne visible, bordée d'or
 		var win := Panel.new()
-		win.custom_minimum_size = Vector2(260, ROW_H)
+		var rw := 260.0
+		win.custom_minimum_size = Vector2(rw, ROW_H)
 		win.clip_contents = true
-		win.add_theme_stylebox_override("panel", sb(Color(0.03, 0.025, 0.03, 1.0), GOLD.darkened(0.2), 8, 2, 0))
-		v.add_child(win)
+		var wrap: Control = win
+		if ResourceLoader.exists(ROLL):
+			# la machine peinte autour : l'ouverture de l'image tombe pile sur la fenêtre qui défile
+			rw = 184.0
+			var tex: Texture2D = load(ROLL)
+			var fk: float = rw / ((ROLL_IN[2] - ROLL_IN[0]) * tex.get_width())
+			wrap = Control.new()
+			wrap.custom_minimum_size = Vector2(tex.get_width(), tex.get_height()) * fk
+			wrap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			win.add_theme_stylebox_override("panel", sb(Color(0.05, 0.04, 0.045, 1.0), Color(0, 0, 0, 0), 2, 0, 0))
+			win.position = Vector2(ROLL_IN[0] * tex.get_width(), ROLL_IN[1] * tex.get_height()) * fk
+			win.size = Vector2(rw, (ROLL_IN[3] - ROLL_IN[1]) * tex.get_height() * fk)
+			wrap.add_child(win)
+			var fr := TextureRect.new()
+			fr.texture = tex
+			fr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			fr.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			fr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			wrap.add_child(fr)
+		else:
+			win.add_theme_stylebox_override("panel", sb(Color(0.03, 0.025, 0.03, 1.0), GOLD.darkened(0.2), 8, 2, 0))
+		v.add_child(wrap)
 		var strip := VBoxContainer.new()
 		strip.add_theme_constant_override("separation", 0)
 		win.add_child(strip)
@@ -4692,7 +5271,7 @@ func trait_roulette(keys: Array, traits: Array) -> void:
 		seq.append(traits[hi])
 		for t in seq:
 			var l := _label(Data.TRAITS[t].name, 24, INK, Fx.goth("pirataone"))
-			l.custom_minimum_size = Vector2(260, ROW_H)
+			l.custom_minimum_size = Vector2(rw, ROW_H)
 			l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			strip.add_child(l)
@@ -4709,10 +5288,10 @@ func trait_roulette(keys: Array, traits: Array) -> void:
 			last.add_theme_color_override("font_color", GOLD.lightened(0.2))
 			txt.text = Data.TRAITS[t_id].text
 			txt.add_theme_color_override("font_color", INK)
-			var pop := win.create_tween()
-			win.pivot_offset = win.size / 2
-			pop.tween_property(win, "scale", Vector2.ONE * 1.1, 0.08)
-			pop.tween_property(win, "scale", Vector2.ONE, 0.15)
+			var pop := wrap.create_tween()
+			wrap.pivot_offset = wrap.size / 2
+			pop.tween_property(wrap, "scale", Vector2.ONE * 1.1, 0.08)
+			pop.tween_property(wrap, "scale", Vector2.ONE, 0.15)
 			done[0] += 1)
 	var go := Button.new()
 	go.text = "Continuer"
@@ -4737,7 +5316,8 @@ func trait_roulette(keys: Array, traits: Array) -> void:
 
 var sheet_layer: Control
 func hero_sheet(h: Unit) -> void:
-	## Lecture seule, par-dessus tout : portrait, stats, trait, vocation, les quatre pièces avec leurs effets. Un clic ferme.
+	## Lecture seule, par-dessus tout. À gauche le héros comme à l'écran d'équipement (figurine, quatre pièces, stats)
+	## et une plaque : trait et vocation, ou l'effet de la pièce survolée. À droite son paquet. Un clic ferme.
 	if sheet_layer and is_instance_valid(sheet_layer):
 		sheet_layer.queue_free()
 	sheet_layer = Control.new()
@@ -4745,114 +5325,109 @@ func hero_sheet(h: Unit) -> void:
 	sheet_layer.z_index = 110
 	root.add_child(sheet_layer)
 	var dim := ColorRect.new()
-	dim.color = Color(0.02, 0.02, 0.03, 0.6)
+	dim.color = Color(0.02, 0.02, 0.03, 0.72)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	sheet_layer.add_child(dim)
 	var close := func(e):
-		if e is InputEventMouseButton and e.pressed:
+		if e is InputEventMouseButton and e.pressed or e is InputEventScreenTouch and e.pressed:
 			sheet_layer.queue_free()
 			sheet_layer = null
 	dim.gui_input.connect(close)
 	var col: Color = Data.CLASS_COLOR[h.key]
-	var p := PanelContainer.new()
-	var ps := sb(Color(0.08, 0.07, 0.075, 0.97), col, 16, 2, 16)
-	ps.content_margin_left = 26
-	ps.content_margin_right = 26
-	ps.content_margin_top = 22
-	ps.content_margin_bottom = 22
-	p.add_theme_stylebox_override("panel", ps)
-	p.gui_input.connect(close)
 	var cc := CenterContainer.new()
 	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	cc.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	sheet_layer.add_child(cc)
-	cc.add_child(p)
 	var both := HBoxContainer.new()
-	both.add_theme_constant_override("separation", 22)
+	both.add_theme_constant_override("separation", 28)
+	both.alignment = BoxContainer.ALIGNMENT_CENTER
 	both.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	p.add_child(both)
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 12)
-	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	both.add_child(v)
-	# son paquet, en petit, à droite : ce qu'on ajoute se juge face à ce qu'on a
+	cc.add_child(both)
+
+	# à gauche : le héros, puis la plaque de lecture
+	var left := VBoxContainer.new()
+	left.add_theme_constant_override("separation", 14)
+	left.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	both.add_child(left)
+	var plate := PanelContainer.new()
+	var ce: StyleBox = encart("gain", 14, "neutre")
+	var cs := sb(Color(0.08, 0.07, 0.075, 0.94), GOLD.darkened(0.4), 12, 2, 10)
+	cs.content_margin_left = 20
+	cs.content_margin_right = 20
+	cs.content_margin_top = 12
+	cs.content_margin_bottom = 12
+	plate.add_theme_stylebox_override("panel", ce if ce else cs)
+	plate.custom_minimum_size = Vector2(380 if not big else 440, 150)
+	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var pt := _rich("", 15 + (2 if big else 0), INK)
+	pt.custom_minimum_size = Vector2(340 if not big else 400, 0)
+	plate.add_child(pt)
+	var base_text: String = "[color=#e3b45c]%s[/color]
+[color=#e3b45c]Trait — %s[/color] : %s
+[color=#a79d8b]%s[/color]" % [
+		Data.HEROES[h.key].title, Data.TRAITS[h.trait_id].name, Data.TRAITS[h.trait_id].text,
+		main.voc_line(h) if h.voc != "" else "Pas encore de vocation · %d / %d points de job" % [h.pj, Data.MASTERY[2]]]
+	pt.text = base_text
+	var on_hover := func(id: String, slot: String) -> void:
+		if id == "":
+			pt.text = "[color=#a79d8b]%s : libre[/color]
+" % Data.SLOT_NAME[slot] + base_text
+			return
+		var it: Dictionary = Data.ITEMS[id]
+		pt.text = "[color=#%s]%s — %s[/color]
+%s" % [ITEM_COL[it.rarity].lightened(0.25).to_html(false), Data.SLOT_NAME[slot], it.name,
+			Data.item_text(id).split("
+")[1].replace(" · ", "
+")]
+	var doll := _hero_doll(h, on_hover, func(_id: String, _slot: String) -> void: pass)
+	doll.gui_input.connect(close)
+	doll.mouse_exited.connect(func(): pt.text = base_text)
+	left.add_child(doll)
+	left.add_child(plate)
+	var hint := _label("Clic pour fermer · l'équipement se change hors combat (carte d'étage, repos, I)", 12, DIM)
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.custom_minimum_size.x = 380
+	left.add_child(hint)
+
+	# à droite : son paquet, ce qu'on ajoute se juge face à ce qu'on a
 	var mine: Array = main.deck.filter(func(ci): return Data.holder(ci) == h.key)
+	var dp := PanelContainer.new()
+	var ds := sb(Color(0.06, 0.055, 0.06, 0.92), col.darkened(0.3), 14, 2, 12)
+	ds.content_margin_left = 18
+	ds.content_margin_right = 18
+	ds.content_margin_top = 14
+	ds.content_margin_bottom = 14
+	dp.add_theme_stylebox_override("panel", ds)
+	dp.gui_input.connect(close)
+	dp.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	both.add_child(dp)
 	var dv := VBoxContainer.new()
-	dv.add_theme_constant_override("separation", 6)
+	dv.add_theme_constant_override("separation", 10)
 	dv.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	both.add_child(dv)
-	dv.add_child(_label("Paquet · %d cartes" % mine.size(), 17, col.lightened(0.35), title_f))
+	dp.add_child(dv)
+	dv.add_child(_label("Paquet · %d cartes" % mine.size(), 22, col.lightened(0.35), title_f))
+	var k := 0.5 if not big else 0.46
+	var ncol := 4
 	var dsc := ScrollContainer.new()
-	dsc.custom_minimum_size = Vector2(CARD.x * 0.42 * 4 + 24, minf(560.0, root.size.y - 180.0))
+	dsc.custom_minimum_size = Vector2(CARD.x * k * ncol + 8 * (ncol - 1) + 14, minf(CARD.y * k * 3 + 16 + 20, root.size.y - 200.0))
 	dsc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	dv.add_child(dsc)
 	var dg := GridContainer.new()
-	dg.columns = 4
-	dg.add_theme_constant_override("h_separation", 6)
-	dg.add_theme_constant_override("v_separation", 6)
+	dg.columns = ncol
+	dg.add_theme_constant_override("h_separation", 8)
+	dg.add_theme_constant_override("v_separation", 8)
 	dsc.add_child(dg)
 	for ci in mine:
 		var hold := Control.new()
-		hold.custom_minimum_size = CARD * 0.42
+		hold.custom_minimum_size = CARD * k
 		var mc := make_card(ci)
-		mc.scale = Vector2.ONE * 0.42
+		mc.scale = Vector2.ONE * k
 		mc.pivot_offset = Vector2.ZERO
 		_passthrough(mc)
 		hold.add_child(mc)
 		hold.set_meta("kwcard", ci)
 		dg.add_child(hold)
-	var top := HBoxContainer.new()
-	top.add_theme_constant_override("separation", 18)
-	v.add_child(top)
-	var por := TextureRect.new()
-	por.texture = load("res://assets/art/portrait_%s.png" % h.key)
-	por.custom_minimum_size = Vector2(110, 110)
-	por.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	por.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	top.add_child(por)
-	var nv := VBoxContainer.new()
-	nv.alignment = BoxContainer.ALIGNMENT_CENTER
-	top.add_child(nv)
-	nv.add_child(_label(h.nm, 30, col.lightened(0.35), Fx.goth("pirataone")))
-	nv.add_child(_label(Data.HEROES[h.key].title, 15, DIM))
-	var st := HBoxContainer.new()
-	st.add_theme_constant_override("separation", 14)
-	st.add_child(_chip("pv", "%d/%d" % [h.hp, h.max_hp], Color.WHITE, 22))
-	st.add_child(_chip("deplacement", str(h.move), Color.WHITE, 22))
-	st.add_child(_chip("attaque", "+%d" % h.gear_dmg(), Color(1.0, 0.75, 0.6), 22))
-	st.add_child(_chip("armure", "+%d" % h.block0(), Color(0.8, 0.9, 1.0), 22))
-	var sj := _label("saut %d · vitesse %d" % [h.jump, h.speed], 14, DIM)
-	sj.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	st.add_child(sj)
-	nv.add_child(st)
-	var tr := _rich("[color=#e3b45c]Trait — %s[/color] : %s" % [Data.TRAITS[h.trait_id].name, Data.TRAITS[h.trait_id].text], 15, INK)
-	tr.text = tr.text.trim_prefix("[center]").trim_suffix("[/center]")
-	tr.custom_minimum_size = Vector2(560, 0)
-	v.add_child(tr)
-	v.add_child(_label(main.voc_line(h) if h.voc != "" else "Pas encore de vocation · %d / %d points de job" % [h.pj, Data.MASTERY[2]], 14, DIM))
-	for slot in Data.SLOTS:
-		var id: String = h.equip.get(slot, "")
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 14)
-		var t := _gear_tile(id, 56, ITEM_COL[Data.ITEMS[id].rarity] if id != "" else DIM.darkened(0.5))
-		t.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_child(t)
-		var rv := VBoxContainer.new()
-		rv.alignment = BoxContainer.ALIGNMENT_CENTER
-		row.add_child(rv)
-		if id == "":
-			rv.add_child(_label("%s : libre" % Data.SLOT_NAME[slot], 16, DIM))
-		else:
-			var it: Dictionary = Data.ITEMS[id]
-			rv.add_child(_label("%s — %s" % [Data.SLOT_NAME[slot], it.name], 17, ITEM_COL[it.rarity].lightened(0.25), title_f))
-			var fx := _label(Data.item_text(id).split("\n")[1], 14, INK)
-			fx.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			fx.custom_minimum_size = Vector2(480, 0)
-			rv.add_child(fx)
-		v.add_child(row)
-	var hint := _label("Clic pour fermer · l'équipement se change hors combat (carte d'étage, repos, I)", 12, DIM)
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(hint)
 
 
 # ------------------------------------------------------------------ barre de boss (spec ennemis du 26/09)

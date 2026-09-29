@@ -131,10 +131,11 @@ static func _fade_ramp() -> Gradient:
 
 
 static var lite := false  # mode portable : ni particules, ni lumières éphémères (ça ramait sur tablette)
+static var particles := true  # réglage Graphismes > Particules
 
 
 static func glow_puff(parent: Node, pos: Vector3, col: Color, n := 8, size := 0.55, life := 0.45, speed := 0.8) -> void:
-	if lite:
+	if lite or not particles:
 		return
 	var p := CPUParticles3D.new()
 	p.one_shot = true
@@ -165,7 +166,7 @@ static func glow_puff(parent: Node, pos: Vector3, col: Color, n := 8, size := 0.
 
 static func flash(parent: Node, pos: Vector3, col: Color, energy := 3.0, rng := 3.5) -> void:
 	## Éclair de lumière bref : l'explosion éclaire les pierres autour.
-	if lite:
+	if lite or not particles:
 		return
 	var l := OmniLight3D.new()
 	l.light_color = col
@@ -180,7 +181,7 @@ static func flash(parent: Node, pos: Vector3, col: Color, energy := 3.0, rng := 
 
 
 static func ring(parent: Node, pos: Vector3, col: Color, radius := 1.6) -> void:
-	if lite:
+	if lite or not particles:
 		return
 	## Onde de choc au sol.
 	if _ring == null:
@@ -236,7 +237,7 @@ static func smoke_cloud(parent: Node, pos: Vector3) -> Node3D:
 
 
 static func burst(parent: Node, pos: Vector3, col: Color, amount := 26, speed := 3.2, up := 0.0) -> void:
-	if lite:
+	if lite or not particles:
 		return
 	# un halo doux derrière les éclats ; les grosses gerbes éclairent et font une onde au sol
 	glow_puff(parent, pos, col, amount / 6, 0.45 + amount * 0.004, 0.4 + amount * 0.002, speed * 0.3)
@@ -316,7 +317,7 @@ static func bolt(parent: Node, from: Vector3, to: Vector3, col: Color) -> void:
 
 
 static func ambient(parent: Node, biome: Dictionary, center: Vector3) -> void:
-	if lite:
+	if lite or not particles:
 		return
 	if biome.leaves:
 		var p := GPUParticles3D.new()

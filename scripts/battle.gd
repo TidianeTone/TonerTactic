@@ -60,6 +60,7 @@ var echo := false           # la prochaine carte agit deux fois
 var played := 0             # cartes jouées ce tour
 var voices: Array = []      # voix Grixis jouées ce tour par Tidiane
 var _killed := false        # la carte en cours a tué
+var _struck: Unit = null    # unité frappée par la carte en cours (déclencheurs : elle a pu être repoussée)
 static var foe_mult := 1.0  # dégâts ennemis selon l'étage
 static var foe_bonus := 0   # dégâts ennemis en plus (Enragés, Rage)
 var mods: Array = []        # modificateurs de la salle et des pactes
@@ -73,12 +74,13 @@ var _first_turn := {}         # héros -> a déjà joué (Ambre du Gué)
 var power_val := {}           # pouvoir -> force, selon le niveau de la carte
 var bonus := {}               # héros -> énergie en plus à son prochain tour
 var sim := {}               # compteurs de simulation (auto-jeu) : objets joués, arbres, explosions, percées
-var spent: Array = []       # cartes-objets sans charge : quittent le paquet en fin de combat
-var won_objs: Array = []    # cartes-objets volées ou ramassées ce combat (revendables au butin)
+var spent: Array = []       # objets sans charge : quittent le paquet en fin de combat
+var won_objs: Array = []    # objets volés ou ramassés ce combat (revendables au butin)
 var brasero_aura := {}      # case -> brûlure du brasero posé par une carte, en fin de manche
-var oriel_turn := false     # Dame Oriel : première carte-objet du tour déjà doublée
+var oriel_turn := false     # Dame Oriel : premier objet du tour déjà doublée
 var fourgue_turn := false   # Le Fourgue : soin sur vol, une fois par tour
 var _alambic := false       # Alambic : Fabrique 1 au premier tour d'un héros
+var _double_fond := false   # Lettre de recommandation : une Embauche au premier tour du combat
 var tool_rate := 0.3        # part des ennemis qui portent un objet
 var smoke := {}             # case -> tours de fumée restants
 var smoke_nodes := {}
@@ -106,6 +108,7 @@ var booms := 0              # barils sautés ce tour (Poudre, 174 BPM)
 var hurt_turn := false      # un héros a perdu des PV ce tour (Blessure)
 var stolen_turn := 0        # objets volés ce tour (Filière)
 var played_ids := {}        # héros -> cartes jouées ce combat (Grand Journal)
+var played_lvl := {}        # héros -> {carte: plus haut niveau joué} (Grand Journal niveau 3)
 var item_poison := 0        # Lame enduite
 var fiole2 := false         # Alchimie
 var trophy := false         # Trophée
@@ -139,6 +142,8 @@ var _dot := false             # dégâts de poison en cours : ni interception ni
 var _last_ranged := false     # le coup qui tue venait de loin (Moussu lesté)
 var _pulling := false         # attraction par un héros (tire le Noyé ancien hors de l'eau)
 # reliques : drapeaux par combat ou par tour
+var _terrain := false         # dégâts de terrain (Choc, noyade, piège, baril, pilier) : indexés sur l'étage
+var _terrain_mark := -1       # -1 : lire la Marque de la cible ; 0/1 : figée à l'entrée du piège
 var _choc := false            # les dégâts en cours viennent d'un Choc (Denier du fossoyeur)
 var _tuile := false           # Tuile Brisée : premier Choc du combat déjà servi
 var _ecusson := false         # Écusson : déjà servi ce combat
@@ -316,6 +321,7 @@ func start(hs: Array, foe_ids: Array, deck_ref: Array, relics_ref: Array) -> voi
 	_place_tiles()
 	_place_ground()
 	_alambic = has("alambic")
+	_double_fond = false
 	if mods.has("hate"):
 		for f in foes:
 			f.move += 1
@@ -361,6 +367,7 @@ func start(hs: Array, foe_ids: Array, deck_ref: Array, relics_ref: Array) -> voi
 		piles[h] ={"draw": d, "discard": [], "exhausted": [], "keep": []}
 	power_owner.clear()
 	played_ids.clear()
+	played_lvl.clear()
 	item_poison = 0
 	fiole2 = false
 	trophy = false
@@ -812,7 +819,9 @@ func trigger_prop(c: Vector2i, d: Vector2i) -> void:
 				var u := unit_at(t)
 				if u:
 					_blast = true
+					_terrain = true
 					damage(u, _boom_dmg(7 + (4 if has("etoupe") else 0)))
+					_terrain = false
 					_blast = false
 				if oaks.has(t):
 					_hit_tree(t, 0, true)
@@ -828,7 +837,9 @@ func trigger_prop(c: Vector2i, d: Vector2i) -> void:
 			Fx.burst(main, board.world(t) + Vector3(0, 0.3, 0), Color(0.75, 0.72, 0.66), 40, 3.0)
 			var u := unit_at(t)
 			if u:
+				_terrain = true
 				damage(u, 9)
+				_terrain = false
 			if board.props.get(t, "") in BOOM + ["pilier"]:
 				await trigger_prop(t, d)
 		Fx.number(main, board.world(c), "Effondrement", Color(1, 0.85, 0.6))
@@ -855,7 +866,7 @@ func _boom_dmg(n: int) -> int:
 
 
 func _after_boom(c: Vector2i) -> void:
-	## Reliques d'explosion : Soufflet de forge (Recharge une carte-objet), Souffle du canonnier (repousse en croix).
+	## Reliques d'explosion : Soufflet de forge (Recharge un objet), Souffle du canonnier (repousse en croix).
 	if has("soufflet") and player_turn and active and not _soufflet:
 		for ci in hand:
 			if Data.def(ci.id).has("tool") and _recharge_ci(ci, 1, false):
@@ -1075,7 +1086,9 @@ func _fall_water(u: Unit) -> void:
 		_cause = "eau"
 		if u.key == "dame":
 			Fx.number(main, u.position + Vector3(0, 1.2, 0), "Noyée dans sa crue !", Color(0.6, 0.85, 1.0), true)
+		_terrain = true
 		damage(u, 8 + (6 if has("cloche") and u.side == "foe" else 0) + (int(u.max_hp * 0.2) if u.key == "dame" else 0))
+		_terrain = false
 		_cause = ""
 		await _drowned(u, wc)
 	if u.alive:
@@ -1367,8 +1380,11 @@ func _hero_turn(h: Unit) -> void:
 	for k in ["bait", "parry", "dodge_next", "tele", "triple", "lvl_next"]:
 		h.set(k, false)
 	h.bph = 0
+	h.bpm = h.bpm / 2  # concile du 29/09 : le BPM retombe de moitié, plus de réserve à 12 pour un Drop à 80
 	h.inner = 0
 	h.hits = 0
+	h.set_meta("hazan_fait", false)  # Trois Coups, Troisième Main : un déclenchement par tour
+	h.set_meta("linfei_fait", false)
 	h.walked = false
 	h.teles = 0
 	h.blastproof = false
@@ -1470,7 +1486,7 @@ func _hero_turn(h: Unit) -> void:
 		+ (1 if h.has_p("prelude") and not _first_turn.has(h) else 0) + ((1 + int(power_val.get("dnb", 0))) if h.key == "tidiane" and powers.has("dnb") else 0)
 		+ (1 if tiles.get(h.cell, "") == "autel" else 0) + (1 if has("chaine_forcat") else 0))
 	if h.key == "receleur":
-		# Double fond : ses cartes-objets ne lui bouchent pas la main
+		# Double fond : ses objets ne lui bouchent pas la main
 		while hand.filter(func(ci): return not Data.def(ci.id).has("tool")).size() < hand_size and hand.size() < 6 and not (draw_pile.is_empty() and discard.is_empty()):
 			draw(1)
 	var th: Array = main.tuto_hand(h)
@@ -1496,6 +1512,17 @@ func _hero_turn(h: Unit) -> void:
 	main.ui.banner(h.nm, "À toi · %d mana" % energy)
 	if powers.has("journal") and power_owner.get("journal") == h and played_ids.get(h, []).size() > 0:
 		_journal.call_deferred(h)
+	if has("double_fond") and not _double_fond:
+		_double_fond = true
+		_double_fond_go.call_deferred(h)
+
+
+func _double_fond_go(h: Unit) -> void:
+	busy = true
+	Fx.number(main, h.position + Vector3(0, 1.4, 0), "Recommandation", GOLD_FX)
+	await _embauche(h, 1)
+	busy = false
+	changed.emit()
 
 
 func _journal(h: Unit) -> void:
@@ -1505,7 +1532,9 @@ func _journal(h: Unit) -> void:
 	for id in played_ids.get(h, []):
 		if not ids.has(id):
 			ids.append(id)
-	await _discover(h, ids, "LE GRAND JOURNAL", "Une page déjà écrite ce combat ; elle coûte 0")
+	# niveau 3 : la page revient au niveau où elle a été jouée
+	var lvls: Dictionary = played_lvl.get(h, {}) if int(power_val.get("journal", 0)) >= 1 else {}
+	await _discover(h, ids, "LE GRAND JOURNAL", "Une page déjà écrite ce combat ; elle coûte 0", true, false, false, lvls)
 	busy = false
 	changed.emit()
 
@@ -1524,7 +1553,7 @@ func draw(n: int) -> void:
 		got += 1
 	if got > 0 and not _start_draw:
 		drawn_turn += got
-	if got > 0 and powers.has("ignar"):
+	if got > 0 and powers.has("ignar") and not _start_draw:
 		for f in alive_foes():
 			damage(f, got * int(power_val.get("ignar", 1)), null, true, true)
 
@@ -1553,7 +1582,7 @@ func end_turn() -> void:
 		if not c.get("retain", false):
 			ci.erase("chg")
 		if c.get("retain", false) or (c.has("tool") and not c.get("eph", false)):
-			keep.append(ci)  # une carte-objet reste en main d'un tour à l'autre, comme dans une besace
+			keep.append(ci)  # un objet reste en main d'un tour à l'autre, comme dans une besace
 		elif c.get("eph", false):
 			pass  # copie éphémère : elle s'efface
 		elif c.get("ethereal", false):
@@ -1745,6 +1774,10 @@ func select_card(i: int) -> void:
 		return
 	if tg.is_empty():
 		main.ui.toast("Aucune cible à portée.")
+	var tl := target_list()
+	if tl.size() > 0:  # la cible la plus proche est déjà visée : un toucher de plus la joue
+		main.hover = tl[0]
+		main.refresh_hover()
 	changed.emit()
 
 
@@ -1904,6 +1937,7 @@ func turn_facing(s: int) -> void:
 	if player_turn and not busy and active and active.alive:
 		active.facing = Vector2i(-active.facing.y * s, active.facing.x * s)
 		_faced = true
+		coach.emit("faced", active)  # l'Initiation attend ce geste : sans lui, le bouton ⤵ de la tablette la bloquait
 		main.refresh_hover()
 
 
@@ -2012,7 +2046,35 @@ func card_range(c: Dictionary, h: Unit) -> Vector2i:
 		hi -= 1
 	if hi > 1 and h.has_p("concentration"):
 		hi += 1
+	if hi > 1 and powers.has("aelis") and int(power_val.get("aelis", 0)) >= 1:
+		hi += 1  # Œil perce-brume niveau 3
 	return Vector2i(r[0], hi)
+
+
+func target_list() -> Array:
+	## Le menu des cibles de la carte choisie : les unités de la plus proche à la plus lointaine, puis arbres et objets.
+	## Les cartes de case (placer, se téléporter) n'en ont pas : leurs cibles sont des cases vides.
+	if card_sel < 0 or card_sel >= hand.size():
+		return []
+	var c := Data.card(hand[card_sel])
+	var h := owner_of(c)
+	if h == null or c.get("target", "foe") in ["self", "tile"]:
+		return []
+	var out: Array = card_targets(c, h).filter(func(t): return unit_at(t) != null or board.props.has(t) or oaks.has(t))
+	var rank := func(t: Vector2i) -> int:
+		return (0 if unit_at(t) != null else (1 if oaks.has(t) else 2)) * 1000 + dist(h.cell, t)
+	out.sort_custom(func(a, b): return rank.call(a) < rank.call(b))
+	return out
+
+
+func target_label(t: Vector2i) -> String:
+	var u := unit_at(t)
+	var d := dist(active.cell, t) if active else 0
+	if u:
+		return "%s · %d PV" % [u.nm, u.hp] + ("" if d == 0 else " · %d case%s" % [d, "s" if d > 1 else ""])
+	var nm: String = "Arbre" if oaks.has(t) else {"brasero": "Brasero", "baril": "Baril", "bombe_retard": "Bombe", "pilier": "Pilier",
+		"coffre": "Coffre"}.get(board.props.get(t, ""), str(board.props.get(t, "")).capitalize())
+	return "%s · %d case%s" % [nm, d, "s" if d > 1 else ""]
 
 
 func card_targets(c: Dictionary, h: Unit) -> Array:
@@ -2160,6 +2222,9 @@ func play_card(i: int, t: Vector2i) -> void:
 	if not played_ids.has(h):
 		played_ids[h] = []
 	played_ids[h].append(ci.id)
+	if not played_lvl.has(h):
+		played_lvl[h] = {}
+	played_lvl[h][ci.id] = maxi(int(played_lvl[h].get(ci.id, 1)), int(ci.get("lvl", 1)))
 	hand.remove_at(i)
 	card_sel = -1
 	busy = true
@@ -2169,6 +2234,7 @@ func play_card(i: int, t: Vector2i) -> void:
 	changed.emit()
 	var pre := _trig_ok(c, h, t)
 	_killed = false
+	_struck = null
 	if c.get("selfdmg", 0) > 0:
 		# le prix en PV ne tue jamais
 		var cost_hp := mini(int(c.selfdmg), h.hp - 1)
@@ -2194,7 +2260,7 @@ func play_card(i: int, t: Vector2i) -> void:
 		h.set_meta("nuancier_round", turn)  # Nuancier : les trois voix dans le tour
 		energy += 1
 		h.bpm = mini(12, h.bpm + 2)
-		Fx.number(main, h.position + Vector3(0, 1.5, 0), "Trois voix · +1 énergie", GOLD_FX)
+		Fx.number(main, h.position + Vector3(0, 1.5, 0), "Crescendo · +1 énergie", GOLD_FX)
 	var refund := false
 	if c.has("trig") and (pre or (c.trig.on == "grace" and _killed) or (c.trig.on == "butin" and stolen_turn > 0)) and h.alive:
 		refund = _trig_apply(c, h, t)
@@ -2217,6 +2283,11 @@ func play_card(i: int, t: Vector2i) -> void:
 			await wait(0.2)
 			await resolve(c, h, t)
 	_resolving = false
+	# concile du 29/09 : le ×3 d'Iaï et l'armure dépensée valent pour toute attaque (zone, dispersion), écho compris
+	if h.triple and c.kind == "atk":
+		h.triple = false
+	if c.get("spend_block", 0.0) > 0.0 and h.block > 0:
+		h.block -= int(h.block * float(c.spend_block))
 	h.bpm = 0 if c.has("drop") else mini(12, h.bpm + 1 + int(c.get("bpm", 0)))
 	if h.bpm >= 3 and _bpm_hero(h):
 		Fx.number(main, h.position + Vector3(0.4, 1.6, 0), "♪ %d" % h.bpm, Color(0.95, 0.5, 0.8))
@@ -2258,11 +2329,13 @@ func play_card(i: int, t: Vector2i) -> void:
 
 func resolve(c: Dictionary, h: Unit, t: Vector2i) -> void:
 	if c.has("tool"):
-		# carte-objet : l'effet de l'outil, monté au niveau de la carte
+		# objet : l'effet de l'outil, monté au niveau de la carte
 		c = _tour_de_main(c, h)
 		if powers.has("oriel") and not oriel_turn and DOUBLABLE.has(c.tool):
 			oriel_turn = true
 			item_echo = h
+			if int(power_val.get("oriel", 0)) > 0:
+				draw(int(power_val.oriel))  # La Double Dose niveau 3
 		_sim("objet_niv%d" % c.lvl)
 		await _apply_tool(c.tool, h, t, c)
 		if c.get("draw", 0) > 0 and c.tool != "carnet":
@@ -2292,6 +2365,7 @@ func resolve(c: Dictionary, h: Unit, t: Vector2i) -> void:
 			var o := unit_at(h.cell + d)
 			if o and o.side == "foe":
 				near.append(o)
+		var seen := {}  # cible -> frappée de dos au moins une fois
 		for k in int(c.scatter):
 			near = near.filter(func(o): return o.alive)
 			if near.is_empty():
@@ -2299,9 +2373,14 @@ func resolve(c: Dictionary, h: Unit, t: Vector2i) -> void:
 			var o: Unit = near[k % near.size()]
 			await h.lunge(o.position)
 			var back := _is_back(h, o)
-			damage(o, calc(h, o, _base(c, h, o.cell), c).dmg, h)
+			damage(o, hit_dmg(h, o, c, _base(c, h, o.cell), 1 if seen.has(o) else 0).dmg, h)
+			seen[o] = back or seen.get(o, false)
 			_on_hit(h, o, back)
 			await wait(0.08)
+		h.ambush = false
+		for o in seen:
+			if seen[o] and o.alive and not o.data.get("structure", false):
+				o.face(h.cell - o.cell)
 		_count_hit(h)
 		return
 	if c.get("around", false):
@@ -2315,8 +2394,10 @@ func resolve(c: Dictionary, h: Unit, t: Vector2i) -> void:
 				if tele:
 					h.ambush = true
 				var back := _is_back(h, o)
-				damage(o, calc(h, o, _base(c, h, o.cell), c).dmg, h)
+				damage(o, hit_dmg(h, o, c, _base(c, h, o.cell)).dmg, h)
 				_on_hit(h, o, back)
+				if back and o.alive and not o.data.get("structure", false):
+					o.face(h.cell - o.cell)
 				if o.alive and c.get("push", 0) > 0:
 					crash_bonus = int(c.get("crash", 0))
 					await push(o, d, c.push)
@@ -2358,11 +2439,12 @@ func resolve(c: Dictionary, h: Unit, t: Vector2i) -> void:
 			for cc in [t] + Board.DIRS.map(func(d): return t + d):
 				if board._in(cc) and board.kind[cc] != "tower":
 					_smoke(cc, c.smoke)
-		if c.get("lure", 0) > 0:
-			await _lure(t, c.lure)
+		# la rune d'abord : l'ennemi attiré marche dessus au lieu de l'empêcher
 		if c.has("rune") and board.walkable(t) and unit_at(t) == null and not tiles.has(t):
 			tiles[t] = c.rune
 			_make_tile(t, c.rune)
+		if c.get("lure", 0) > 0:
+			await _lure(t, c.lure)
 		if c.get("omen", 0) > 0:
 			_omen(t, int(c.omen), h)
 		if c.has("ground"):
@@ -2399,7 +2481,7 @@ func resolve(c: Dictionary, h: Unit, t: Vector2i) -> void:
 					if a != h and dist(a.cell, h.cell) == 1:
 						gain_block(a, c.block)
 		if c.get("craft", 0) > 0:
-			_craft(c.craft, h)
+			_craft(c.craft, h, int(c.get("craft_min", 1)))
 		if c.get("taunt", false):
 			h.taunt = true
 			Fx.number(main, h.position + Vector3(0, 0.4, 0), "Défi !", Color(1, 0.8, 0.4))
@@ -2464,7 +2546,7 @@ func resolve(c: Dictionary, h: Unit, t: Vector2i) -> void:
 					if a != h and dist(a.cell, h.cell) == 1:
 						gain_block(a, c.block)
 		if c.get("craft", 0) > 0:
-			_craft(c.craft, h)
+			_craft(c.craft, h, int(c.get("craft_min", 1)))
 		if c.get("energy", 0) > 0:
 			energy += c.energy
 		if c.get("hitcount", false):
@@ -2504,8 +2586,10 @@ func resolve(c: Dictionary, h: Unit, t: Vector2i) -> void:
 			var u := unit_at(cell)
 			if u and u.side == "foe":
 				_blast = c.owner in ["artificier", "oracle"]  # grenades, mortier, cendre : du feu
-				damage(u, calc(h, u, _base(c, h, t), c).dmg, h, true, true)
+				damage(u, hit_dmg(h, u, c, _base(c, h, t)).dmg, h, true, true)
 				_blast = false
+				if u.alive and int(c.get("root", 0)) > 0:
+					u.root = maxi(u.root, int(c.root))  # Pluie de flèches niveau 3
 			elif oaks.has(cell):
 				_hit_tree(cell, _base(c, h, t) + h.gear_dmg() + h.dmg_bonus, c.owner in ["artificier", "oracle"])
 			elif board.props.get(cell, "") in BOOM:
@@ -2548,6 +2632,7 @@ func resolve(c: Dictionary, h: Unit, t: Vector2i) -> void:
 
 
 func attack(h: Unit, f: Unit, c: Dictionary) -> void:
+	_struck = f
 	var col: Color = Data.CLASS_COLOR[c.owner]
 	var origin := h.cell
 	if c.get("rechute", false) and h.hp * 10 < h.max_hp * 3:
@@ -2607,6 +2692,7 @@ func attack(h: Unit, f: Unit, c: Dictionary) -> void:
 	if c.get("bph", 0) > 0:
 		h.bph = int(c.bph)
 	var dealt := 0
+	var pivot := false  # frappé de dos, l'ennemi se retourne vers son agresseur après la carte
 	var n_hits: int = (1 + played) if c.get("hits_flow", false) else int(c.get("hits", 1))
 	for k in n_hits:
 		if not f.alive:
@@ -2617,7 +2703,8 @@ func attack(h: Unit, f: Unit, c: Dictionary) -> void:
 		else:
 			await h.lunge(f.position)
 		var back := _is_back(h, f)
-		var dm: int = calc(h, f, base, c).dmg
+		pivot = pivot or back
+		var dm: int = hit_dmg(h, f, c, base, k).dmg
 		dealt += dm
 		damage(f, dm, h, true, ranged)
 		f.exposed = false
@@ -2628,6 +2715,9 @@ func attack(h: Unit, f: Unit, c: Dictionary) -> void:
 	if f.alive and dealt > 0 and (c.get("exec", false) or h.has_p("execution")):
 		_execute(h, f)
 	h.ambush = false
+	if pivot and f.alive and not f.data.get("structure", false):
+		f.face(h.cell - f.cell)
+		Fx.number(main, f.position + Vector3(0, 1.3, 0), "Se retourne", Color(1.0, 0.75, 0.45))
 	if h.triple and c.kind == "atk":
 		h.triple = false
 	if c.get("heal_adj", false) and dealt > 0:
@@ -2693,7 +2783,7 @@ func attack(h: Unit, f: Unit, c: Dictionary) -> void:
 			if nxt == null:
 				break
 			await Fx.bolt(main, last.position, nxt.position, col.lightened(0.3))
-			damage(nxt, calc(h, nxt, base, c).dmg, h, true, true)
+			damage(nxt, hit_dmg(h, nxt, c, base).dmg, h, true, true)
 			hit.append(nxt)
 			last = nxt
 	_count_hit(h)
@@ -2712,8 +2802,6 @@ func attack(h: Unit, f: Unit, c: Dictionary) -> void:
 	if c.get("expose", false) and f.alive:
 		f.exposed = true
 		Fx.number(main, f.position + Vector3(0, 1.0, 0), "Exposé", Color(1.0, 0.75, 0.45))
-	if c.get("spend_block", 0.0) > 0.0 and h.block > 0:
-		h.block -= int(h.block * float(c.spend_block))
 	if c.get("trap_behind", false) and f.alive:
 		var tb: Vector2i = f.cell + _dir(h.cell, f.cell)
 		if board._in(tb) and board.walkable(tb) and unit_at(tb) == null and not traps.has(tb):
@@ -2738,7 +2826,7 @@ func attack(h: Unit, f: Unit, c: Dictionary) -> void:
 			var o := unit_at(f.cell + d)
 			if o and o.side == "foe":
 				await Fx.bolt(main, f.position, o.position, col.lightened(0.3))
-				damage(o, calc(h, o, base, c).dmg, h, true, true)
+				damage(o, hit_dmg(h, o, c, base).dmg, h, true, true)
 				break
 	if c.get("omen", 0) > 0 and f.alive:
 		_omen(f.cell, int(c.omen), h)
@@ -2806,7 +2894,7 @@ func charge(h: Unit, t: Vector2i, c: Dictionary) -> void:
 	var f := unit_at(nx)
 	if f and f.side == "foe":
 		await h.lunge(f.position)
-		damage(f, calc(h, f, _base(c, h, nx), c).dmg, h)
+		damage(f, hit_dmg(h, f, c, _base(c, h, nx)).dmg, h)
 		if f.alive and c.get("push", 0) > 0:
 			crash_bonus = int(c.get("crash", 0))
 			await push(f, d, c.push)
@@ -2938,7 +3026,27 @@ func _equip_foe(f: Unit) -> void:
 	f.jump += int(it.get("jump", 0)) + 2 * int(it.passive == "saut")
 
 
-func calc(att: Unit, tgt: Unit, base: int, c := {}) -> Dictionary:
+func hit_dmg(h: Unit, f: Unit, c: Dictionary, base: int, k := 0) -> Dictionary:
+	## Le k-ième coup d'une carte. Concile du 29/09 : les bonus plats (arme, Fragile, soutien...) ne comptent qu'au
+	## premier coup ; les dégâts de Proie et de Revers s'ajoutent après les multiplicateurs (la Marque ou le dos
+	## qui remplit la condition ne multiplie plus son propre bonus).
+	var tb: int = mini(base, _trig_dmg(c, h, f.cell)) if c.has("trig") and c.trig.on in ["proie", "dos"] else 0
+	var r := calc(h, f, base - tb, c, k > 0)
+	r.dmg += tb
+	return r
+
+
+func card_total(h: Unit, f: Unit, c: Dictionary) -> Dictionary:
+	## Ce que la carte inflige à f, tous ses coups compris : la prévision et l'infobulle disent la même chose que l'attaque.
+	var base := _base(c, h, f.cell)
+	var r := hit_dmg(h, f, c, base, 0)
+	var n: int = (1 + played) if c.get("hits_flow", false) else int(c.get("hits", 1))
+	if n > 1:
+		r.dmg += hit_dmg(h, f, c, base, 1).dmg * (n - 1)
+	return r
+
+
+func calc(att: Unit, tgt: Unit, base: int, c := {}, no_flat := false) -> Dictionary:
 	var mult := 1.0
 	var flat := att.gear_dmg()
 	if att.side == "hero" and att.rage > 0:
@@ -2970,6 +3078,10 @@ func calc(att: Unit, tgt: Unit, base: int, c := {}) -> Dictionary:
 		notes.append("pavois ×0.5")
 	if lit and dot == 0 and main.floor_i >= 3:
 		dot = 1
+	# couvert : un héros collé à un allié, ou au premier round, ne se fait pas prendre de dos (flanc au pire)
+	if dot < 0 and _covered(tgt):
+		dot = 0
+		notes.append("couvert : pas de dos")
 	if dot < 0:
 		var bs: float = c.get("backstab", 1.5)
 		mult *= bs
@@ -2983,7 +3095,7 @@ func calc(att: Unit, tgt: Unit, base: int, c := {}) -> Dictionary:
 		flat += 3
 		notes.append("rune de force +3")
 	if att.side == "hero" and has("pierre") and int(c.get("hits", 1)) >= 2:
-		flat += 1
+		flat += 2  # ne compte plus qu'au premier coup
 	if att.companion and has("collier"):
 		flat += 3
 	if att.side == "hero" and att.key == "tidiane" and powers.has("hyperfocus"):
@@ -3046,6 +3158,9 @@ func calc(att: Unit, tgt: Unit, base: int, c := {}) -> Dictionary:
 	if tiles.get(tgt.cell, "") == "fourre":
 		mult *= 0.7
 		notes.append("fourré ×0.7")
+	if mult > 2.5:  # concile du 29/09 : au-delà, un cumul dispense de réfléchir (dos + Marque ×2,25 reste entier)
+		mult = 2.5
+		notes.append("plafond ×2.5")
 	# soutien : un allié au contact
 	if att.side == "hero" and alive_heroes().any(func(a): return a != att and dist(a.cell, att.cell) == 1):
 		flat += 2
@@ -3056,7 +3171,7 @@ func calc(att: Unit, tgt: Unit, base: int, c := {}) -> Dictionary:
 	if att.side == "foe" and att.data.get("aura", "") != "ordre" and _in_aura(att, "ordre", 2):
 		flat += 2
 		notes.append("ordre du capitaine +2")
-	return {"dmg": maxi(0, int(round(base * mult)) + flat), "notes": notes}
+	return {"dmg": maxi(0, int(round(base * mult)) + (0 if no_flat else flat)), "notes": notes}
 
 
 
@@ -3078,6 +3193,10 @@ func damage(u: Unit, amount: int, src: Unit = null, show := true, ranged := fals
 		Fx.number(main, u.position, "Esquive", Color(0.8, 0.95, 1.0))
 		u.dodge()
 		return
+	if _terrain and u.side == "foe" and src == null:
+		# concile du 29/09 : le terrain suit les PV ennemis (étage) et paie la Marque
+		var marked: bool = (u.mark > 0) if _terrain_mark < 0 else _terrain_mark == 1
+		amount = int(round(amount * Data.TERRAIN[clampi(main.floor_i, 1, 3) - 1] * (1.5 if marked else 1.0)))
 	var melee_hit: bool = src != null and not ranged and dist(src.cell, u.cell) == 1
 	if melee_hit and amount > 0 and src.side != u.side and src.has_p("venin"):
 		u.poison += 1
@@ -3280,7 +3399,7 @@ func kill(u: Unit, src: Unit = null) -> void:
 			if nx2:
 				nx2.poison += u.poison + int(power_val.get("seve_noire", 0))
 				Fx.number(main, nx2.position + Vector3(0, 0.8, 0), "Sève noire ☠ %d" % nx2.poison, Color(0.6, 0.9, 0.3), true)
-		if powers.has("curee") and u.root > 0:
+		if powers.has("curee") and (u.root > 0 or (int(power_val.get("curee2", 0)) > 0 and u.mark > 0)):
 			if board.walkable(u.cell) and not traps.has(u.cell):
 				_make_trap(u.cell, "piege", maxi(1, int(power_val.get("curee", 6))))
 			if player_turn and curee_turn < 3:
@@ -3412,6 +3531,9 @@ func await_spill(u: Unit, nx: Unit, dv: int) -> void:
 	Fx.bolt(main, u.position, nx.position, Color(0.5, 0.9, 1.0))
 	Fx.number(main, nx.position + Vector3(0, 0.9, 0), "Débordement", Color(0.5, 0.9, 1.0))
 	damage(nx, dv)
+	# Marée haute niveau 3 : le débordement repousse l'ennemi touché
+	if int(power_val.get("maree_haute2", 0)) > 0 and nx.alive:
+		await push(nx, _dir(u.cell, nx.cell), 1)
 
 
 func gain_block(u: Unit, v: int) -> void:
@@ -3466,7 +3588,9 @@ func anchored(u: Unit) -> bool:
 func _push_steps(u: Unit, d: Vector2i, n: int) -> void:
 	if anchored(u) and n > 0:
 		Fx.number(main, u.position, "Ancré", Color(0.7, 0.85, 0.95))
+		_terrain = true
 		damage(u, 3 + crash_bonus)
+		_terrain = false
 		return
 	var i := 0
 	var slid := 0
@@ -3500,6 +3624,8 @@ func _push_steps(u: Unit, d: Vector2i, n: int) -> void:
 		var drop: int = board.h[u.cell] - board.h[nx]
 		u.cell = nx
 		await _slide(u, board.world(nx))
+		if u.side == "foe" and traps.has(nx):
+			return  # concile du 29/09 : le piège traversé mord et arrête la poussée
 		if drop >= 3:
 			Fx.number(main, u.position, "Chute", Color(1, 0.8, 0.5))
 			damage(u, drop)
@@ -3521,10 +3647,12 @@ func _crash(u: Unit, o: Unit = null) -> void:
 	Fx.number(main, u.position, "Choc", Color(1, 0.8, 0.5))
 	var n := 3 + crash_bonus + (3 if has("clou_halage") else 0)
 	_choc = true
+	_terrain = true
 	damage(u, n)
 	if o:
 		damage(o, n)
 	_choc = false
+	_terrain = false
 	if o == null and u.side == "foe" and u.alive and has("clou_quai"):
 		u.root = maxi(u.root, 1)
 		Fx.number(main, u.position + Vector3(0, 0.5, 0), "⛓ Entravé", Color(0.8, 0.9, 1.0))
@@ -4410,6 +4538,7 @@ func foe_strike(f: Unit, h: Unit) -> void:
 		if last:
 			await push(last, d, 1)
 		return
+	var bk := _is_back(f, h)
 	var dmg: int = calc(f, h, f.atk()).dmg
 	if f.data.get("arme", "") == "magie" and f.data.ai != "healer":
 		var keep := h.block  # la magie passe sous l'armure
@@ -4418,6 +4547,8 @@ func foe_strike(f: Unit, h: Unit) -> void:
 		h.block = keep
 	else:
 		damage(h, dmg, f, true, ranged)
+	if bk and h.alive:  # frappé de dos, il fait face : le suivant du même côté frappe de face
+		h.face(f.cell - h.cell)
 	if ai == "boss":
 		main.shake(0.5)
 		for d in Board.DIRS:
@@ -4581,11 +4712,30 @@ func predict(u: Unit, hover) -> Dictionary:
 	var h := owner_of(c)
 	if c.get("dmg", 0) <= 0 or not card_targets(c, h).has(hover):
 		return {}
-	var r := calc(h, u, _base(c, h, u.cell), c)
-	r.dmg *= int(c.get("hits", 1))
+	var r := card_total(h, u, c)
 	if _trig_dmg(c, h, u.cell) > 0:
 		r.notes.append(Data.TRIGGERS[c.trig.on].name)
 	return r
+
+
+func incoming(h: Unit) -> int:
+	## Concile du 29/09 : ce que les ennemis peuvent infliger à h d'ici son prochain tour, chacun son meilleur coup
+	## sur lui (même procédé que l'IA). Orientation, Marque et soutien comptent : tourner ou grouper le héros se lit ici.
+	var total := 0
+	for f: Unit in alive_foes():
+		if f.data.ai in IDLE_AI or f.data.get("structure", false) or int(f.data.get("dmg", 0)) <= 0:
+			continue
+		var saved: Vector2i = f.cell
+		var rc = reach(f).cells
+		var cells: Array = [f.cell] if f.root > 0 else (rc.keys() if rc is Dictionary else rc)
+		var best := 0
+		for cell in cells:
+			f.cell = cell
+			if can_hit(f, cell, h):
+				best = maxi(best, calc(f, h, f.atk()).dmg)
+		f.cell = saved
+		total += best
+	return total
 
 
 func preview(hover) -> String:
@@ -4596,8 +4746,8 @@ func preview(hover) -> String:
 		var c := Data.card(hand[card_sel])
 		var h := owner_of(c)
 		if card_targets(c, h).has(hover) and c.get("dmg", 0) > 0:
-			var r := calc(h, u, _base(c, h, u.cell), c)
-			var t := "%s — %d dégâts" % [u.nm, r.dmg * int(c.get("hits", 1))]
+			var r := card_total(h, u, c)
+			var t := "%s — %d dégâts" % [u.nm, r.dmg]
 			if r.notes.size() > 0:
 				t += "  (" + " · ".join(r.notes) + ")"
 			return t
@@ -4607,6 +4757,10 @@ func preview(hover) -> String:
 			t += "  🛡%d" % u.block
 		if u.poison > 0:
 			t += "  ☠%d" % u.poison
+		if u.side == "hero" and not over:
+			var m := incoming(u)
+			if m > 0:
+				t += "  ·  Menace %d%s" % [m, " — mortel !" if m >= u.hp + u.block else ""]
 		if u.side == "foe":
 			t += "  —  %s" % Data.FOE_TIPS.get(u.key, "")
 			if u.affix != "":
@@ -4685,7 +4839,7 @@ func sheet(u: Unit) -> String:
 		var worn: Array = Data.SLOTS.filter(func(sl): return u.equip.get(sl, "") != "").map(func(sl): return Data.ITEMS[u.equip[sl]].name)
 		L.append("Équipement — %s" % (", ".join(worn) if worn.size() > 0 else "rien") + " · clic sur son portrait : la fiche")
 		if u.key == "receleur":
-			L.append("Double fond : ses cartes-objets ne comptent pas dans sa main · Tour de main : ses objets +2 (sinon pioche 1) · Stock %d" % stock())
+			L.append("Double fond : ses objets ne comptent pas dans sa main · Tour de main : ses objets +2 (sinon pioche 1) · Stock %d" % stock())
 		if tiles.has(u.cell):
 			L.append("Sur %s : %s" % [Data.TILES[tiles[u.cell]].name, Data.TILES[tiles[u.cell]].text])
 		var n := hand.filter(func(ci): return Data.card(ci).owner == u.key).size()
@@ -4927,6 +5081,8 @@ func _foe_walk(f: Unit, path: Array) -> void:
 func _spring(f: Unit) -> void:
 	## Piège à mâchoires (8, entrave) ou picots (5) : l'ennemi s'arrête dessus.
 	var node: Node3D = traps[f.cell]
+	_terrain_mark = 1 if f.mark > 0 else 0  # Détente, Collet de crin, Instinct marquent au déclic : pas pour ce piège-ci
+	_terrain = true
 	var k: String = trap_kind.get(f.cell, "piege")
 	var td: int = trap_dmg.get(f.cell, 8)
 	traps.erase(f.cell)
@@ -4952,7 +5108,7 @@ func _spring(f: Unit) -> void:
 			break
 		match k:
 			"piege":
-				f.root = maxi(f.root, 1)
+				f.root = maxi(f.root, 1 + (int(power_val.get("instinct2", 0)) if powers.has("instinct") else 0))  # Instinct niveau 3 : un tour de plus
 				if powers.has("instinct"):
 					f.mark = maxi(f.mark, 2)
 				_cause = "piege"
@@ -4983,9 +5139,13 @@ func _spring(f: Unit) -> void:
 			if f.alive:
 				f.exposed = true
 				Fx.number(main, f.position + Vector3(0, 1.0, 0), "Exposé", Color(1.0, 0.75, 0.45))
+				if int(power_val.get("piquets2", 0)) > 0:
+					f.mark = maxi(f.mark, int(power_val.piquets2))  # Piquets niveau 3
 		if double_trap and rep_i == 0:
 			Fx.number(main, f.position + Vector3(0, 0.9, 0), "Deux fois !", Color(1.0, 0.8, 0.4), true)
 			await wait(0.2)
+	_terrain = false
+	_terrain_mark = -1
 	if powers.has("crane"):
 		_craft(1)
 	await wait(0.3)
@@ -5150,7 +5310,7 @@ func _trig_apply(c: Dictionary, h: Unit, t) -> bool:
 	if tr.has("craft"):
 		_craft(int(tr.craft), h)
 	if (tr.has("mark") or tr.has("boom")) and t != null:
-		var f := unit_at(t)
+		var f: Unit = _struck if _struck != null and _struck.alive else unit_at(t)
 		if f and f.alive and f.side == "foe":
 			if tr.has("mark"):
 				f.mark = maxi(f.mark, int(tr.mark))
@@ -5177,14 +5337,14 @@ func _hero_dist(c: Vector2i) -> int:
 	return best
 
 
-# ------------------------------------------------------------------ cartes-objets
+# ------------------------------------------------------------------ objets
 
 func _sim(k: String, n := 1) -> void:
 	sim[k] = int(sim.get(k, 0)) + n
 
 
 func stock() -> int:
-	## Stock : cartes-objets de l'escouade encore en jeu (Éphémères exclues), 4 au plus.
+	## Stock : objets de l'escouade encore en jeu (Éphémères exclues), 4 au plus.
 	var is_obj := func(ci): return Data.def(ci.id).has("tool") and not ci.get("eph", false)
 	var n := hand.filter(is_obj).size()
 	for u in alive_heroes():
@@ -5195,23 +5355,23 @@ func stock() -> int:
 
 
 func objs_in_hand(filter := Callable()) -> Array:
-	## Indices des cartes-objets de la main (le filtre reçoit l'instance).
+	## Indices des objets de la main (le filtre reçoit l'instance).
 	return range(hand.size()).filter(func(i): return Data.def(hand[i].id).has("tool") and (not filter.is_valid() or filter.call(hand[i])))
 
 
 func _pick_obj(title: String, idx: Array) -> int:
-	## Quelle carte-objet de la main : d'office s'il n'y en a qu'une ; sinon au choix (auto-jeu : la plus basse).
+	## Quel objet de la main : d'office s'il n'y en a qu'une ; sinon au choix (auto-jeu : la plus basse).
 	if idx.is_empty():
 		return -1
 	if idx.size() == 1 or main._testing():
 		idx.sort_custom(func(a, b): return Data.level(hand[a]) + (5 if Data.card(hand[a]).get("legend", false) else 0) < Data.level(hand[b]) + (5 if Data.card(hand[b]).get("legend", false) else 0))
 		return idx[0]
-	var j: int = await main.ui.choose(title, "Quelle carte-objet ?", idx.map(func(i): return {"card": hand[i]}))
+	var j: int = await main.ui.choose(title, "Quel objet ?", idx.map(func(i): return {"card": hand[i]}))
 	return idx[maxi(0, j)]
 
 
 func _spend_obj(ci: Dictionary, played := false) -> bool:
-	## Comptabilité d'une carte-objet qui quitte la main (jouée, démontée ou lancée). Vrai si sa dernière charge part.
+	## Comptabilité d'un objet qui quitte la main (joué, démonté ou lancé). Vrai si sa dernière charge part.
 	var c := Data.card(ci)
 	if c.get("eph", false):
 		return false
@@ -5231,7 +5391,7 @@ func _spend_obj(ci: Dictionary, played := false) -> bool:
 
 
 func _item_consumed(h: Unit) -> void:
-	## Chaque carte-objet jouée, démontée ou lancée : compteurs et pouvoirs qui s'en nourrissent.
+	## Chaque objet joué, démonté ou lancé : compteurs et pouvoirs qui s'en nourrissent.
 	used_turn += 1
 	if h.has_p("prestesse") and h == active and h.get_meta("prestesse_round", -1) != turn and hand.size() < 10:
 		h.set_meta("prestesse_round", turn)  # Prestesse : le premier objet du tour fait piocher
@@ -5239,6 +5399,9 @@ func _item_consumed(h: Unit) -> void:
 	if powers.has("linfei") and power_owner.get("linfei") == h:
 		h.hits += 1
 		_count_hit(h)
+		if h.hits >= 3 - int(power_val.get("linfei", 0)) and not h.get_meta("linfei_fait", false):
+			h.set_meta("linfei_fait", true)
+			_craft(1, h)  # pas de cible à voler : Fabrique 1
 	if powers.has("marchenoir") and not over:
 		var near: Unit = null
 		for f in alive_foes():
@@ -5247,13 +5410,15 @@ func _item_consumed(h: Unit) -> void:
 		if near:
 			Fx.bolt(main, h.position, near.position, Data.CLASS_COLOR.receleur.lightened(0.3))
 			damage(near, 4 + int(power_val.get("marchenoir", 0)))
+			if int(power_val.get("marchenoir2", 0)) > 0 and near.alive:
+				near.mark = maxi(near.mark, 1)  # Marché noir niveau 3
 
 
 const TOOL_MAIN := {"bombe": "bomb", "picots": "picots", "gland": "oak_hp", "sels": "block"}
 
 
 func _tour_de_main(c: Dictionary, h: Unit) -> Dictionary:
-	## Tour de main : les cartes-objets du Receleur gagnent +2 sur leur valeur principale, sinon piochent 1.
+	## Tour de main : les objets du Receleur gagnent +2 sur leur valeur principale, sinon piochent 1.
 	if h.key != "receleur":
 		return c
 	c = c.duplicate()
@@ -5265,10 +5430,10 @@ func _tour_de_main(c: Dictionary, h: Unit) -> Dictionary:
 
 
 func _consume(h: Unit) -> String:
-	## Démonte : une carte-objet quitte la main sans son effet (elle perd une charge). "" si la main n'en a pas.
+	## Démonte : un objet quitte la main sans son effet (elle perd une charge). "" si la main n'en a pas.
 	var i: int = await _pick_obj("DÉMONTE", objs_in_hand())
 	if i < 0:
-		main.ui.toast("Aucune carte-objet en main.")
+		main.ui.toast("Aucun objet en main.")
 		return ""
 	var ci: Dictionary = hand[i]
 	hand.remove_at(i)
@@ -5291,7 +5456,7 @@ func _recharge_ci(ci: Dictionary, n: int, rule := true) -> bool:
 
 
 func _recharge(h: Unit, n: int) -> void:
-	## Recharge : +n charges à une carte-objet de la main, sinon à la première de la pioche du héros.
+	## Recharge : +n charges à un objet de la main, sinon à la première de la pioche du héros.
 	var ok := func(ci): return _recharge_ci(ci.duplicate(), 0)
 	var idx := objs_in_hand(ok)
 	var ci = null
@@ -5311,7 +5476,7 @@ func _recharge(h: Unit, n: int) -> void:
 
 
 func _craft(n: int, h: Unit = null, min_rar := 1, tool := "") -> void:
-	## Fabrique : des cartes-objets Éphémères dans la main (commune 75 %, peu commune 20 %, rare 5 %) ; jamais de légendaire.
+	## Fabrique : des objets Éphémères dans la main (commune 75 %, peu commune 20 %, rare 5 %) ; jamais de légendaire.
 	if h == null:
 		h = active
 	if h == null:
@@ -5337,7 +5502,7 @@ func _craft_id(id: String, n: int, h: Unit) -> void:
 
 
 func give_obj(h: Unit, id: String, lvl := 1) -> Dictionary:
-	## Une carte-objet gagnée en combat : dans la main si c'est le tour du héros, sinon en réserve pour son tour.
+	## Un objet gagnée en combat : dans la main si c'est le tour du héros, sinon en réserve pour son tour.
 	var ci: Dictionary = main.gain_obj(id, h.key, lvl)
 	if ci.is_empty():
 		return ci
@@ -5352,7 +5517,7 @@ func give_obj(h: Unit, id: String, lvl := 1) -> Dictionary:
 
 
 func _copy_item(h: Unit) -> bool:
-	## Contrefaçon : une copie niveau 1, Éphémère, d'une carte-objet de la main.
+	## Contrefaçon : une copie niveau 1, Éphémère, d'un objet de la main.
 	var i: int = await _pick_obj("COPIE", objs_in_hand())
 	if i < 0 or hand.size() >= 10:
 		main.ui.toast("Rien à copier.")
@@ -5364,7 +5529,7 @@ func _copy_item(h: Unit) -> bool:
 
 
 func _throw_item(h: Unit, t: Vector2i) -> void:
-	## Lance : une carte-objet de la main joue son effet sur la cible (jamais un outil de soin d'allié).
+	## Lance : un objet de la main joue son effet sur la cible (jamais un outil de soin d'allié).
 	var i: int = await _pick_obj("LANCE", objs_in_hand(func(ci): return Data.TOOLS[Data.def(ci.id).tool].target != "ally"))
 	if i < 0:
 		return
@@ -5464,6 +5629,16 @@ func _apply_tool(id: String, u: Unit, t: Vector2i, c := {}) -> void:
 				Fx.number(main, u.position + Vector3(0, 0.6, 0), "+%d énergie" % int(c.get("energy", 2)), GOLD_FX)
 				if c.is_empty():
 					energy += 2
+			"ballot":
+				if hero:
+					await _embauche(u, int(c.get("heist", 1)), 2 if c.get("heist_free", false) else (0 if c.get("heist_plain", true) else 1))
+				else:
+					var spots: Array = Board.DIRS.map(func(d): return u.cell + d).filter(func(q): return board.walkable(q) and unit_at(q) == null and not board.props.has(q))
+					if spots.size() > 0:
+						var pool: Array = Data.EXTRAS[clampi(main.floor_i, 1, 3)]
+						var cp := spawn_foe(pool[rng.randi_range(0, pool.size() - 1)], spots[rng.randi_range(0, spots.size() - 1)])
+						Fx.burst(main, cp.position + Vector3(0, 0.5, 0), EMBER, 30, 2.0, 6.0)
+						Fx.number(main, cp.position + Vector3(0, 1.6, 0), "Un complice !", EMBER, true)
 			"carnet":
 				var before := hand.size()
 				draw(int(c.get("draw", 3)))
@@ -5572,8 +5747,8 @@ func _apply_tool(id: String, u: Unit, t: Vector2i, c := {}) -> void:
 
 func _base(c: Dictionary, h: Unit, t) -> int:
 	## Dégâts de base d'une carte avant hauteur, dos, marque...
-	return int(c.get("dmg", 0)) + int(c.get("combo", 0)) * h.combo + _trig_dmg(c, h, t) + int(c.get("flow", 0)) * played + int(c.get("junk", 0)) * stock() \
-		+ int(h.block * float(c.get("per_block", 0.0))) + int(c.get("per_boom", 0)) * booms \
+	return int(c.get("dmg", 0)) + int(c.get("combo", 0)) * mini(h.combo, 4) + _trig_dmg(c, h, t) + int(c.get("flow", 0)) * played + int(c.get("junk", 0)) * stock() \
+		+ int(mini(h.block, 12) * float(c.get("per_block", 0.0))) + int(c.get("per_boom", 0)) * booms \
 		+ int(c.get("per_missing", 0)) * ((h.max_hp - h.hp) / 5) + int(c.get("per_tele", 0)) * h.teles \
 		+ int(c.get("per_used", 0)) * used_turn + int(c.get("_dropv", 0)) + int(c.get("_chg", 0)) \
 		+ int(c.get("per_drawn", 0)) * drawn_turn + int(c.get("per_exhaust", 0)) * int(exhaust_n.get(h, 0)) \
@@ -5601,7 +5776,7 @@ func _gives(g: Dictionary, h: Unit) -> void:
 func _berserk(u: Unit) -> void:
 	## Berserk : chaque perte de PV de son porteur ajoute +val à ses coups jusqu'à la fin du combat.
 	if powers.has("berserk") and power_owner.get("berserk") == u:
-		u.rage += int(power_val.get("berserk", 2))
+		u.rage = mini(u.rage + int(power_val.get("berserk", 2)), 3 * int(power_val.get("berserk", 2)))  # plafond : trois gains
 		Fx.number(main, u.position + Vector3(0, 1.2, 0), "Rage +%d" % int(power_val.get("berserk", 2)), Color(1.0, 0.3, 0.25))
 
 
@@ -5636,6 +5811,8 @@ func _fourgue(h: Unit, stolen: bool) -> void:
 
 func _steal(h: Unit, f: Unit) -> bool:
 	## Voler rapporte toujours : la carte de l'objet porté arrive en main ; sinon ce qui traîne dans ses poches (Éphémère).
+	if int(power_val.get("fourgue2", 0)) > 0 and powers.has("fourgue"):
+		f.exposed = true  # Le Fourgue niveau 3 : le vol ouvre le dos
 	if f.card_id != "":
 		_card_won(f, "Carte volée")
 		stolen_turn += 1
@@ -5656,7 +5833,7 @@ func _steal(h: Unit, f: Unit) -> bool:
 	stolen_turn += 1
 	_fourgue(h, true)
 	if f.tool == "":
-		# Poches fouillées : une carte-objet commune, Éphémère, dans la main du voleur
+		# Poches fouillées : un objet commune, Éphémère, dans la main du voleur
 		var common: Array = Data.CARDS.keys().filter(func(k): return Data.CARDS[k].has("tool") and Data.CARDS[k].rar == 1)
 		var id: String = common[randi() % common.size()]
 		if active == h and hand.size() < 10:
@@ -5789,6 +5966,10 @@ func _foe_tool(f: Unit) -> void:
 		"fumigene":
 			if f.hp * 2 < f.max_hp and rng.randf() < 0.6:
 				t = f.cell
+		"ballot":
+			# loin des héros, il sort son contrat : un complice est embauché
+			if not alive_heroes().any(func(hh): return dist(hh.cell, f.cell) <= 2) and rng.randf() < 0.5:
+				t = f.cell
 		"filet":
 			for h in alive_heroes():
 				if dist(f.cell, h.cell) <= 4 and rng.randf() < 0.4:
@@ -5846,7 +6027,7 @@ func _explode(c: Vector2i, dmg: int, cross := false) -> void:
 
 
 func _plant(c: Vector2i, hp := 10, arm := 0, aura := 3, fireproof := false, grow := true) -> void:
-	## Un arbre à PV : du décor (aura 0, sans pousse) ou un chêne planté par une carte-objet.
+	## Un arbre à PV : du décor (aura 0, sans pousse) ou un chêne planté par un objet.
 	board.blocked[c] = "oak" if aura > 0 else "tree"
 	tree_hp[c] = hp
 	oak_max[c] = hp
@@ -6416,13 +6597,21 @@ func _landed(u: Unit) -> void:
 
 # ------------------------------------------------------------------ multiclasse : cartes de guilde
 
+func _covered(tgt: Unit) -> bool:
+	## Concile du 29/09 : un héros au contact d'un allié, ou au premier round, ne se fait pas prendre de dos.
+	## Exposé passe outre. Même règle dans calc et _is_back.
+	return tgt.side == "hero" and not tgt.exposed and (turn <= 1 or alive_heroes().any(func(a): return a != tgt and dist(a.cell, tgt.cell) == 1))
+
+
 func _is_back(att: Unit, tgt: Unit) -> bool:
 	## Le coup vient-il de dos ? (même règle que calc)
-	if att.ambush or tgt.exposed or (smoke.has(tgt.cell) and dist(att.cell, tgt.cell) == 1):
+	if tgt.exposed:
+		return true
+	if (att.ambush or (smoke.has(tgt.cell) and dist(att.cell, tgt.cell) == 1)) and not _covered(tgt):
 		return true
 	var to_att := att.cell - tgt.cell
 	var dot := tgt.facing.x * signi(to_att.x) + tgt.facing.y * signi(to_att.y)
-	return dot < 0 and not tgt.has_p("vigilance")
+	return dot < 0 and not tgt.has_p("vigilance") and not _covered(tgt)
 
 
 func _on_hit(h: Unit, f: Unit, back: bool) -> void:
@@ -6431,7 +6620,7 @@ func _on_hit(h: Unit, f: Unit, back: bool) -> void:
 		return
 	h.hits += 1
 	# Nyxa : un coup de dos souffle un Murmure dans la main de celui qui l'a porté (4 par tour)
-	if back and powers.has("nyxa") and nyxa_turn < 4 and hand.size() < 10:
+	if back and powers.has("nyxa") and nyxa_turn < 2 and hand.size() < 10:
 		nyxa_turn += 1
 		hand.append({"id": "murmure", "lvl": 2 if int(power_val.get("nyxa", 0)) >= 2 else 1, "h": h.key, "eph": true})
 		Fx.number(main, h.position + Vector3(0, 1.3, 0), "+ Murmure", Color(0.75, 0.55, 1.0))
@@ -6465,11 +6654,14 @@ func _on_hit(h: Unit, f: Unit, back: bool) -> void:
 		if own.call("korin") and f.alive and h.block > 0:
 			Fx.number(main, f.position + Vector3(0, 1.0, 0), "Kōrin", Data.CLASS_COLOR.garde.lightened(0.4))
 			damage(f, h.block, h)
-		if own.call("hazan"):
-			_boom_foes(f.cell, int(power_val.get("hazan", 7)))
-		if own.call("linfei"):
-			if not (f.alive and _steal(h, f)):
-				_craft(1, h)
+	# >= et drapeau : un coup compté ailleurs (hitcount, objet) ne fait plus sauter le déclenchement
+	if own.call("hazan") and h.hits >= 3 and not h.get_meta("hazan_fait", false):
+		h.set_meta("hazan_fait", true)
+		_boom_foes(f.cell, int(power_val.get("hazan", 7)))
+	if own.call("linfei") and h.hits >= 3 - int(power_val.get("linfei", 0)) and not h.get_meta("linfei_fait", false):
+		h.set_meta("linfei_fait", true)
+		if not (f.alive and _steal(h, f)):
+			_craft(1, h)
 
 
 func _boom_foes(c: Vector2i, dmg: int) -> void:
@@ -6590,23 +6782,38 @@ func _enclume(src: Unit, hit: Unit) -> void:
 	Fx.number(main, ally.position + Vector3(0, 1.0, 0), "Enclume", Data.CLASS_COLOR.garde.lightened(0.4))
 	damage(src, calc(ally, src, int(power_val.get("enclume", 6))).dmg, ally)
 	ally.ambush = false
+	# niveau 3 : Marque 2, car la fin du tour ennemi en retire 1 juste après
+	if int(power_val.get("enclume2", 0)) > 0 and src.alive:
+		src.mark = maxi(src.mark, 2)
 
 
-func _discover(h: Unit, ids: Array, title: String, sub: String, free := true) -> void:
-	## Découvre : trois cartes au choix, la choisie arrive en main (coût 0, ou 1 de moins).
+func _embauche(h: Unit, n: int, disc := 0) -> void:
+	## Embauche : trois cartes d'une classe absente de l'escouade, on en garde une (cadre de sa classe d'origine).
+	## disc : 0 prix plein (tout le monde), 1 coûte 1 de moins, 2 gratuite ce tour (les Cambrioleurs font mieux).
+	var absent: Array = Data.HEROES.keys().filter(func(k): return not heroes.any(func(u): return u.key == k))
+	for i in n:
+		var pool: Array = Data.CARDS.keys().filter(func(id): return absent.has(Data.CARDS[id].owner) and not Data.STARTER[Data.CARDS[id].owner].has(id))
+		await _discover(h, pool, "EMBAUCHE", "Trois cartes d'une classe absente de l'escouade%s" % ((" (%d / %d)" % [i + 1, n]) if n > 1 else ""), disc == 2, disc == 0, true)
+
+
+func _discover(h: Unit, ids: Array, title: String, sub: String, free := true, plain := false, cb := false, lvls := {}) -> void:
+	## Découvre : trois cartes au choix, la choisie arrive en main (coût 0, ou 1 de moins ; plain : prix plein).
 	ids = ids.duplicate()
 	ids.shuffle()
 	var picks: Array = ids.slice(0, 3)
 	if picks.is_empty() or hand.size() >= 10:
 		return
-	var opts: Array = picks.map(func(id): return {"card": {"id": id, "lvl": 1, "h": h.key}})
+	var opts: Array = picks.map(func(id): return {"card": {"id": id, "lvl": int(lvls.get(id, 1)), "h": h.key, "cb": cb}})
 	for o in opts:
 		main.library_see(o.card.id)
 	var j: int = await main.ui.choose(title, sub, opts, true)
 	if j < 0:
 		return
-	var ci: Dictionary = {"id": picks[j], "lvl": 1, "h": h.key}
-	ci["free" if free else "cut"] = true if free else 1
+	var ci: Dictionary = {"id": picks[j], "lvl": int(lvls.get(picks[j], 1)), "h": h.key}
+	if cb:
+		ci["cb"] = true  # embauchée : la carte le dit sur son bandeau
+	if not plain:
+		ci["free" if free else "cut"] = true if free else 1
 	hand.append(ci)
 	changed.emit()
 
@@ -6709,6 +6916,12 @@ func _self_fx(c: Dictionary, h: Unit) -> void:
 		for o in alive_foes():
 			o.mark = maxi(o.mark, int(c.mark_all))
 			Fx.number(main, o.position + Vector3(0, 0.5, 0), "◎", Color(1.0, 0.85, 0.4))
+	if c.get("mark_contact", 0) > 0:
+		# Présage de mort : seuls les ennemis au contact d'un héros
+		for o in alive_foes():
+			if alive_heroes().any(func(a): return dist(a.cell, o.cell) == 1):
+				o.mark = maxi(o.mark, int(c.mark_contact))
+				Fx.number(main, o.position + Vector3(0, 0.5, 0), "◎", Color(1.0, 0.85, 0.4))
 	if c.get("heal_ally", 0) > 0:
 		var w: Unit = null
 		for a in alive_heroes():
@@ -6746,10 +6959,7 @@ func _self_fx(c: Dictionary, h: Unit) -> void:
 		var pool: Array = Data.CARDS.keys().filter(func(id): return c.cls.has(Data.CARDS[id].owner) and not Data.STARTER[Data.CARDS[id].owner].has(id))
 		await _discover(h, pool, "DÉCOUVRE", "Une carte de %s ; elle coûte 0 ce tour" % " ou ".join(c.cls.map(func(k): return Data.HEROES[k].name)))
 	if c.get("heist", 0) > 0:
-		var absent: Array = Data.HEROES.keys().filter(func(k): return not heroes.any(func(u): return u.key == k))
-		for n in int(c.heist):
-			var pool: Array = Data.CARDS.keys().filter(func(id): return absent.has(Data.CARDS[id].owner))
-			await _discover(h, pool, "BRAQUAGE", "Trois cartes d'un paquet qui n'est pas le tien (%d / %d)" % [n + 1, c.heist], c.get("heist_free", false))
+		await _embauche(h, int(c.heist), 2 if c.get("heist_free", false) else (0 if c.get("heist_plain", false) else 1))
 	if c.get("echo_item", false):
 		item_echo = h
 		Fx.number(main, h.position + Vector3(0, 1.0, 0), "Le prochain objet agit deux fois", GOLD_FX)
@@ -6763,7 +6973,7 @@ func _self_fx(c: Dictionary, h: Unit) -> void:
 	if c.get("add_card", "") != "" and c.get("add_per_item", false) and stock() == 0:
 		main.ui.toast("Stock vide.")
 	elif c.get("add_card", "") != "":
-		for k in (mini(stock(), 3) if c.get("add_per_item", false) else int(c.get("add_n", 1))):
+		for k in (mini(stock(), 2) if c.get("add_per_item", false) else int(c.get("add_n", 1))):
 			if hand.size() < 10:
 				hand.append({"id": c.add_card, "lvl": 1, "eph": true, "h": h.key})
 	if c.get("flashback", false):

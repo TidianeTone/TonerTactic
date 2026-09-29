@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="fr">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
+		<title>$GODOT_PROJECT_NAME</title>
+		<style>
+html, body, #canvas {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+body {
+	color: white;
+	background-color: black;
+	overflow: hidden;
+	touch-action: none;
+}
+
+#canvas {
+	display: block;
+}
+
+#canvas:focus {
+	outline: none;
+}
+
+#status, #status-splash, #status-progress {
+	position: absolute;
+	left: 0;
+	right: 0;
+}
+
+#status, #status-splash {
+	top: 0;
+	bottom: 0;
+}
+
+#status {
+	background-color: $GODOT_SPLASH_COLOR;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	visibility: hidden;
+}
+
+#status-splash {
+	max-height: 100%;
+	max-width: 100%;
+	margin: auto;
+}
+
+#status-splash.show-image--false {
+	display: none;
+}
+
+#status-splash.fullsize--true {
+	height: 100%;
+	width: 100%;
+	object-fit: contain;
+}
+
+#status-splash.use-filter--false {
+	image-rendering: pixelated;
+}
+
+/* TonerTactic : le logo, une barre dorée qui dit où on en est, et une phrase quand le téléchargement est fini */
+#status { background: radial-gradient(ellipse at center, #1a1512 0%, #050409 70%); gap: 2.2rem; }
+#status-splash { position: static; max-width: min(560px, 80vw); max-height: 45vh; margin: 0; }
+#status-notice { display: none; }
+#status-progress { position: static; display: none; width: min(520px, 80vw); }
+#bar { height: 14px; border: 2px solid #8a6a33; border-radius: 8px; background: #120e0c; overflow: hidden;
+	box-shadow: 0 0 0 1px #000, inset 0 2px 6px #000; }
+#fill { height: 100%; width: 0%; background: linear-gradient(#f4d08a, #e3b45c 50%, #9c7431); }
+#fill.wait { width: 100% !important; background: repeating-linear-gradient(-45deg, #e3b45c 0 14px, #9c7431 14px 28px);
+	background-size: 40px 40px; animation: rayures 0.8s linear infinite; }
+@keyframes rayures { to { background-position: 40px 0; } }
+#label { margin-top: 0.8rem; text-align: center; color: #e3b45c; font: 1.6rem 'Pirata One', serif; letter-spacing: 0.04em; }
+#hint { margin-top: 0.3rem; min-height: 1.3em; text-align: center; color: #9d9384; font: italic 0.95rem 'Lato', sans-serif; transition: opacity 0.35s; }
+
+#status-notice {
+	background-color: #5b3943;
+	border-radius: 0.5rem;
+	border: 1px solid #9b3943;
+	color: #e0e0e0;
+	font-family: 'Noto Sans', 'Droid Sans', Arial, sans-serif;
+	line-height: 1.3;
+	margin: 0 2rem;
+	overflow: hidden;
+	padding: 1rem;
+	text-align: center;
+	z-index: 1;
+}
+		</style>
+		<link rel="preconnect" href="https://fonts.googleapis.com">
+		<link href="https://fonts.googleapis.com/css2?family=Pirata+One&family=Lato&display=swap" rel="stylesheet">
+		$GODOT_HEAD_INCLUDE
+	</head>
+	<body>
+		<canvas id="canvas">
+			Your browser does not support the canvas tag.
+		</canvas>
+
+		<noscript>
+			Your browser does not support JavaScript.
+		</noscript>
+
+		<div id="status">
+			<img id="status-splash" class="$GODOT_SPLASH_CLASSES" src="$GODOT_SPLASH" alt="">
+			<div id="status-progress"><div id="bar"><div id="fill"></div></div><div id="label"></div><div id="hint"></div></div>
+			<div id="status-notice"></div>
+		</div>
+
+		<script src="$GODOT_URL"></script>
+		<script>
+const GODOT_CONFIG = $GODOT_CONFIG;
+const GODOT_THREADS_ENABLED = $GODOT_THREADS_ENABLED;
+const engine = new Engine(GODOT_CONFIG);
+
+(function () {
+	const statusOverlay = document.getElementById('status');
+	const statusProgress = document.getElementById('status-progress');
+	const statusNotice = document.getElementById('status-notice');
+
+	const FR = (navigator.language || 'fr').toLowerCase().startsWith('fr');
+	const fill = document.getElementById('fill');
+	const label = document.getElementById('label');
+	const hint = document.getElementById('hint');
+	label.textContent = FR ? 'Chargement…' : 'Loading…';
+	// des phrases d'ambiance qui défilent : tant que le texte change, on voit que ça avance
+	const FLAVOUR = FR ? [
+		'On aiguise les lames…', 'On mélange le paquet…', 'On rallume les braseros…', 'Les Moussus reprennent leur place…',
+		'On remonte les vannes de l’Écluse…', 'Le marchand recompte sa monnaie…', 'Les coffres se referment tout seuls…',
+		'On taille les voxels un par un…', 'Le crabe ajuste sa carapace…', 'On dépoussière la Bibliothèque…',
+		'On réarme les pièges…', 'L’eau remonte dans les ruines…', 'On cire les bottes de l’escouade…', 'On graisse les charnières du donjon…',
+	] : [
+		'Sharpening the blades…', 'Shuffling the deck…', 'Relighting the braziers…', 'The Mossbacks take their places…',
+		'Raising the lock gates…', 'The merchant recounts his coins…', 'The chests close themselves…',
+		'Carving the voxels one by one…', 'The crab adjusts its shell…', 'Dusting off the Library…',
+		'Resetting the traps…', 'The water rises through the ruins…', 'Polishing the squad’s boots…', 'Oiling the dungeon’s hinges…',
+	];
+	let fi = Math.floor(Math.random() * FLAVOUR.length);
+	hint.textContent = FLAVOUR[fi];
+	const flavourTimer = setInterval(() => {
+		hint.style.opacity = 0;
+		setTimeout(() => { fi = (fi + 1) % FLAVOUR.length; hint.textContent = FLAVOUR[fi]; hint.style.opacity = 1; }, 350);
+	}, 2500);
+	let ready = false;
+	function prepare() {
+		// téléchargement fini : le moteur démarre et compile ses shaders, l'écran ne bouge plus de lui-même
+		fill.classList.add('wait');
+		label.textContent = FR ? 'Préparation du donjon…' : 'Preparing the dungeon…';
+	}
+	// le jeu appelle tonerReady() quand l'écran titre est dessiné (main.gd) ; au pire on lève le rideau après 2 minutes
+	window.tonerReady = () => { ready = true; clearInterval(flavourTimer); setStatusMode('hidden'); };
+
+	let initializing = true;
+	let statusMode = '';
+
+	function setStatusMode(mode) {
+		if (statusMode === mode || !initializing) {
+			return;
+		}
+		if (mode === 'hidden') {
+			statusOverlay.remove();
+			initializing = false;
+			return;
+		}
+		statusOverlay.style.visibility = 'visible';
+		statusProgress.style.display = mode === 'progress' ? 'block' : 'none';
+		statusNotice.style.display = mode === 'notice' ? 'block' : 'none';
+		statusMode = mode;
+	}
+
+	function setStatusNotice(text) {
+		while (statusNotice.lastChild) {
+			statusNotice.removeChild(statusNotice.lastChild);
+		}
+		const lines = text.split('\n');
+		lines.forEach((line) => {
+			statusNotice.appendChild(document.createTextNode(line));
+			statusNotice.appendChild(document.createElement('br'));
+		});
+	}
+
+	function displayFailureNotice(err) {
+		console.error(err);
+		if (err instanceof Error) {
+			setStatusNotice(err.message);
+		} else if (typeof err === 'string') {
+			setStatusNotice(err);
+		} else {
+			setStatusNotice('An unknown error occurred.');
+		}
+		setStatusMode('notice');
+		initializing = false;
+	}
+
+	const missing = Engine.getMissingFeatures({
+		threads: GODOT_THREADS_ENABLED,
+	});
+
+	if (missing.length !== 0) {
+		if (GODOT_CONFIG['serviceWorker'] && GODOT_CONFIG['ensureCrossOriginIsolationHeaders'] && 'serviceWorker' in navigator) {
+			let serviceWorkerRegistrationPromise;
+			try {
+				serviceWorkerRegistrationPromise = navigator.serviceWorker.getRegistration();
+			} catch (err) {
+				serviceWorkerRegistrationPromise = Promise.reject(new Error('Service worker registration failed.'));
+			}
+			// There's a chance that installing the service worker would fix the issue
+			Promise.race([
+				serviceWorkerRegistrationPromise.then((registration) => {
+					if (registration != null) {
+						return Promise.reject(new Error('Service worker already exists.'));
+					}
+					return registration;
+				}).then(() => engine.installServiceWorker()),
+				// For some reason, `getRegistration()` can stall
+				new Promise((resolve) => {
+					setTimeout(() => resolve(), 2000);
+				}),
+			]).then(() => {
+				// Reload if there was no error.
+				window.location.reload();
+			}).catch((err) => {
+				console.error('Error while registering service worker:', err);
+			});
+		} else {
+			// Display the message as usual
+			const missingMsg = 'Error\nThe following features required to run Godot projects on the Web are missing:\n';
+			displayFailureNotice(missingMsg + missing.join('\n'));
+		}
+	} else {
+		setStatusMode('progress');
+		engine.startGame({
+			'onProgress': function (current, total) {
+				if (current > 0 && total > 0) {
+					const mo = (n) => (n / 1048576).toFixed(0);
+					fill.style.width = (100 * current / total).toFixed(1) + '%';
+					label.textContent = (FR ? 'Chargement · ' : 'Loading · ') + Math.floor(100 * current / total) + ' %  ·  ' + mo(current) + ' / ' + mo(total) + (FR ? ' Mo' : ' MB');
+					if (current >= total) {
+						prepare();
+					}
+				}
+			},
+		}).then(() => {
+			prepare();
+			setTimeout(() => { if (!ready) { setStatusMode('hidden'); } }, 120000);
+		}, displayFailureNotice);
+	}
+}());
+		</script>
+	</body>
+</html>

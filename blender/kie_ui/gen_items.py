@@ -223,6 +223,28 @@ RELICS2 = {  # les 57 reliques du concile (27/09), planches à part pour ne pas 
 }
 
 
+PACTES = {  # les 7 pactes (28/09) : même pixel art que l'équipement, mais des objets maudits (lueur rouge sombre), plus des pictogrammes plats
+	"sang": "a cracked black stone chalice overflowing with dark blood, a rolled contract dipped in it, faint red glow",
+	"horde": "a tattered black war banner on a spear with many small crude skull tokens tied to it with cords",
+	"acier": "a heavy black steel shield boss covered with riveted iron plates and a glowing red cursed rune",
+	"rage": "a snarling horned iron war mask with burning red eyes and cracks",
+	"main": "a withered grey hand holding only two playing cards while a third card falls away burning",
+	"brume": "an old ship lantern swallowed by thick grey swirling mist, its light choked, a broken arrow at its base",
+	"champion": "a spiked black iron crown resting on a champion's horned skull, glowing red eyes",
+}
+
+
+SALLES = {  # marqueurs de la carte d'étage (28/09), à la place des pastilles : de petits objets posés au sol, vue de trois quarts
+	"combat": "two crossed swords planted in a small mound of earth and autumn leaves",
+	"elite": "a horned skull mounted on a spear with a torn crimson banner",
+	"boss": "a small dark stone fortress tower with a glowing red window at the top",
+	"sanctuaire": "a small mossy stone shrine with a basin of glowing green water and a candle",
+	"reliquaire": "a small ornate reliquary chest of gold and violet enamel, slightly open, violet glow",
+	"marchand": "a tiny merchant stall with a striped canopy and a brass balance scale on the counter",
+	"mystere": "a broken old lantern with a glowing turquoise will-o-wisp floating out of it",
+}
+
+
 def reliques(src=RELICS, sub="reliques"):
 	out = os.path.join(HERE, sub)
 	os.makedirs(out, exist_ok=True)
@@ -241,4 +263,4 @@ def reliques(src=RELICS, sub="reliques"):
 
 
 if __name__ == "__main__":
-	{"dos": dos, "dos_classes": dos_classes, "reliques": reliques, "reliques2": lambda: reliques(RELICS2, "reliques2")}.get(sys.argv[1] if sys.argv[1:] else "", planches)()
+	{"dos": dos, "dos_classes": dos_classes, "reliques": reliques, "reliques2": lambda: reliques(RELICS2, "reliques2"), "pactes": lambda: reliques(PACTES, "pactes"), "salles": lambda: reliques(SALLES, "salles")}.get(sys.argv[1] if sys.argv[1:] else "", planches)()

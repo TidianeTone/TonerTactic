@@ -131,6 +131,17 @@ OPTION = ("Using the reference image as the style guide, paint a NEW game UI pan
 	"No crest. The inside is one flat, plain dark leather surface with a faint stitched line just inside the rim, no texture, no pattern, "
 	"no picture, no divider, dark enough for light text. Nothing sticks out beyond the rim. The whole background around the panel is pure flat "
 	"chroma green #00FF00. No text, no letters, no numbers.")
+# Panneaux neutres (28/09) : la même famille que la boîte du coach (pierre claire des ruines, feuilles d'automne), pour homogénéiser
+# tout ce qui était encore un rectangle uni : colonne d'annonce de la carte, blocs Risques / Récompenses, panneau générique.
+NEUTRE_LOOK = ("pale weathered ruin stone moulding with a thin dark bronze inner line, like the reference dialog box; the corner pieces are small "
+	"clusters of orange and red autumn leaves with a little ivy, kept small and inside the frame")
+NEUTRES = {
+	"annonce": (VOC, "9:16", "The crest on the top edge is a small bronze compass rose."),
+	"panneau": (VOC, "9:16", "No crest: the top edge is plain like the others, the four leafy corners are the only decoration."),
+	"risque": (BANDEAU, "16:9", "Instead of leaves, the two ends carry a small dark iron clasp with a deep crimson enamel stone, and a thin crimson enamel line runs just inside the whole border."),
+	"ennemi": (BANDEAU, "16:9", "This one is the ENEMY FACTION version: instead of pale stone and leaves, the border is dark rusted iron and blackened bronze with a thin deep crimson enamel line inside; the two short ends carry a small horned iron skull clasp; menacing but sober."),
+	"gain": (BANDEAU, "16:9", "Instead of leaves, the two ends carry a small bronze clasp holding a tiny stack of gold coins, and a thin warm gold enamel line runs just inside the whole border."),
+}
 CHROMA = {"moine": "magenta #FF00FF"}  # le jade mangerait le vert du fond
 PAIRE_BLEUE = {("moine", "tidiane")}   # jade et laque magenta : ni vert ni magenta
 
@@ -147,6 +158,10 @@ def job(k):
 		key = "blue #0000FF" if (x, y) in PAIRE_BLEUE else ("magenta #FF00FF" if "moine" in (x, y) else "green #00FF00")
 		return (GUILDE % key, os.path.join(D, "guilde_%s.png" % c), "9:16",
 			[os.path.join(D, "encart_voc_%s.png" % x), os.path.join(D, "encart_voc_%s.png" % y)])
+	if fam == "neutre" and c in NEUTRES:
+		tpl, ar, extra = NEUTRES[c]
+		return (tpl % ("dark teal", "green #00FF00", "Materials and motifs: " + NEUTRE_LOOK + ". " + extra), os.path.join(D, "neutre_%s.png" % c), ar,
+			[os.path.join(os.path.dirname(D), "..", "boites", "neutre.png")])
 	if k == "action":
 		return ACTION, os.path.join(D, "bouton_action.png"), "21:9", [os.path.join(D, "bouton_equipement.png")]
 	if k == "option":

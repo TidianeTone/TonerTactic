@@ -13,6 +13,8 @@ uniform vec4 units[16];          // xyz : torse des unités, w : 1 si active
 uniform int unit_n = 0;
 instance uniform float flash = 0.0;
 instance uniform vec3 rim = vec3(0.0);
+uniform bool use_tex = false;    // modèles HD allégés (tools/hd_web.py) : la couleur vient d'une texture, pas des sommets
+uniform sampler2D albedo_tex : source_color, filter_nearest;
 
 varying vec3 wpos;
 
@@ -65,7 +67,7 @@ void fragment() {
 			discard;
 		}
 	}
-	vec3 c = COLOR.rgb;
+	vec3 c = use_tex ? texture(albedo_tex, UV).rgb : COLOR.rgb;
 	float wet = 1.0 - smoothstep(water_y - 0.05, water_y + 0.22, wpos.y);
 	c = mix(c, c * vec3(0.5, 0.62, 0.58), wet * 0.85);
 	if (moss > 0.0) {

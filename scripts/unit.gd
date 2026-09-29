@@ -103,12 +103,28 @@ var _body: Node3D
 var anim: AnimationPlayer  # modèle HD animé ; null pour les modèles voxel rigides
 
 
-var _hand: Node3D  # os de la main droite du modèle HD : le bâton suit sa position, pas sa rotation
+var _hand: Node3D  # os de la main droite du modèle HD : l'arme suit sa position
+var _hand_l: Node3D  # main gauche : le second gantelet du Moine
+var _weapon_l: Node3D
+var _bras: SkeletonModifier3D  # bras_arme.gd : coupé pendant la mort (le bras raide suivrait le corps qui tombe)
 var _staff_k := 1.0
+var _tenue := Vector3.ZERO  # arme HD : inclinaison vers l'avant, vers l'extérieur (rad), 1 si elle suit la rotation de la main
+
+# Armes HD (blender/voxeliser_arme.py), origine sur la poignée, grand axe +Y, à leur taille :
+# (vers l'avant, vers l'extérieur, suit la main). Une épée pointe devant, un bâton reste planté, la lanterne pend.
+const TENUE := {
+	"garde": Vector3(1.0, 0.15, 0), "lame": Vector3(1.25, 0.1, 0), "artificier": Vector3(0.85, 0.2, 0),
+	"tidiane": Vector3(0.85, 0.2, 0), "oracle": Vector3(0.12, 0.4, 0), "receleur": Vector3(0.08, 0.05, 0),
+	"trappeur": Vector3(-0.1, 0.02, 0), "moine": Vector3(0, 0, 1),
+}
 
 
-func _grip(inst: Node3D, old_path: String) -> void:
-	## Le modèle HD vient les mains vides : on prend l'arme du modèle voxel d'origine et on la met dans la main droite.
+func _grip(inst: Node3D, cls: String, other := "") -> void:
+	## Le modèle HD vient les mains vides : il prend l'arme de sa VOCATION (sinon de sa classe) et la tient dans la
+	## main droite (le Moine : un gantelet à chaque main). Arme HD s'il y en a une, sinon celle de l'ancien voxel.
+	## other : l'autre classe d'un hybride, dont la couleur teinte la zone colorable de l'arme.
+	var hd := "res://assets/hd/arme_%s.glb" % cls
+	var old_path := hd if ResourceLoader.exists(hd) else "res://assets/u_%s.glb" % cls
 	if not ResourceLoader.exists(old_path):
 		return
 	var sks := inst.find_children("*", "Skeleton3D", true, false)
@@ -120,7 +136,7 @@ func _grip(inst: Node3D, old_path: String) -> void:
 		if bi < 0:
 			bi = sk.find_bone(n)
 	var old: Node3D = load(old_path).instantiate()
-	var w: Node3D = old.find_child(key + "_weapon", true, false)
+	var w: Node3D = old.find_child(cls + "_weapon", true, false)
 	if bi < 0 or w == null:
 		old.free()
 		return
@@ -132,14 +148,64 @@ func _grip(inst: Node3D, old_path: String) -> void:
 	sk.add_child(ba)
 	inst.add_child(w)
 	_hand = ba
-	_staff_k = 0.55
+	if old_path != hd:
+		var h := (w as MeshInstance3D).get_aabb().get_longest_axis_size() if w is MeshInstance3D else 1.2
+		_staff_k = clampf(1.2 / maxf(h, 0.1), 0.4, 1.0)  # toutes les armes à ~1,2 m (le bâton de 2,2 m aussi)
+		_tenue = Vector3.ZERO
+		return
+	_staff_k = 1.0
+	_tenue = TENUE.get(cls, Vector3(0.9, 0.15, 0))
+	# le bras qui tient l'arme sort du corps (bras_arme.gd) : sinon les animations de l'Oracle la plantent dans le ventre
+	var bras := preload("res://scripts/bras_arme.gd").new()
+	bras.ref = model
+	bras.garde = cls == "moine"
+	bras.sides = ["Right", "Left"] if cls == "moine" else ["Right"]
+	if cls == "receleur":  # la lanterne tendue devant : pendue au côté, elle disparaîtrait dans le long manteau
+		bras.ecart = 0.3
+		bras.leve = 1.1
+		bras.avant_bras = Vector3(0.2, 0.15, 1.0)
+	elif cls == "oracle":  # le bâton loin du corps : l'orbe passerait dans le bord des chapeaux
+		bras.ecart = 0.6
+	sk.add_child(bras)
+	_bras = bras
+	if cls == "moine":
+		var bl := sk.find_bone(sk.get_bone_name(bi).replace("Right", "Left"))
+		if bl >= 0:
+			_weapon_l = w.duplicate()
+			_weapon_l.scale.x = -1.0  # le gantelet gauche : le droit en miroir
+			inst.add_child(_weapon_l)
+			_hand_l = BoneAttachment3D.new()
+			_hand_l.bone_name = sk.get_bone_name(bl)
+			sk.add_child(_hand_l)
+	_tint = Color(Data.CLASS_COLOR[other], 0.65) if Data.CLASS_COLOR.has(other) else Color(0, 0, 0, 0)  # une teinte, pas un aplat
+
+
+var _tint := Color(0, 0, 0, 0)
+
+
+func _tint_weapon() -> void:
+	## La zone colorable de l'arme HD (<classe>_weapon_glow) prend la couleur de l'autre classe de l'hybride.
+	for g in [weapon, _weapon_l]:
+		if g:
+			for mi in g.find_children("*glow", "MeshInstance3D", true, false):
+				mi.set_instance_shader_parameter("tint", _tint)
 
 
 func _follow_hand() -> void:
-	## Bâton droit, un peu penché vers l'avant, tenu à la hauteur de la main.
+	## Arme HD : tenue à la main, orientée selon son type (TENUE). Ancienne arme : bâton droit à la hauteur de la main.
 	if _hand == null or weapon == null:
 		return
 	var h := _hand.global_position
+	if _tenue.z > 0.0:  # gantelets : ils suivent la main, rotation comprise
+		weapon.global_transform = Transform3D(_hand.global_basis.orthonormalized() * Basis.from_scale(Vector3.ONE * bs), h)
+		if _hand_l and _weapon_l:
+			_weapon_l.global_transform = Transform3D(_hand_l.global_basis.orthonormalized() * Basis.from_scale(Vector3(-bs, bs, bs)), _hand_l.global_position)
+		return
+	if _tenue != Vector3.ZERO:
+		var mb := model.global_basis.orthonormalized()
+		weapon.global_position = h + _hand.global_basis.y.normalized() * 0.06 * bs  # dans la paume, pas au poignet
+		weapon.global_basis = mb * Basis.from_euler(Vector3(_tenue.x, 0, _tenue.y)) * Basis.from_scale(Vector3.ONE * bs)
+		return
 	var side := h - model.global_position
 	side.y = 0.0
 	weapon.global_position = h + side.normalized() * 0.12 * bs  # écarté du corps : visible de face
@@ -150,6 +216,8 @@ func play(n: String, speed := 1.0) -> bool:
 	## Joue une animation du modèle HD puis revient au repos ; false si le modèle n'en a pas.
 	if anim == null or not anim.has_animation(n):
 		return false
+	if _bras:
+		_bras.active = n != "death"
 	anim.play(n, 0.12, speed)
 	if n != "walk" and n != "death":
 		anim.queue("idle")
@@ -169,9 +237,14 @@ func _load_body(path: String) -> void:
 	_meshes.clear()
 	_xmats.clear()
 	_hand = null
+	_hand_l = null
+	_weapon_l = null
+	_bras = null
+	_tint = Color(0, 0, 0, 0)
+	weapon = null
 	# PC ultra : modèle voxel fin riggé et animé (blender/voxeliser_rig.py), s'il existe
-	var hdp := "res://assets/hd/" + path.get_file()
-	if Board.hd and ResourceLoader.exists(hdp):
+	var hdp: String = Board.hd_dir + path.get_file()
+	if Board.hd_units and ResourceLoader.exists(hdp):
 		path = hdp
 	var inst: Node3D = load(path).instantiate()
 	_body = inst
@@ -183,8 +256,13 @@ func _load_body(path: String) -> void:
 				anim.get_animation(n).loop_mode = Animation.LOOP_LINEAR
 		anim.play("idle")
 		if inst.find_child(key + "_weapon", true, false) == null:
-			_grip(inst, "res://assets/" + path.get_file())
-	weapon = inst.find_child(key + "_weapon", true, false)
+			var f := path.get_file().get_basename()
+			if f.contains("__"):  # u_<classe>__<vocation> : l'arme de la vocation, teintée par la classe
+				_grip(inst, f.get_slice("__", 1), f.get_slice("__", 0).trim_prefix("u_"))
+			else:
+				_grip(inst, key)
+	if weapon == null:  # l'arme de vocation posée par _grip garde la priorité
+		weapon = inst.find_child(key + "_weapon", true, false)
 	if weapon == null and data.has("model"):
 		weapon = inst.find_child(str(data.model) + "_weapon", true, false)
 	for mi in inst.find_children("*", "MeshInstance3D", true, false):
@@ -192,7 +270,8 @@ func _load_body(path: String) -> void:
 			mi.material_override = Board.material("glow_unit")
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		else:
-			mi.material_override = Board.material("unit")
+			var sm := mi.mesh.surface_get_material(0) as BaseMaterial3D
+			mi.material_override = Board.unit_material(sm.albedo_texture if sm else null)
 			var col: Color = Data.CLASS_COLOR.get(key, Color(1.0, 0.3, 0.15))
 			_xmats.append(_xray(col if side == "hero" else Color(1.0, 0.35, 0.2)))
 			# liseré de contour : sur le voxel fin animé, il s'allume sur chaque petite face de biais et fait du bruit
@@ -201,6 +280,7 @@ func _load_body(path: String) -> void:
 			_meshes.append(mi)
 			if String(mi.name).ends_with("_body"):
 				head = (1.75 if anim else mi.get_aabb().end.y) * bs + 0.35
+	_tint_weapon()
 
 
 func reset_fight() -> void:
@@ -265,7 +345,7 @@ func setup(k: String, s: String) -> void:
 	# anneau au sol : bleu pour les héros (or pour celui qui joue), rouge pour les ennemis
 	ring = MeshInstance3D.new()
 	var q := QuadMesh.new()
-	q.size = Vector2(1.0, 1.0) * {"gardien": 2.0, "grelin": 1.5, "hale": 1.5, "brasse": 1.5, "chevrier": 1.5, "dame": 1.5, "brule_haie": 1.5}.get(k, 1.0)
+	q.size = Vector2(1.4, 1.4) * {"gardien": 2.0, "grelin": 1.5, "hale": 1.5, "brasse": 1.5, "chevrier": 1.5, "dame": 1.5, "brule_haie": 1.5}.get(k, 1.0)
 	q.orientation = PlaneMesh.FACE_Y
 	ring.mesh = q
 	var m := ShaderMaterial.new()
@@ -317,14 +397,19 @@ render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabl
 uniform vec4 col : source_color;
 uniform float sel = 0.0;
 void fragment(){
-	float d = length(UV - 0.5) * 2.0;
+	float d = length(UV - 0.5) * 2.0 * 1.4;  // quad agrandi ×1,4 : l'anneau garde sa taille, la pointe de regard dépasse devant
 	float r = smoothstep(0.56, 0.72, d) * (1.0 - smoothstep(0.86, 0.98, d));
 	float fill = (1.0 - smoothstep(0.0, 0.85, d)) * 0.3;
 	// celui qui joue : l'anneau bat, et une onde s'en échappe
 	float beat = sel * (0.55 + 0.45 * sin(TIME * 4.0));
 	float w = fract(TIME * 0.7);
 	float wave = sel * (1.0 - w) * smoothstep(0.08, 0.0, abs(d - (0.55 + w * 0.43)));
-	ALBEDO = col.rgb * (r * (1.3 + beat * 1.8) + fill * (0.5 + sel * 0.6) + wave * 1.6);
+	// orientation : un petit chevron sur l'anneau, côté regard (l'anneau tourne avec l'unité)
+	vec2 p = UV - 0.5;
+	float ang = abs(atan(p.x, p.y));
+	float tip = clamp((d - 1.02) / 0.3, 0.0, 1.0);
+	float chev = step(1.02, d) * step(d, 1.32) * (1.0 - smoothstep(0.0, 0.04, ang - 0.22 * (1.0 - tip)));
+	ALBEDO = col.rgb * (r * (1.3 + beat * 1.8) + fill * (0.5 + sel * 0.6) + wave * 1.6 + chev * 1.4);
 }"""
 	return _rs
 
@@ -461,6 +546,7 @@ func _process(dt: float) -> void:
 	var target := atan2(float(facing.x), float(facing.y))
 	_yaw = lerp_angle(_yaw, target, 1.0 - exp(-dt * 12.0))
 	model.rotation.y = _yaw
+	ring.rotation.y = _yaw
 	var t := Time.get_ticks_msec() / 1000.0
 	if not _busy and anim == null:
 		model.scale.y = bs * (1.0 + sin(t * 2.4 + _phase) * 0.018)
@@ -476,8 +562,13 @@ func _process(dt: float) -> void:
 
 # ------------------------------------------------------------------ animations
 
+static var on_walk := Callable()  # main : la caméra suit l'unité qui marche
+
+
 func walk(path: Array, board: Board) -> void:
 	_busy = true
+	if on_walk.is_valid():
+		on_walk.call(self)
 	play("walk", 2.0)
 	for c in path:
 		var a := position
@@ -490,6 +581,8 @@ func walk(path: Array, board: Board) -> void:
 		await tw.finished
 	play("idle")
 	_busy = false
+	if on_walk.is_valid():
+		on_walk.call(null)
 
 
 func teleport(c: Vector2i, board: Board) -> void:

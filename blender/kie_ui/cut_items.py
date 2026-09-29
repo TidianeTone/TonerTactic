@@ -88,6 +88,13 @@ def sheets(SRC, PRE):
 
 
 
+import sys
+if "pactes" in sys.argv:  # python cut_items.py pactes : seulement les icônes de pactes
+	sheets(os.path.join(HERE, "pactes"), "pact_")
+	sys.exit()
+if "salles" in sys.argv:  # marqueurs de la carte d'étage, version pixel art
+	sheets(os.path.join(HERE, "salles"), "mapico_px_")
+	sys.exit()
 sheets(ITEMS, "item_")
 sheets(os.path.join(HERE, "reliques"), "relic_")
 sheets(os.path.join(HERE, "reliques2"), "relic_")  # reliques (27/09) : à la place des pictogrammes

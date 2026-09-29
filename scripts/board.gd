@@ -34,6 +34,8 @@ var monument_face := Vector2i.ZERO
 var _hl: MultiMeshInstance3D
 var _water: MeshInstance3D
 static var _meshes := {}
+static var hd_units := false  ## modèles HD des unités (assets/hd/u_*.glb), réglage Graphismes > Modèles
+static var hd_dir := "res://assets/hd/"  ## web : assets/hdw/, les ennemis HD allégés par tools/hd_web.py
 static var hd := false  ## voxel fin (assets/hd, généré par DELVE_HD=3) : PC en qualité ultra
 static var _mats := {}
 
@@ -841,6 +843,19 @@ static func mesh_of(key: String) -> Dictionary:
 	inst.free()
 	_meshes[ck] = md
 	return md
+
+
+static func unit_material(tex: Texture2D) -> Material:
+	## Unités HD allégées (web) : la couleur vient de leur texture ; un matériau par texture, sinon le commun.
+	if tex == null:
+		return material("unit")
+	var k := "unit:" + tex.resource_path
+	if not _mats.has(k):
+		var m: ShaderMaterial = material("unit").duplicate()
+		m.set_shader_parameter("use_tex", true)
+		m.set_shader_parameter("albedo_tex", tex)
+		_mats[k] = m
+	return _mats[k]
 
 
 static func material(kind_: String) -> Material:

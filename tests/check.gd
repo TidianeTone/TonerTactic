@@ -19,7 +19,7 @@ func _init() -> void:
 			if Data.card_text(c).contains("{"):
 				print("texte non résolu : ", id, " niveau ", lv)
 				fails += 1
-			if not Data.HEROES.has(c.owner) and not c.has("tool"):
+			if not Data.HEROES.has(c.owner) and not c.has("tool") and c.owner != "neutre":  # cartes neutres : sans classe
 				print("propriétaire inconnu : ", id)
 				fails += 1
 			if c.has("trig") and not Data.TRIGGERS.has(c.trig.on):

@@ -6,6 +6,9 @@ config_version=5
 config/name="TonerTactic"
 config/description="Roguelike tactique à cartes dans les ruines de l'Écluse."
 run/main_scene="res://main.tscn"
+boot_splash/bg_color=Color(0.02, 0.016, 0.035, 1)
+boot_splash/image="res://assets/ui/logo.png"
+boot_splash/fullsize=false
 config/features=PackedStringArray("4.7", "Forward Plus")
 
 [display]
