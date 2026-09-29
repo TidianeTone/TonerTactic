@@ -646,7 +646,10 @@ func _unhandled_input(e: InputEvent) -> void:
 			_rmb_drag = 0.0
 		elif _rmb_drag < 6.0:
 			# un clic droit bref annule ; sans rien à annuler, il tourne le héros actif vers la case visée
-			if battle.card_sel >= 0 or battle.inspect or battle._move_plan != null or hover == null or not battle.face_cell(hover):
+			var fc = hover
+			if battle.active and fc == battle.active.cell:  # son propre volume cache la case visée : la dalle sous le curseur
+				fc = board.pick(cam.project_ray_origin(e.position), cam.project_ray_normal(e.position))
+			if battle.card_sel >= 0 or battle.inspect or battle._move_plan != null or fc == null or not battle.face_cell(fc):
 				battle.cancel()
 	elif e is InputEventMouseButton and e.pressed:
 		match e.button_index:
@@ -1337,6 +1340,8 @@ func _coach(evt: String, _info) -> void:
 		tip("course", "Déjà marché ? Les cases orange restent possibles : une course, pour 3 mana.")
 	if tuto and tuto_i < tuto_steps.size() and evt == {"move": "moved", "play": "done", "prop": "coffre", "face": "faced", "end": "ended"}.get(tuto_steps[tuto_i].do, "") and (evt != "faced" or _tuto_face_ok()):
 		_tuto_next()
+	elif tuto and evt == "faced" and tuto_i < tuto_steps.size() and tuto_steps[tuto_i].do == "face":
+		ui.toast("Un ennemi reste dans son dos : encore un quart de tour.")
 
 
 func _tuto_ok() -> void:
@@ -1926,7 +1931,7 @@ func _job_here(k: String) -> bool:
 
 
 func rack_weapon(h: Unit) -> void:
-	## Râtelier d'armes : une arme pour ce héros, plutôt bonne (peu commune ou mieux), équipée si sa main est libre.
+	## Râtelier d'armes : une arme pour ce héros, plutôt bonne (peu commune ou mieux), au sac jusqu'à la fin du combat.
 	var r := rng.randf()
 	var rar := 3 if r > 0.7 else 2
 	var ids: Array = []
@@ -1938,11 +1943,11 @@ func rack_weapon(h: Unit) -> void:
 
 
 func _gain_item(id: String, h: Unit = null) -> void:
-	tip("equipement", "Une pièce d'équipement : portée d'office si la place est libre, sinon au sac. On s'équipe après le combat, jamais pendant.")
-	## Au sac, ou équipé d'office si l'emplacement du héros qui l'a trouvé est libre.
+	tip("equipement", "Une pièce d'équipement : au sac pendant le combat, on s'équipe après. Hors combat, portée d'office si la place est libre.")
+	## Au sac pendant un combat (on s'équipe après, jamais pendant) ; hors combat, équipée d'office si l'emplacement est libre.
 	var it: Dictionary = Data.ITEMS[id]
 	library_see("item:" + id)
-	var who: Array = [h] if h else heroes
+	var who: Array = [] if not battle.over and not battle.heroes.is_empty() else [h] if h else heroes
 	for u in who:
 		if u.equip[it.slot] == "" and Data.item_fits(id, u.key, u.voc, u.voc2):
 			u.equip[it.slot] = id
@@ -3927,9 +3932,25 @@ func _tuto_bot() -> void:
 						if tuto_steps[tuto_i].do != "face":
 							break
 						ui.face_btn.pressed.emit()
-				else:
+				else:  # comme à la souris : survoler la case vers l'ennemi proche, clic droit bref
 					var f := _tuto_near()
-					battle.face_cell(f.cell)
+					var sp := cam.unproject_position(board.world(battle.active.cell + battle._dir(battle.active.cell, f.cell)))
+					var mv := InputEventMouseMotion.new()
+					mv.position = sp
+					mv.global_position = sp
+					Input.warp_mouse(sp)
+					get_viewport().push_input(mv)
+					await _frames(6)
+					for down in [true, false]:
+						var rb := InputEventMouseButton.new()
+						rb.button_index = MOUSE_BUTTON_RIGHT
+						rb.pressed = down
+						rb.position = sp
+						rb.global_position = sp
+						get_viewport().push_input(rb)
+						await _frames(2)
+					if tuto_steps[tuto_i].do == "face":
+						print("ÉCHEC orientation au clic droit : survol ", hover, ", héros ", battle.active.cell, " regard ", battle.active.facing, ", ennemi ", f.cell)
 			"ok":
 				_tuto_ok()
 			_:
