@@ -1235,6 +1235,10 @@ func _tuto_setup() -> void:
 
 func _tuto_show() -> void:
 	var s: Dictionary = tuto_steps[tuto_i]
+	if _tuto_faced_already():  # l'orientation automatique a déjà fait le geste : ⤵ ne ferait que détourner le héros
+		ui.coach("%s · %d/%d" % [_tuto_title(), tuto_i + 1, tuto_steps.size()], _touch_say(TUTO_FACED), true)
+		ui.point(func(): return null)
+		return
 	ui.coach("%s · %d/%d" % [_tuto_title(), tuto_i + 1, tuto_steps.size()], _touch_say(s.say), s.do == "ok")
 	ui.point(_tuto_arrow(s))
 
@@ -1288,9 +1292,17 @@ func _touch_say(t: String) -> String:
 	for r in [["clic droit sur une case vers eux (ou ← →)", "bouton ⤵ à droite, jusqu'à leur faire face"],
 			["clic droit sur une case vers eux", "bouton ⤵ à droite, jusqu'à leur faire face"],
 			["Clic droit sur une case vers les ennemis : le héros se tourne.", "Bouton ⤵ à droite : le héros se tourne d'un quart."],
+			["clic droit sur une case (ou ← →)", "bouton ⤵ à droite, d'un quart de tour"],
 			["Cliquez", "Touchez"], ["cliquez", "touchez"]]:
 		t = t.replace(r[0], r[1])
 	return t
+
+
+const TUTO_FACED := "La flèche dorée : où regarde le héros. Les ennemis frappent de dos, mais après un pas, un héros se tourne seul vers l'ennemi proche. Pour choisir : clic droit sur une case (ou ← →)."
+
+
+func _tuto_faced_already() -> bool:
+	return tuto and tuto_i < tuto_steps.size() and tuto_steps[tuto_i].do == "face" and battle.active != null and _tuto_face_ok()
 
 
 func _tuto_face_ok() -> bool:
@@ -1349,7 +1361,7 @@ func _tuto_ok() -> void:
 	if not tuto:
 		ui.coach("", "")
 		return
-	if tuto_i < tuto_steps.size() and tuto_steps[tuto_i].do == "ok":
+	if tuto_i < tuto_steps.size() and (tuto_steps[tuto_i].do == "ok" or _tuto_faced_already()):
 		_tuto_next()
 
 
@@ -3927,7 +3939,9 @@ func _tuto_bot() -> void:
 					_shot(dir, "%03d_%s_cible" % [n, tag])
 					battle.click(s.at)
 			"face":
-				if mobile:  # --portable=1 : comme au doigt, l'ennemi touché (sa fiche s'épingle), puis le bouton ⤵ jusqu'à faire face
+				if _tuto_faced_already():  # déjà tourné vers eux : l'étape se lit, « Suite »
+					_tuto_ok()
+				elif mobile:  # --portable=1 : comme au doigt, l'ennemi touché (sa fiche s'épingle), puis le bouton ⤵ jusqu'à faire face
 					_tap(cam.unproject_position(board.world(_tuto_near().cell)))
 					await _frames(10)
 					for q in 4:
