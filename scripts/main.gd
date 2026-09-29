@@ -3927,11 +3927,21 @@ func _tuto_bot() -> void:
 					_shot(dir, "%03d_%s_cible" % [n, tag])
 					battle.click(s.at)
 			"face":
-				if mobile:  # --portable=1 : comme au doigt, le bouton ⤵ jusqu'à faire face
+				if mobile:  # --portable=1 : comme au doigt, l'ennemi touché (sa fiche s'épingle), puis le bouton ⤵ jusqu'à faire face
+					_tap(cam.unproject_position(board.world(_tuto_near().cell)))
+					await _frames(10)
 					for q in 4:
 						if tuto_steps[tuto_i].do != "face":
 							break
-						ui.face_btn.pressed.emit()
+						var bp := get_viewport().get_screen_transform() * ui.face_btn.get_global_transform_with_canvas() * Vector2(ui.face_btn.size.x / 2.0, 6.0)  # un vrai toucher (haut du bouton, sous la fiche) sur ⤵, en pixels d'écran
+						for down in [true, false]:
+							var tb := InputEventScreenTouch.new()
+							tb.pressed = down
+							tb.position = bp
+							Input.parse_input_event(tb)  # comme le navigateur : le toucher devient aussi un clic
+							await _frames(3)
+					if tuto_steps[tuto_i].do == "face":
+						print("ÉCHEC orientation au bouton ⤵ : héros ", battle.active.cell, " regard ", battle.active.facing, " bouton ", ui.face_btn.get_global_rect(), " visible ", ui.face_btn.is_visible_in_tree())
 				else:  # comme à la souris : survoler la case vers l'ennemi proche, clic droit bref
 					var f := _tuto_near()
 					var sp := cam.unproject_position(board.world(battle.active.cell + battle._dir(battle.active.cell, f.cell)))
