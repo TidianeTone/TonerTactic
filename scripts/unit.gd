@@ -123,7 +123,7 @@ func _grip(inst: Node3D, cls: String, other := "") -> void:
 	## Le modèle HD vient les mains vides : il prend l'arme de sa VOCATION (sinon de sa classe) et la tient dans la
 	## main droite (le Moine : un gantelet à chaque main). Arme HD s'il y en a une, sinon celle de l'ancien voxel.
 	## other : l'autre classe d'un hybride, dont la couleur teinte la zone colorable de l'arme.
-	var hd := "res://assets/hd/arme_%s.glb" % cls
+	var hd: String = Board.hd_dir + "arme_%s.glb" % cls  # web : assets/hdw, comme les corps
 	var old_path := hd if ResourceLoader.exists(hd) else "res://assets/u_%s.glb" % cls
 	if not ResourceLoader.exists(old_path):
 		return
