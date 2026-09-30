@@ -31,7 +31,7 @@ ROLE_TIPS = {
     "artificier": "L'Artificier prépare le terrain : barils, tourelles, puis une étincelle fait tout sauter. Pensez aux réactions en chaîne.",
     "moine": "Le Moine compte ses coups : chaque carte au contact nourrit l'enchaînement. Bond de grue le met au bon endroit.",
     "trappeur": "Le Trappeur contrôle : pièges, filets, harpons et marques (+50 % de dégâts reçus) préparent les coups des autres.",
-    "tidiane": "Tidiane paie en PV pour frapper fort. Jouer une carte bleue, rouge et noire dans le tour déclenche Grixis.",
+    "tidiane": "Tidiane paie en PV pour frapper fort. Jouer une carte bleue, rouge et noire dans le tour déclenche la Trinité.",
     "receleur": "Le Receleur est le maître des cartes-objets. Double fond : ses objets ne lui bouchent pas la main. Tour de main : ses objets frappent ou protègent de +2. Il vole, fabrique, recharge, démonte.",
 }
 
@@ -306,7 +306,7 @@ page("""<div class='kicker'>Chapitre 10</div><h2>La run, salle par salle</h2><di
 <tr><td>Combat</td><td>Or, 3 cartes au choix (+ case bonus), parfois un objet, 1 point de job</td></tr><tr><td>Élite</td><td>Plus d'or, carte meilleure, équipement, relique, 2 points de job</td></tr>
 <tr><td>Marchand</td><td>Un étal sous auvent et son marchand. 6 cartes (dont une soldée et une de guilde), 3 équipements, 2 objets. Soins (35), épuration (50, +25 à chaque fois dans la run), forge (35) : une fois chacun, puis « fait ✓ ».</td></tr>
 <tr><td>Halte</td><td>Fontaine, kiosque et feu de camp : soigner le groupe, forger ou fusionner</td></tr><tr><td>Reliquaire</td><td>Une relique parmi trois</td></tr>
-<tr><td>Salles « ? »</td><td>Vingt événements (Passeur, duel d'honneur, coffre-mimique, autel de Grixis, bête blessée...). Descente et Aventure.</td></tr><tr><td>Gardien / Boss</td><td>Fin d'étage ; le Gardien de l'Écluse au 3e</td></tr></table>
+<tr><td>Salles « ? »</td><td>Vingt événements (Passeur, duel d'honneur, coffre-mimique, autel des trois voix, bête blessée...). Descente et Aventure.</td></tr><tr><td>Gardien / Boss</td><td>Fin d'étage ; le Gardien de l'Écluse au 3e</td></tr></table>
 <p>Prix de l'étal : ~50 or (commune), ~75 (peu commune), ~150 (rare), +25 pour une carte de guilde. Équipement : 45 / 75 / 110 selon la rareté.</p></div>
 <div><img src='img/marchand.jpg' class='wide'><p class='cap'>Le marchand : cartes en haut, équipement, objets et services en dessous.</p><img src='img/donjon.jpg' class='wide'><p class='cap'>Le mode Aventure : fiches des héros, équipement, paquet et fusion (I, P, F).</p></div></div>""", title="La run")
 
@@ -319,7 +319,7 @@ page("""<h2>Événements et compagnons</h2><div class='cols2'><div><h3>Les salle
 <tr><td><b>La Bibliothécaire aveugle</b></td><td>une carte devient une carte du même héros, une rareté au-dessus</td></tr><tr><td><b>Maître d'armes errant</b></td><td>4 points de job, ou son arme (−3 PV max)</td></tr>
 <tr><td><b>Bête blessée</b></td><td>la soigner : elle devient un compagnon (rare)</td></tr><tr><td><b>Épave de la Compagnie</b></td><td>équipement et or, mais des renforts au prochain combat</td></tr>
 <tr><td><b>Cercle de glyphes</b></td><td>sacrifier une carte : une autre gagne deux niveaux</td></tr><tr><td><b>Rave engloutie</b></td><td>soin de 25 %, ou 35 or et un carnet</td></tr>
-<tr><td><b>Autel de Grixis</b></td><td>bleu : deux cartes +1 niveau · rouge : une rare contre 5 PV · noir : une relique contre 8 PV max</td></tr>
+<tr><td><b>Autel des trois voix</b></td><td>bleu : deux cartes +1 niveau · rouge : une rare contre 5 PV · noir : une relique contre 8 PV max</td></tr>
 <tr><td><b>Un coffre, seul</b></td><td>relique ou mimique</td></tr></table></div>
 <div><h3>Compagnons</h3><p>Des bêtes des Hauts-Fonds apprivoisées. Elles jouent seules à leur vitesse, du côté des héros, et se relèvent à chaque combat. Une seule à la fois.</p>""" + comp + """</div></div>""", title="La run")
 

@@ -2268,7 +2268,9 @@ func _refresh_frieze() -> void:
 		if u.side == "hero":
 			l.text = u.nm
 		else:
-			l.text = "%s %s" % [u.nm.split(" ")[0], battle.intent(u)]
+			# nom court : 1er mot en français (Frondeur des toits), dernier en anglais (Rooftop Slinger)
+			var w: PackedStringArray = Lang.t(u.nm).get_slice(",", 0).split(" ")
+			l.text = "%s %s" % [w[w.size() - 1] if Lang.on else w[0], battle.intent(u)]
 			l.add_theme_color_override("font_color", Color("#ffc48a"))
 		# survol = comme survoler l'unité sur le plateau (case, fiche, silhouette) ; clic = la caméra y va
 		p.mouse_filter = Control.MOUSE_FILTER_STOP

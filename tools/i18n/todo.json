@@ -1,7 +1,14 @@
 [
-"Trois nouvelles cartes par héros : deux de sa guilde, une de sa nouvelle classe",
-"Trois nouvelles cartes par héros : deux de sa guilde, une de sa nouvelle classe.",
-"[b][color=#ffe3a3]%s[/color][/b]",
+" % Data.SLOT_NAME[slot] + base_text",
+" % [ITEM_COL[it.rarity].lightened(0.25).to_html(false), Data.SLOT_NAME[slot], it.name,",
+"% Data.SLOT_NAME",
+"% [ITEM_COL[it.rarity].lightened(0.25).to_html(false), Data.SLOT_NAME",
+")[1].replace(",
+"*glow",
 "annonce_",
-"annonce_%02d"
+"annonce_%02d",
+"arme_",
+"foe_",
+"portrait_",
+"u_"
 ]

@@ -5398,7 +5398,7 @@ func _event_new(ev: String, r: Dictionary) -> bool:
 				gold += 35
 				await _gain_obj_ui("o_carnet", 1)
 		"grixis":
-			var i := await ui.choose("AUTEL DE GRIXIS", "Trois vasques : l'une d'encre bleue, l'une de braise, l'une de nuit.", [
+			var i := await ui.choose("AUTEL DES TROIS VOIX", "Trois vasques : l'une d'encre bleue, l'une de braise, l'une de nuit.", [
 				{"title": "Bleu : l'Analyse", "glyph": "◆", "text": "Deux cartes au hasard gagnent un niveau.", "color": Color("#4aa3d8")},
 				{"title": "Rouge : l'Émotion", "glyph": "✹", "text": "Une carte rare au choix, mais chaque héros perd 5 PV.", "color": Color("#e0483f")},
 				{"title": "Noir : l'Ambition", "glyph": "♦", "text": "Une relique au choix parmi trois ; le héros aux plus hauts PV max en perd 8.", "color": Color("#9b6dd6")},

@@ -552,7 +552,7 @@ def trappeur():
 
 
 def tidiane():
-    """Artisan Grixis : dreadlocks, bonnet marine à croix, long manteau brun taché de peinture, grand pinceau tricolore."""
+    """Artisan Tidiane : dreadlocks, bonnet marine à croix, long manteau brun taché de peinture, grand pinceau tricolore."""
     R = random.Random(17)
     SKIN, SKD = P("#6e4430", "#5a3624")
     LOC, LOD = P("#3e2718", "#5a3a22")
